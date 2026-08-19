@@ -53,6 +53,22 @@
 | [03-trigger-timing.md](./03-trigger-timing.md) | 触发时机与调度策略 |
 | [04-mod-schema.md](./04-mod-schema.md) | 创意工坊模组（Mod）数据规范 |
 | [05-workflow.md](./05-workflow.md) | 端到端工作流与示例 |
+| [06-boost-capabilities.md](./06-boost-capabilities.md) | **强化层总览**（开源能力：dsh-routing-suite / superpowers） |
+| [07-routing-modes.md](./07-routing-modes.md) | **思维模式路由强化**（spec/react/weak 三波段） |
+| [08-scientific-exploration.md](./08-scientific-exploration.md) | **科研探索能力**（元学习/树探索/假设求证/多Agent博弈） |
+
+## 3.1 强化层（Capability Boost）
+
+在既有三层管线之上，借鉴开源 Agent 能力强化技术栈（dsh-routing-suite 的思维模式路由与
+注入器、superpowers 的方法论技能包），实现"不换模型、只靠提示词/插件工程推高上限"：
+
+- **思维模式路由**（07）：按任务类型自动路由到 spec（计划-集体）/react（执行者）/weak（自分类），
+  首请求锁定，过渡带回避。
+- **科研探索**（08）：元学习（从借鉴中迭代策略）、树探索（多分支推演+剪枝）、
+  假设求证思维链（先假设后求证）、多 Agent 博弈（不同思维链辩论评审）。
+- **可插拔强化 Mod**：强化能力封装为可注入/回滚的 Mod（借鉴 dsh-super-injector）。
+
+实现见 `config/agent_boost/`（路由预设、科研引擎、博弈评审配置）。
 
 ## 4. 与岗位体系的关系
 

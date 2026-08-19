@@ -13,10 +13,14 @@
 game-studio-agents/
 ├── docs/
 │   ├── 岗位体系调研.md          # 游戏开发行业岗位调研报告
-│   └── reference-learning-agent/  # 游戏借鉴学习 Agent 设计（能力/行为逻辑/触发时机/Mod规范）
+│   └── reference-learning-agent/  # 游戏借鉴学习 Agent 设计（能力/行为逻辑/触发时机/Mod规范/强化层）
 ├── config/
-│   ├── roles.yaml               # Agent 岗位定义文件（职责/任务/协作/状态机）
-│   └── agent_behavior.py        # Agent 行为逻辑框架（决策/通信/协作/异常）
+│   ├── roles.yaml               # Agent 岗位定义文件（职责/任务/协作/状态机，含 reference_learner 强化层）
+│   ├── agent_behavior.py        # Agent 行为逻辑框架（决策/通信/协作/异常 + 强化层机制）
+│   └── agent_boost/             # 能力强化层（思维模式路由 / 科研探索 / 博弈评审）
+│       ├── routing_preset.yaml  #   三波段思维模式路由预设（spec/react/weak）
+│       ├── research_engine.py   #   科研探索引擎（元学习/树探索/假设求证/多Agent博弈）
+│       └── debate_reviewer.yaml #   多 Agent 博弈评审配置
 └── README.md                    # 本文件
 ```
 
@@ -54,6 +58,15 @@ game-studio-agents/
 - **v0.3** 🔜 单个 Agent 自动执行
 - **v0.4** 🔜 多 Agent 协作流水线
 - **v0.5** 🔜 质量闭环与数据驱动
+- **v0.8** 🔜 能力强化层（思维模式路由 + 科研探索 + 可插拔强化Mod）
+
+## ✨ 强化层（Capability Boost）
+
+`reference_learner` 岗位已引入**开源能力强化层**（借鉴 dsh-routing-suite / superpowers）：
+
+- **思维模式路由**：按任务自动路由到 spec/react/weak，不换模型即推高上限（见 `07-routing-modes.md`）
+- **科研探索**：元学习、树探索、假设求证思维链、多 Agent 博弈（见 `08-scientific-exploration.md`）
+- **可插拔强化 Mod**：强化能力封装为可注入/回滚的 Mod
 
 ## 🚀 快速开始
 

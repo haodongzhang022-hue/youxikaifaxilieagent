@@ -1429,6 +1429,47 @@ roles:
         - "自有游戏基线版本与Mod清单"
       response_format: "结构化决策单 + 机制分析报告 + Mod交付物"
 
+    # ---- 强化层（Capability Boost，见 docs/06-08）----
+    boost:
+      routing:                       # 思维模式路由（借鉴 dsh-router-standard 三波段）
+        preset: "config/agent_boost/routing_preset.yaml"
+        bands: [spec, react, weak]   # 过渡带(mixed)永不自动选择
+        mapping:
+          - {stage: "L1_understand", mode: spec,   note: "读优先，计划-集体"}
+          - {stage: "L2_assess",     mode: spec,   note: "适配评估/取舍，读优先"}
+          - {stage: "L3_build_mod",  mode: react,  note: "直接交付Mod，免仪式"}
+          - {stage: "L3_verify",     mode: react,  note: "沙盒验证，免测试仪式"}
+          - {stage: "composite",     mode: weak,   note: "复合/模糊任务，模型自分类"}
+        first_request_lock: true      # 首请求锁定模式，中途不切换
+        self_optimization: [boost_router_status, boost_router_mode, boost_mode_subagent]
+
+      scientific_exploration:        # 科研探索（见 docs/08）
+        engine: "config/agent_boost/research_engine.py"
+        meta_learning:
+          enabled: true
+          review_level: L2           # 策略更新需人工审核
+          output: "元学习策略卡(meta_learning)"
+        tree_search:
+          enabled: true
+          max_depth: 2               # 复杂机制可加深到3
+          prune_threshold: 0.4
+          output: "探索树(tree_search)"
+        hypothesis_verify:
+          enabled: true
+          evidence_sources: [player_feedback, operational_data, competitor, technical]
+          output: "假设求证思维链"
+        multi_agent_debate:
+          enabled: true
+          config: "config/agent_boost/debate_reviewer.yaml"
+          roles: [advocate(react), reviewer(spec), skeptic(weak), arbiter(spec)]
+          mode_isolated: true        # 各角色隔离上下文
+          output: "决策评审单(debate)"
+
+      boost_mods:                    # 可插拔强化Mod（借鉴 dsh-super-injector）
+        - {name: "routing-standard", source: "dsh-routing-suite", injectable: true, rollback: true}
+        - {name: "methodology-skills", source: "superpowers", injectable: true, rollback: true}
+      maturity: L1                   # 可辅助，人工确认，随信任度升级
+
   # ---------------- 游戏运营 ----------------
   - role_id: "game_operator"
     name: "游戏运营"
