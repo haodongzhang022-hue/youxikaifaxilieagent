@@ -1,0 +1,1406 @@
+# ============================================================
+# 游戏开发 Agent 岗位定义文件
+# 版本: v0.1
+# 说明: 基于人类游戏开发分工，定义 Agent 岗位模型。
+#       每个岗位包含: 职责、任务、产出物、协作关系、状态机、行为逻辑。
+# 格式: YAML
+# ============================================================
+
+# 项目元信息
+project:
+  name: "Game Studio Agents"
+  version: "0.1.0"
+  description: "游戏开发全流程 Agent 岗位体系，实现开发流程 Agent 化替代"
+
+# ============================================================
+# 一、策划线 (Design Team)
+# ============================================================
+roles:
+
+  # ---------------- 制作人 ----------------
+  - role_id: "producer"
+    name: "制作人"
+    en_name: "Producer"
+    department: "策划线"
+    level: "管理岗"
+    agent_priority: 10   # 执行优先级（低数字先执行）
+    status: "agent_enabled"
+
+    responsibilities:
+      - "整体游戏方向把控与愿景定义"
+      - "资源分配与项目里程碑决策"
+      - "跨团队协调与冲突仲裁"
+      - "对外汇报与利益相关方沟通"
+
+    tasks:
+      - id: "producer.vision"
+        name: "定义项目愿景"
+        inputs: ["市场需求", "团队能力", "技术可行性"]
+        process: "整合分析 → 输出愿景文档 → 团队共识"
+        outputs: ["愿景文档", "立项书"]
+        trigger: "项目启动/重大转型"
+
+      - id: "producer.milestone"
+        name: "制定里程碑计划"
+        inputs: ["愿景", "资源预算", "时间窗口"]
+        process: "拆分阶段 → 定义验收标准 → 排期 → 下发"
+        outputs: ["里程碑计划", "验收标准"]
+        trigger: "立项/版本规划"
+
+      - id: "producer.review"
+        name: "里程碑验收评审"
+        inputs: ["里程碑交付物", "质量报告", "进度状态"]
+        process: "逐项验收 → 质量判定 → 通过/打回 → 复盘"
+        outputs: ["验收结论", "复盘报告"]
+        trigger: "里程碑到期"
+
+      - id: "producer.risk"
+        name: "风险管理与决策"
+        inputs: ["风险清单", "资源现状"]
+        process: "识别 → 评估 → 制定对策 → 决策执行"
+        outputs: ["风险处置方案"]
+        trigger: "风险事件发生/定期扫描"
+
+    workflows:
+      - name: "版本立项流程"
+        steps: ["接收需求 → 市场分析 → 可行性评估 → 立项决策 → 组建团队 → 启动开发"]
+
+      - name: "里程碑交付流程"
+        steps: ["规划里程碑 → 任务拆解 → 执行开发 → 质量检查 → 验收评审 → 复盘迭代"]
+
+    collaboration:
+      receives_from: ["运营线-发行经理", "数据分析师"]
+      sends_to: ["主策划", "技术总监", "主美", "项目经理"]
+      needs_approval_from: []  # 制作人无上级
+      approves: ["里程碑计划", "立项书", "版本决策"]
+
+    # 行为状态机
+    state_machine:
+      states: ["IDLE", "VISION_DEFINING", "PLANNING", "REVIEWING", "DECISION_MAKING", "REPORTING"]
+      transitions:
+        - {from: "IDLE", event: "PROJECT_START", to: "VISION_DEFINING"}
+        - {from: "VISION_DEFINING", event: "VISION_READY", to: "PLANNING"}
+        - {from: "PLANNING", event: "PLAN_APPROVED", to: "IDLE"}
+        - {from: "IDLE", event: "MILESTONE_REVIEW", to: "REVIEWING"}
+        - {from: "REVIEWING", event: "QUALITY_OK", to: "REPORTING"}
+        - {from: "REVIEWING", event: "QUALITY_FAIL", to: "DECISION_MAKING"}
+        - {from: "DECISION_MAKING", event: "DECISION_MADE", to: "PLANNING"}
+
+    # Agent行为逻辑（替代人类决策）
+    agent_logic:
+      decision_points:
+        - "该项目是否继续做？→ 依据: 市场潜力/资源/风险 综合评分"
+        - "里程碑是否通过？→ 依据: 交付物完成度 ≥ 80% + 质量标准"
+        - "延期 or 砍需求？→ 依据: 影响范围/团队负荷/商业优先级"
+      knowledge_base:
+        - "项目愿景库"
+        - "历史里程碑验收记录"
+        - "市场竞品分析库"
+      response_format: "结构化决策报告 + 理由 + 影响评估"
+
+  # ---------------- 主策划 ----------------
+  - role_id: "lead_designer"
+    name: "主策划"
+    en_name: "Lead Designer"
+    department: "策划线"
+    level: "策划管理岗"
+    agent_priority: 20
+    status: "agent_enabled"
+
+    responsibilities:
+      - "玩法方向定义与核心循环设计"
+      - "游戏系统架构设计"
+      - "策划团队任务分配与设计审核"
+      - "设计文档质量把控"
+
+    tasks:
+      - id: "ld.core_loop"
+        name: "设计核心游戏循环"
+        inputs: ["愿景", "目标玩家", "市场趋势"]
+        process: "分析 → 设计循环 → 验证可玩性 → 输出"
+        outputs: ["核心循环文档", "玩法概念图"]
+        trigger: "立项"
+
+      - id: "ld.system_arch"
+        name: "游戏系统架构设计"
+        inputs: ["核心循环", "系统需求清单"]
+        process: "模块划分 → 系统关联定义 → 依赖设计 → 评审"
+        outputs: ["系统架构文档"]
+        trigger: "立项后"
+
+      - id: "ld.design_review"
+        name: "设计文档审核"
+        inputs: ["各策划提交的设计文档"]
+        process: "逐项审查 → 一致性检查 → 反馈意见 → 通过/打回"
+        outputs: ["审核意见", "设计定稿"]
+        trigger: "策划提交设计"
+
+      - id: "ld.task_assign"
+        name: "策划任务分配"
+        inputs: ["系统架构", "成员能力", "优先级"]
+        process: "任务拆解 → 能力匹配 → 分配 → 排期"
+        outputs: ["策划任务清单"]
+        trigger: "立项/版本规划"
+
+    workflows:
+      - name: "玩法设计流程"
+        steps: ["接收愿景 → 竞品分析 → 核心循环设计 → 系统架构 → 模块拆分 → 任务下发 → 设计审核 → 定稿"]
+
+    collaboration:
+      receives_from: ["制作人"]
+      sends_to: ["系统策划", "数值策划", "关卡策划", "剧情策划", "战斗策划"]
+      needs_approval_from: ["制作人"]
+      approves: ["系统设计文档", "玩法方案", "设计拆解"]
+
+    state_machine:
+      states: ["IDLE", "DESIGNING", "REVIEWING", "TASKING", "ITERATING"]
+      transitions:
+        - {from: "IDLE", event: "CORE_LOOP_REQ", to: "DESIGNING"}
+        - {from: "DESIGNING", event: "DESIGN_READY", to: "REVIEWING"}
+        - {from: "REVIEWING", event: "APPROVED", to: "TASKING"}
+        - {from: "REVIEWING", event: "NEED_REVISE", to: "DESIGNING"}
+        - {from: "TASKING", event: "TASKS_ASSIGNED", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "该玩法是否契合愿景？→ 依据: 愿景关键词匹配度"
+        - "系统设计是否合理？→ 依据: 模块复用性/复杂度/一致性"
+        - "任务分配是否合理？→ 依据: 成员负载/能力匹配度"
+      knowledge_base:
+        - "游戏设计方法论"
+        - "竞品玩法库"
+        - "历史设计文档库"
+
+  # ---------------- 系统策划 ----------------
+  - role_id: "system_designer"
+    name: "系统策划"
+    en_name: "System Designer"
+    department: "策划线"
+    level: "执行岗"
+    agent_priority: 30
+    status: "agent_enabled"
+
+    responsibilities:
+      - "具体游戏系统设计（背包/任务/商城/成就/好友等）"
+      - "系统规则、交互流程、数据表结构定义"
+      - "与UI、程序对接实现验收"
+
+    tasks:
+      - id: "sd.design_system"
+        name: "系统详细设计"
+        inputs: ["系统需求", "竞品参考", "技术约束"]
+        process: "需求分析 → 规则设计 → 交互流程 → 边界/异常 → 输出"
+        outputs: ["系统设计文档"]
+        trigger: "接收任务"
+
+      - id: "sd.data_table"
+        name: "数据表结构设计"
+        inputs: ["系统设计", "存储约束"]
+        process: "字段规划 → 关系设计 → 索引优化 → 输出"
+        outputs: ["数据表结构文档"]
+        trigger: "系统设计定稿"
+
+      - id: "sd.ui_flow"
+        name: "UI交互流程设计"
+        inputs: ["系统设计", "UI规范"]
+        process: "界面流程 → 交互状态 → 异常提示 → 输出"
+        outputs: ["UI交互图", "UI说明"]
+        trigger: "系统设计定稿"
+
+      - id: "sd.accept"
+        name: "系统实现验收"
+        inputs: ["实现代码", "系统设计文档"]
+        process: "逐条验收 → 功能验证 → 边界测试 → 通过/反馈"
+        outputs: ["验收报告"]
+        trigger: "实现完成"
+
+    workflows:
+      - name: "系统设计流程"
+        steps: ["接收需求 → 竞品分析 → 规则设计 → 交互设计 → 数据设计 → 评审 → 下发实现 → 验收"]
+
+    collaboration:
+      receives_from: ["主策划"]
+      sends_to: ["客户端程序员", "UI/UX设计师", "服务端程序员"]
+      needs_approval_from: ["主策划"]
+      approves: ["系统功能验收"]
+
+    state_machine:
+      states: ["IDLE", "ANALYZING", "DESIGNING", "WAITING_REVIEW", "VERIFYING"]
+      transitions:
+        - {from: "IDLE", event: "REQ_RECEIVED", to: "ANALYZING"}
+        - {from: "ANALYZING", event: "REQ_READY", to: "DESIGNING"}
+        - {from: "DESIGNING", event: "DESIGN_DONE", to: "WAITING_REVIEW"}
+        - {from: "WAITING_REVIEW", event: "REVIEW_PASS", to: "VERIFYING"}
+        - {from: "WAITING_REVIEW", event: "REVIEW_FAIL", to: "DESIGNING"}
+        - {from: "VERIFYING", event: "VERIFY_DONE", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "系统规则是否完整？→ 依据: 规则覆盖度/边界完整性检查"
+        - "交互是否友好？→ 依据: UI规范符合度/用户旅程"
+      knowledge_base:
+        - "游戏系统设计模式库"
+        - "竞品系统参考库"
+        - "UI交互规范"
+
+  # ---------------- 数值策划 ----------------
+  - role_id: "balance_designer"
+    name: "数值策划"
+    en_name: "Balance Designer"
+    department: "策划线"
+    level: "执行岗"
+    agent_priority: 31
+    status: "agent_enabled"
+
+    responsibilities:
+      - "经济系统设计（产出/消耗循环）"
+      - "成长曲线与平衡性设计"
+      - "数值表配置与调优"
+
+    tasks:
+      - id: "bd.economy"
+        name: "经济系统设计"
+        inputs: ["核心玩法", "商业模式", "玩家预期"]
+        process: "产出设计 → 消耗设计 → 循环验证 → 防膨胀 → 输出"
+        outputs: ["经济系统模型"]
+        trigger: "立项/版本规划"
+
+      - id: "bd.growth"
+        name: "成长曲线设计"
+        inputs: ["玩法目标", "付费设计", "预期在线时长"]
+        process: "等级曲线 → 战力曲线 → 资源曲线 → 平衡校验"
+        outputs: ["成长曲线数值表"]
+        trigger: "系统设计定稿"
+
+      - id: "bd.balance"
+        name: "平衡性调优"
+        inputs: ["数值表", "战斗模拟数据", "玩家反馈"]
+        process: "数据收集 → 分析 → 调参 → 回归验证"
+        outputs: ["调优数值表", "平衡报告"]
+        trigger: "测试反馈/数据异常"
+
+      - id: "bd.config"
+        name: "数值表配置"
+        inputs: ["设计模型", "数据表结构"]
+        process: "参数填充 → 校验 → 导出 → 集成"
+        outputs: ["配置表文件"]
+        trigger: "设计完成"
+
+    workflows:
+      - name: "数值设计流程"
+        steps: ["接收设计目标 → 建立模型 → 参数设计 → 模拟验证 → 配置表 → 平衡测试 → 迭代调优"]
+
+    collaboration:
+      receives_from: ["主策划", "战斗策划"]
+      sends_to: ["客户端程序员", "服务端程序员", "数据分析师"]
+      needs_approval_from: ["主策划"]
+      approves: ["数值平衡性验证"]
+
+    state_machine:
+      states: ["IDLE", "MODELING", "PARAMETERIZING", "SIMULATING", "TUNING"]
+      transitions:
+        - {from: "IDLE", event: "DESIGN_TARGET", to: "MODELING"}
+        - {from: "MODELING", event: "MODEL_READY", to: "PARAMETERIZING"}
+        - {from: "PARAMETERIZING", event: "PARAMS_READY", to: "SIMULATING"}
+        - {from: "SIMULATING", event: "SIM_OK", to: "IDLE"}
+        - {from: "SIMULATING", event: "SIM_FAIL", to: "TUNING"}
+        - {from: "TUNING", event: "TUNE_DONE", to: "SIMULATING"}
+
+    agent_logic:
+      decision_points:
+        - "数值是否失衡？→ 依据: 模拟数据方差/极端值检测"
+        - "是否防膨胀？→ 依据: 产出/消耗比阈值监控"
+      knowledge_base:
+        - "数值平衡模型库"
+        - "历史调优记录"
+
+  # ---------------- 关卡策划 ----------------
+  - role_id: "level_designer"
+    name: "关卡策划"
+    en_name: "Level Designer"
+    department: "策划线"
+    level: "执行岗"
+    agent_priority: 32
+    status: "agent_enabled"
+
+    responsibilities:
+      - "关卡结构与地图布局设计"
+      - "关卡难度曲线与玩家体验控制"
+      - "关卡白盒验证与迭代"
+
+    tasks:
+      - id: "lv.design"
+        name: "关卡设计"
+        inputs: ["玩法机制", "剧情需求", "难度目标"]
+        process: "关卡结构 → 空间布局 → 玩法元素 → 难度设置 → 输出"
+        outputs: ["关卡设计文档", "白盒关卡"]
+        trigger: "接收任务"
+
+      - id: "lv.difficulty"
+        name: "难度曲线设计"
+        inputs: ["玩家能力模型", "关卡序列"]
+        process: "难度评估 → 曲线规划 → 平滑调整 → 验证"
+        outputs: ["难度曲线文档"]
+        trigger: "关卡设计时"
+
+      - id: "lv.verify"
+        name: "关卡白盒验证"
+        inputs: ["白盒关卡", "玩法机制"]
+        process: "可玩性测试 → 寻路验证 → 难度验证 → 优化"
+        outputs: ["验证报告", "优化建议"]
+        trigger: "白盒完成"
+
+    workflows:
+      - name: "关卡设计流程"
+        steps: ["接收需求 → 结构设计 → 布局设计 → 玩法元素 → 难度设置 → 白盒 → 验证 → 迭代"]
+
+    collaboration:
+      receives_from: ["主策划", "剧情策划"]
+      sends_to: ["3D建模师", "客户端程序员", "测试工程师"]
+      needs_approval_from: ["主策划"]
+      approves: ["关卡功能验收"]
+
+    state_machine:
+      states: ["IDLE", "DESIGNING", "WHITEBOXING", "VERIFYING", "ITERATING"]
+      transitions:
+        - {from: "IDLE", event: "REQ_RECEIVED", to: "DESIGNING"}
+        - {from: "DESIGNING", event: "DESIGN_DONE", to: "WHITEBOXING"}
+        - {from: "WHITEBOXING", event: "BOX_READY", to: "VERIFYING"}
+        - {from: "VERIFYING", event: "VERIFY_PASS", to: "IDLE"}
+        - {from: "VERIFYING", event: "VERIFY_FAIL", to: "ITERATING"}
+        - {from: "ITERATING", event: "FIXED", to: "VERIFYING"}
+
+  # ---------------- 剧情策划 ----------------
+  - role_id: "narrative_designer"
+    name: "剧情策划"
+    en_name: "Narrative Designer"
+    department: "策划线"
+    level: "执行岗"
+    agent_priority: 33
+    status: "agent_enabled"
+
+    responsibilities:
+      - "世界观与剧情设定"
+      - "角色塑造与对白创作"
+      - "任务文案与叙事节奏控制"
+
+    tasks:
+      - id: "nd.world"
+        name: "世界观设定"
+        inputs: ["游戏愿景", "美术风格", "目标玩家"]
+        process: "主题确定 → 背景构建 → 文化/规则设定 → 输出"
+        outputs: ["世界观设定文档"]
+        trigger: "立项"
+
+      - id: "nd.story"
+        name: "剧情与角色设计"
+        inputs: ["世界观", "玩法结构", "叙事目标"]
+        process: "主线设计 → 支线设计 → 角色设定 → 对白 → 输出"
+        outputs: ["剧情脚本", "角色卡"]
+        trigger: "世界观定稿"
+
+      - id: "nd.quest"
+        name: "任务文案编写"
+        inputs: ["剧情设计", "任务系统设计"]
+        process: "任务结构 → 文案编写 → 本地化适配 → 输出"
+        outputs: ["任务文案表"]
+        trigger: "剧情定稿"
+
+    workflows:
+      - name: "叙事设计流程"
+        steps: ["接收愿景 → 世界观 → 主线剧情 → 角色 → 任务文案 → 审核 → 交付"]
+
+    collaboration:
+      receives_from: ["主策划"]
+      sends_to: ["系统策划", "音频设计师", "3D建模师"]
+      needs_approval_from: ["主策划"]
+      approves: ["剧情内容验收"]
+
+  # ---------------- 战斗策划 ----------------
+  - role_id: "combat_designer"
+    name: "战斗策划"
+    en_name: "Combat Designer"
+    department: "策划线"
+    level: "执行岗"
+    agent_priority: 34
+    status: "agent_enabled"
+
+    responsibilities:
+      - "战斗机制与技能设计"
+      - "NPC AI行为设计"
+      - "战斗数值与平衡验证"
+
+    tasks:
+      - id: "cd.combat_system"
+        name: "战斗机制设计"
+        inputs: ["核心玩法", "角色定位", "操作手感目标"]
+        process: "机制框架 → 技能体系 → 操作反馈 → 手感调优 → 输出"
+        outputs: ["战斗设计文档"]
+        trigger: "立项"
+
+      - id: "cd.skills"
+        name: "技能与职业设计"
+        inputs: ["战斗机制", "角色职业设定"]
+        process: "职业定位 → 技能设计 → 效果数值 → 平衡验证"
+        outputs: ["技能表", "职业设计文档"]
+        trigger: "战斗机制定稿"
+
+      - id: "cd.ai"
+        name: "NPC AI行为设计"
+        inputs: ["战斗机制", "AI能力约束"]
+        process: "行为模式 → 决策树 → 状态切换 → 难度调整"
+        outputs: ["AI行为设计文档"]
+        trigger: "战斗机制定稿"
+
+    workflows:
+      - name: "战斗设计流程"
+        steps: ["接收玩法 → 机制设计 → 技能设计 → AI设计 → 数值验证 → 手感调优"]
+
+    collaboration:
+      receives_from: ["主策划", "数值策划"]
+      sends_to: ["客户端程序员", "游戏AI程序员", "特效师"]
+      needs_approval_from: ["主策划"]
+      approves: ["战斗功能验收"]
+
+  # ============================================================
+  # 二、程序线 (Program Team)
+  # ============================================================
+
+  # ---------------- 技术总监 ----------------
+  - role_id: "cto"
+    name: "技术总监"
+    en_name: "Technical Director"
+    department: "程序线"
+    level: "技术管理岗"
+    agent_priority: 40
+    status: "agent_enabled"
+
+    responsibilities:
+      - "技术选型与架构设计"
+      - "核心技术风险把控"
+      - "技术团队管理与技术评审"
+
+    tasks:
+      - id: "cto.arch"
+        name: "技术架构设计"
+        inputs: ["项目需求", "团队能力", "技术趋势"]
+        process: "需求分析 → 技术选型 → 架构设计 → 评审 → 输出"
+        outputs: ["技术架构文档"]
+        trigger: "立项"
+
+      - id: "cto.tech_review"
+        name: "技术方案评审"
+        inputs: ["各程序员技术方案"]
+        process: "架构审查 → 性能评估 → 风险识别 → 意见输出"
+        outputs: ["技术评审意见"]
+        trigger: "技术方案提交"
+
+      - id: "cto.risk"
+        name: "技术风险管控"
+        inputs: ["技术现状", "项目计划"]
+        process: "风险识别 → 影响评估 → 预案制定 → 监控"
+        outputs: ["技术风险清单"]
+        trigger: "持续"
+
+    workflows:
+      - name: "技术架构流程"
+        steps: ["需求收集 → 技术调研 → 架构设计 → 团队评审 → 定稿 → 技术分解"]
+
+    collaboration:
+      receives_from: ["制作人"]
+      sends_to: ["客户端程序员", "服务端程序员", "引擎程序员", "工具链程序员"]
+      needs_approval_from: ["制作人"]
+      approves: ["技术架构方案", "技术方案"]
+
+  # ---------------- 客户端程序员 ----------------
+  - role_id: "client_dev"
+    name: "客户端程序员"
+    en_name: "Client Developer"
+    department: "程序线"
+    level: "执行岗"
+    agent_priority: 41
+    status: "agent_enabled"
+
+    responsibilities:
+      - "客户端功能实现（UI/交互/表现）"
+      - "客户端性能优化"
+      - "与美术/策划联调"
+
+    tasks:
+      - id: "cd.feat_impl"
+        name: "功能实现"
+        inputs: ["设计文档", "需求规格"]
+        process: "技术方案 → 编码 → 自测 → 联调 → 提测"
+        outputs: ["功能代码", "构建包"]
+        trigger: "任务分配"
+
+      - id: "cd.opt"
+        name: "性能优化"
+        inputs: ["性能报告", "瓶颈分析"]
+        process: "定位瓶颈 → 优化方案 → 实现 → 验证"
+        outputs: ["优化代码", "性能对比报告"]
+        trigger: "性能不达标"
+
+      - id: "cd.integration"
+        name: "美术/策划联调"
+        inputs: ["美术资源", "数值配置", "UI规范"]
+        process: "资源接入 → 配置集成 → 功能验证 → 修复"
+        outputs: ["联调通过版本"]
+        trigger: "资源/配置就绪"
+
+    workflows:
+      - name: "功能开发流程"
+        steps: ["接收设计 → 技术方案 → 编码 → 自测 → CodeReview → 联调 → 提测 → 修复Bug → 发布"]
+
+    collaboration:
+      receives_from: ["系统策划", "UI/UX设计师", "数值策划"]
+      sends_to: ["测试工程师", "技术总监"]
+      needs_approval_from: ["技术总监"]
+      approves: ["客户端功能验收"]
+
+  # ---------------- 服务端程序员 ----------------
+  - role_id: "server_dev"
+    name: "服务端程序员"
+    en_name: "Server Developer"
+    department: "程序线"
+    level: "执行岗"
+    agent_priority: 42
+    status: "agent_enabled"
+
+    responsibilities:
+      - "网络通信与协议设计"
+      - "游戏逻辑与数据存储"
+      - "性能稳定与安全防护"
+
+    tasks:
+      - id: "sv.protocol"
+        name: "协议设计"
+        inputs: ["功能需求", "网络约束"]
+        process: "协议格式 → 字段定义 → 消息路由 → 文档输出"
+        outputs: ["协议文档"]
+        trigger: "新功能"
+
+      - id: "sv.logic"
+        name: "服务端逻辑实现"
+        inputs: ["协议", "设计文档"]
+        process: "架构实现 → 业务逻辑 → 数据存储 → 测试"
+        outputs: ["服务端代码", "部署包"]
+        trigger: "协议定稿"
+
+      - id: "sv.stability"
+        name: "稳定性保障"
+        inputs: ["监控数据", "错误日志"]
+        process: "监控 → 告警 → 定位 → 修复 → 验证"
+        outputs: ["修复补丁", "监控报告"]
+        trigger: "异常事件"
+
+      - id: "sv.security"
+        name: "安全防护"
+        inputs: ["安全日志", "攻击特征"]
+        process: "威胁识别 → 漏洞修复 → 防护加固"
+        outputs: ["安全报告"]
+        trigger: "安全事件/定期"
+
+    workflows:
+      - name: "服务端开发流程"
+        steps: ["接收需求 → 协议设计 → 架构实现 → 逻辑开发 → 联调 → 压测 → 部署 → 监控"]
+
+    collaboration:
+      receives_from: ["系统策划", "数值策划"]
+      sends_to: ["测试工程师", "运维/DevOps", "技术总监"]
+      needs_approval_from: ["技术总监"]
+      approves: ["服务端功能验收"]
+
+  # ---------------- 引擎程序员 ----------------
+  - role_id: "engine_dev"
+    name: "引擎程序员"
+    en_name: "Engine Developer"
+    department: "程序线"
+    level: "专家岗"
+    agent_priority: 43
+    status: "agent_enabled"
+
+    responsibilities:
+      - "游戏引擎底层功能开发"
+      - "渲染管线与性能优化"
+      - "引擎工具与资源管线"
+
+    tasks:
+      - id: "en.core"
+        name: "引擎核心功能"
+        inputs: ["技术需求", "引擎现状"]
+        process: "需求分析 → 模块开发 → 性能基准 → 输出"
+        outputs: ["引擎模块"]
+        trigger: "技术需求"
+
+      - id: "en.render"
+        name: "渲染管线优化"
+        inputs: ["渲染性能数据", "目标设备"]
+        process: "管线分析 → 优化 → 基准测试 → 输出"
+        outputs: ["优化管线", "基准报告"]
+        trigger: "性能瓶颈"
+
+      - id: "en.tools"
+        name: "引擎工具开发"
+        inputs: ["美术/策划工具需求"]
+        process: "工具设计 → 开发 → 集成 → 文档"
+        outputs: ["编辑器工具"]
+        trigger: "工作流需求"
+
+    workflows:
+      - name: "引擎开发流程"
+        steps: ["需求分析 → 架构设计 → 模块开发 → 性能验证 → 集成 → 文档"]
+
+    collaboration:
+      receives_from: ["技术总监", "客户端程序员", "技术美术"]
+      sends_to: ["客户端程序员", "图形程序员", "技术美术"]
+      needs_approval_from: ["技术总监"]
+      approves: ["引擎模块验收"]
+
+  # ---------------- 游戏AI程序员 ----------------
+  - role_id: "ai_programmer"
+    name: "游戏AI程序员"
+    en_name: "AI Programmer"
+    department: "程序线"
+    level: "专家岗"
+    agent_priority: 44
+    status: "agent_enabled"
+
+    responsibilities:
+      - "NPC行为系统实现"
+      - "寻路与决策系统"
+      - "敌人AI与战斗AI"
+
+    tasks:
+      - id: "ai.behavior"
+        name: "NPC行为系统"
+        inputs: ["AI行为设计", "战斗设计"]
+        process: "行为树 → 状态机 → 感知系统 → 实现"
+        outputs: ["AI系统代码"]
+        trigger: "AI需求"
+
+      - id: "ai.pathfinding"
+        name: "寻路系统"
+        inputs: ["关卡布局", "性能约束"]
+        process: "算法选型 → 导航网格 → 寻路实现 → 优化"
+        outputs: ["寻路模块"]
+        trigger: "AI需求"
+
+    workflows:
+      - name: "AI开发流程"
+        steps: ["接收设计 → 技术方案 → 行为实现 → 测试 → 调优"]
+
+    collaboration:
+      receives_from: ["战斗策划", "关卡策划"]
+      sends_to: ["客户端程序员", "测试工程师"]
+      needs_approval_from: ["技术总监"]
+      approves: ["AI功能验收"]
+
+  # ---------------- 工具链程序员 ----------------
+  - role_id: "tools_dev"
+    name: "工具链程序员"
+    en_name: "Tools Developer"
+    department: "程序线"
+    level: "执行岗"
+    agent_priority: 45
+    status: "agent_enabled"
+
+    responsibilities:
+      - "开发自动化工具与编辑器"
+      - "构建管线与资源处理"
+      - "工作流效率优化"
+
+    tasks:
+      - id: "td.build_pipeline"
+        name: "构建管线维护"
+        inputs: ["构建需求", "现状问题"]
+        process: "管线设计 → 自动化 → 集成CI → 监控"
+        outputs: ["构建管线"]
+        trigger: "持续"
+
+      - id: "td.tools"
+        name: "开发工具"
+        inputs: ["策划/美术工具需求"]
+        process: "需求 → 设计 → 开发 → 测试 → 文档"
+        outputs: ["工具集"]
+        trigger: "工具需求"
+
+    workflows:
+      - name: "工具开发流程"
+        steps: ["需求收集 → 工具设计 → 开发 → 测试 → 部署 → 培训"]
+
+    collaboration:
+      receives_from: ["技术总监", "策划", "美术"]
+      sends_to: ["各岗位"]
+      needs_approval_from: ["技术总监"]
+      approves: ["工具功能验收"]
+
+  # ============================================================
+  # 三、美术线 (Art Team)
+  # ============================================================
+
+  # ---------------- 主美 ----------------
+  - role_id: "art_director"
+    name: "主美"
+    en_name: "Art Director"
+    department: "美术线"
+    level: "美术管理岗"
+    agent_priority: 50
+    status: "agent_enabled"
+
+    responsibilities:
+      - "美术风格定义与品质把控"
+      - "美术资源规划与制作管理"
+      - "美术团队协调与审核"
+
+    tasks:
+      - id: "ad.style"
+        name: "美术风格定义"
+        inputs: ["游戏愿景", "目标玩家", "市场趋势"]
+        process: "风格调研 → 风格确定 → 规范制定 → 输出"
+        outputs: ["美术风格规范文档"]
+        trigger: "立项"
+
+      - id: "ad.resource_plan"
+        name: "美术资源规划"
+        inputs: ["游戏系统", "进度计划"]
+        process: "资源清单 → 优先级 → 排期 → 分配"
+        outputs: ["美术资源计划"]
+        trigger: "立项"
+
+      - id: "ad.review"
+        name: "美术品质审核"
+        inputs: ["美术产出", "风格规范"]
+        process: "品质检查 → 规范符合度 → 意见 → 通过/打回"
+        outputs: ["审核意见"]
+        trigger: "美术产出"
+
+    workflows:
+      - name: "美术风格流程"
+        steps: ["接收愿景 → 风格调研 → 风格定稿 → 规范输出 → 资源规划 → 制作审核"]
+
+    collaboration:
+      receives_from: ["制作人"]
+      sends_to: ["原画师", "3D建模师", "动画师", "特效师", "UI/UX设计师"]
+      needs_approval_from: ["制作人"]
+      approves: ["美术风格规范", "美术产出品质"]
+
+  # ---------------- 原画师 ----------------
+  - role_id: "concept_artist"
+    name: "原画师"
+    en_name: "Concept Artist"
+    department: "美术线"
+    level: "执行岗"
+    agent_priority: 51
+    status: "agent_enabled"
+
+    responsibilities:
+      - "角色/场景/道具概念设计"
+      - "美术氛围图与方向参考"
+      - "为3D/动画提供视觉依据"
+
+    tasks:
+      - id: "ca.character"
+        name: "角色概念设计"
+        inputs: ["角色设定", "风格规范"]
+        process: "造型构思 → 草图 → 细化 → 定稿"
+        outputs: ["角色概念图"]
+        trigger: "任务分配"
+
+      - id: "ca.scene"
+        name: "场景概念设计"
+        inputs: ["关卡需求", "世界观"]
+        process: "氛围构思 → 构图 → 细化 → 定稿"
+        outputs: ["场景概念图"]
+        trigger: "任务分配"
+
+    workflows:
+      - name: "原画流程"
+        steps: ["接收需求 → 构思 → 草图 → 评审 → 细化 → 定稿 → 交付"]
+
+    collaboration:
+      receives_from: ["主美", "剧情策划"]
+      sends_to: ["3D建模师", "动画师", "特效师"]
+      needs_approval_from: ["主美"]
+      approves: ["概念设计验收"]
+
+  # ---------------- 3D建模师 ----------------
+  - role_id: "modeler"
+    name: "3D建模师"
+    en_name: "3D Modeler"
+    department: "美术线"
+    level: "执行岗"
+    agent_priority: 52
+    status: "agent_enabled"
+
+    responsibilities:
+      - "角色/场景/道具3D建模"
+      - "贴图与材质制作"
+      - "模型资源优化"
+
+    tasks:
+      - id: "mo.model"
+        name: "3D建模"
+        inputs: ["概念图", "技术规范"]
+        process: "基础模型 → 细节 → 拓扑 → UV → 输出"
+        outputs: ["3D模型资源"]
+        trigger: "任务分配"
+
+      - id: "mo.texture"
+        name: "贴图与材质"
+        inputs: ["模型", "风格规范"]
+        process: "贴图绘制 → 材质设置 → 渲染验证"
+        outputs: ["贴图资源"]
+        trigger: "模型完成"
+
+      - id: "mo.optimize"
+        name: "资源优化"
+        inputs: ["模型", "性能目标"]
+        process: "面数优化 → LOD → 压缩 → 验证"
+        outputs: ["优化模型"]
+        trigger: "性能不达标"
+
+    workflows:
+      - name: "3D建模流程"
+        steps: ["接收概念图 → 建模 → UV → 贴图 → 材质 → 渲染验证 → 优化 → 交付"]
+
+    collaboration:
+      receives_from: ["原画师", "关卡策划"]
+      sends_to: ["动画师", "客户端程序员", "技术美术"]
+      needs_approval_from: ["主美"]
+      approves: ["模型验收"]
+
+  # ---------------- 动画师 ----------------
+  - role_id: "animator"
+    name: "动画师"
+    en_name: "Animator"
+    department: "美术线"
+    level: "执行岗"
+    agent_priority: 53
+    status: "agent_enabled"
+
+    responsibilities:
+      - "角色动作制作与绑定"
+      - "过场动画制作"
+      - "动作流畅度与手感优化"
+
+    tasks:
+      - id: "an.rig"
+        name: "骨骼绑定"
+        inputs: ["模型", "动画需求"]
+        process: "骨骼创建 → 权重 → 约束 → 验证"
+        outputs: ["绑定模型"]
+        trigger: "模型完成"
+
+      - id: "an.anim"
+        name: "动作制作"
+        inputs: ["绑定模型", "动作需求"]
+        process: "关键帧 → 中间帧 → 曲线调整 → 输出"
+        outputs: ["动画资源"]
+        trigger: "绑定完成"
+
+    workflows:
+      - name: "动画流程"
+        steps: ["接收模型 → 绑定 → 动作制作 → 审核 → 交付"]
+
+    collaboration:
+      receives_from: ["3D建模师", "主美"]
+      sends_to: ["客户端程序员", "特效师"]
+      needs_approval_from: ["主美"]
+      approves: ["动画验收"]
+
+  # ---------------- 特效师 ----------------
+  - role_id: "vfx_artist"
+    name: "特效师"
+    en_name: "VFX Artist"
+    department: "美术线"
+    level: "执行岗"
+    agent_priority: 54
+    status: "agent_enabled"
+
+    responsibilities:
+      - "技能/战斗特效制作"
+      - "环境与场景特效"
+      - "特效性能控制"
+
+    tasks:
+      - id: "vf.skill_effect"
+        name: "技能特效"
+        inputs: ["技能设计", "战斗节奏"]
+        process: "特效构思 → 粒子系统 → 渲染 → 手感验证"
+        outputs: ["技能特效资源"]
+        trigger: "技能设计"
+
+      - id: "vf.env_effect"
+        name: "环境特效"
+        inputs: ["场景需求", "世界观"]
+        process: "氛围设计 → 特效制作 → 整合验证"
+        outputs: ["环境特效资源"]
+        trigger: "场景需求"
+
+    workflows:
+      - name: "特效流程"
+        steps: ["接收需求 → 构思 → 制作 → 效果验证 → 性能优化 → 交付"]
+
+    collaboration:
+      receives_from: ["战斗策划", "主美"]
+      sends_to: ["客户端程序员"]
+      needs_approval_from: ["主美"]
+      approves: ["特效验收"]
+
+  # ---------------- UI/UX设计师 ----------------
+  - role_id: "ui_ux"
+    name: "UI/UX设计师"
+    en_name: "UI/UX Designer"
+    department: "美术线"
+    level: "执行岗"
+    agent_priority: 55
+    status: "agent_enabled"
+
+    responsibilities:
+      - "界面视觉与布局设计"
+      - "交互体验设计"
+      - "UI规范与组件库维护"
+
+    tasks:
+      - id: "ui.design"
+        name: "界面设计"
+        inputs: ["系统设计", "风格规范"]
+        process: "布局 → 视觉 → 图标 → 切图 → 输出"
+        outputs: ["UI设计稿", "切图资源"]
+        trigger: "系统设计"
+
+      - id: "ui.spec"
+        name: "UI规范制定"
+        inputs: ["风格规范", "通用模式"]
+        process: "组件设计 → 规范文档 → 示例"
+        outputs: ["UI规范文档", "组件库"]
+        trigger: "立项"
+
+      - id: "ui.implement"
+        name: "UI实现对接"
+        inputs: ["UI设计稿", "客户端接口"]
+        process: "界面搭建 → 交互对接 → 验证 → 交付"
+        outputs: ["UI界面功能"]
+        trigger: "设计稿完成"
+
+    workflows:
+      - name: "UI设计流程"
+        steps: ["接收系统设计 → 交互流程 → 界面设计 → 规范遵循 → 切图 → 对接实现 → 验收"]
+
+    collaboration:
+      receives_from: ["系统策划", "主美"]
+      sends_to: ["客户端程序员", "工具链程序员"]
+      needs_approval_from: ["主美"]
+      approves: ["UI验收"]
+
+  # ---------------- 技术美术 ----------------
+  - role_id: "tech_artist"
+    name: "技术美术(TA)"
+    en_name: "Technical Artist"
+    department: "美术线"
+    level: "专家岗"
+    agent_priority: 56
+    status: "agent_enabled"
+
+    responsibilities:
+      - "美术与程序桥梁对接"
+      - "Shader与渲染效果开发"
+      - "美术资源管线优化"
+
+    tasks:
+      - id: "ta.shader"
+        name: "Shader开发"
+        inputs: ["美术需求", "渲染能力"]
+        process: "效果设计 → Shader编写 → 调优 → 文档"
+        outputs: ["Shader效果"]
+        trigger: "美术需求"
+
+      - id: "ta.pipeline"
+        name: "美术管线优化"
+        inputs: ["制作流程", "工具现状"]
+        process: "瓶颈分析 → 工具开发 → 流程优化 → 培训"
+        outputs: ["管线工具", "流程文档"]
+        trigger: "效率瓶颈"
+
+    workflows:
+      - name: "TA工作流程"
+        steps: ["接收美术需求 → 技术方案 → 效果实现 → 性能验证 → 交付 → 文档"]
+
+    collaboration:
+      receives_from: ["美术", "程序员"]
+      sends_to: ["客户端程序员", "引擎程序员"]
+      needs_approval_from: ["主美", "技术总监"]
+      approves: ["技术美术效果"]
+
+  # ---------------- 音频设计师 ----------------
+  - role_id: "audio_designer"
+    name: "音频设计师"
+    en_name: "Audio Designer"
+    department: "美术线"
+    level: "执行岗"
+    agent_priority: 57
+    status: "agent_enabled"
+
+    responsibilities:
+      - "音效设计制作"
+      - "背景音乐创作"
+      - "音频资源整合与性能控制"
+
+    tasks:
+      - id: "au.sfx"
+        name: "音效制作"
+        inputs: ["系统需求", "世界观"]
+        process: "音效设计 → 制作 → 混音 → 整合"
+        outputs: ["音效资源"]
+        trigger: "系统需求"
+
+      - id: "au.bgm"
+        name: "背景音乐"
+        inputs: ["游戏氛围", "场景需求"]
+        process: "作曲 → 编曲 → 混音 → 输出"
+        outputs: ["BGM资源"]
+        trigger: "场景需求"
+
+    workflows:
+      - name: "音频流程"
+        steps: ["接收需求 → 设计 → 制作 → 审核 → 整合 → 交付"]
+
+    collaboration:
+      receives_from: ["剧情策划", "关卡策划"]
+      sends_to: ["客户端程序员"]
+      needs_approval_from: ["主美"]
+      approves: ["音频验收"]
+
+  # ============================================================
+  # 四、测试线 (QA Team)
+  # ============================================================
+
+  # ---------------- 测试工程师 ----------------
+  - role_id: "qa_engineer"
+    name: "测试工程师"
+    en_name: "QA Engineer"
+    department: "测试线"
+    level: "执行岗"
+    agent_priority: 60
+    status: "agent_enabled"
+
+    responsibilities:
+      - "测试用例设计与执行"
+      - "Bug发现与管理"
+      - "版本质量评估与放行"
+
+    tasks:
+      - id: "qa.plan"
+        name: "测试计划制定"
+        inputs: ["版本内容", "需求文档"]
+        process: "需求分析 → 范围界定 → 用例规划 → 排期"
+        outputs: ["测试计划"]
+        trigger: "版本规划"
+
+      - id: "qa.cases"
+        name: "测试用例编写"
+        inputs: ["需求文档", "测试计划"]
+        process: "场景分析 → 用例编写 → 评审 → 维护"
+        outputs: ["测试用例集"]
+        trigger: "测试计划"
+
+      - id: "qa.execute"
+        name: "测试执行与Bug管理"
+        inputs: ["测试用例", "构建包"]
+        process: "执行 → Bug提交 → 追踪 → 回归 → 报告"
+        outputs: ["Bug报告", "测试报告"]
+        trigger: "版本提交"
+
+      - id: "qa.release"
+        name: "版本放行评估"
+        inputs: ["测试报告", "Bug状态", "风险评估"]
+        process: "质量评估 → 放行/打回 → 记录"
+        outputs: ["放行结论"]
+        trigger: "测试完成"
+
+    workflows:
+      - name: "测试流程"
+        steps: ["接收版本 → 需求分析 → 计划 → 用例 → 执行 → Bug管理 → 回归 → 质量报告 → 放行"]
+
+    collaboration:
+      receives_from: ["客户端程序员", "服务端程序员"]
+      sends_to: ["程序员", "策划", "项目经理"]
+      needs_approval_from: ["项目经理"]
+      approves: ["版本放行"]
+
+  # ---------------- 自动化测试 ----------------
+  - role_id: "auto_qa"
+    name: "自动化测试工程师"
+    en_name: "Automation QA"
+    department: "测试线"
+    level: "执行岗"
+    agent_priority: 61
+    status: "agent_enabled"
+
+    responsibilities:
+      - "自动化测试框架开发"
+      - "UI/功能自动化脚本"
+      - "CI集成自动化回归"
+
+    tasks:
+      - id: "aq.framework"
+        name: "自动化框架搭建"
+        inputs: ["测试需求", "技术栈"]
+        process: "框架选型 → 搭建 → 封装 → 文档"
+        outputs: ["自动化框架"]
+        trigger: "立项"
+
+      - id: "aq.scripts"
+        name: "自动化脚本开发"
+        inputs: ["测试用例", "框架"]
+        process: "脚本编写 → 调试 → 集成 → 维护"
+        outputs: ["自动化脚本"]
+        trigger: "用例就绪"
+
+      - id: "aq.ci"
+        name: "CI回归集成"
+        inputs: ["CI环境", "自动化脚本"]
+        process: "CI配置 → 定时回归 → 结果报告"
+        outputs: ["CI回归报告"]
+        trigger: "CI就绪"
+
+    workflows:
+      - name: "自动化流程"
+        steps: ["框架搭建 → 脚本开发 → CI集成 → 定时回归 → 结果分析"]
+
+    collaboration:
+      receives_from: ["测试工程师", "工具链程序员"]
+      sends_to: ["测试工程师"]
+      needs_approval_from: ["测试主管"]
+      approves: ["自动化脚本验收"]
+
+  # ============================================================
+  # 五、项目管理 (PM)
+  # ============================================================
+
+  # ---------------- 项目经理 ----------------
+  - role_id: "project_manager"
+    name: "项目经理"
+    en_name: "Project Manager"
+    department: "项目管理"
+    level: "管理岗"
+    agent_priority: 70
+    status: "agent_enabled"
+
+    responsibilities:
+      - "项目计划制定与跟踪"
+      - "任务拆解与分配"
+      - "风险管理与跨团队协调"
+
+    tasks:
+      - id: "pm.plan"
+        name: "项目计划制定"
+        inputs: ["里程碑", "团队能力", "资源"]
+        process: "WBS拆解 → 排期 → 依赖管理 → 输出"
+        outputs: ["项目计划", "甘特图"]
+        trigger: "立项"
+
+      - id: "pm.track"
+        name: "进度跟踪"
+        inputs: ["任务状态", "团队反馈"]
+        process: "每日跟进 → 阻塞识别 → 协调解决"
+        outputs: ["进度报告"]
+        trigger: "持续"
+
+      - id: "pm.risk"
+        name: "风险管理"
+        inputs: ["进度数据", "团队反馈", "外部因素"]
+        process: "风险识别 → 评估 → 应对 → 监控"
+        outputs: ["风险清单", "应对方案"]
+        trigger: "持续"
+
+      - id: "pm.report"
+        name: "项目汇报"
+        inputs: ["进度", "风险", "资源"]
+        process: "汇总 → 分析 → 汇报 → 建议"
+        outputs: ["周报/月报"]
+        trigger: "定期"
+
+    workflows:
+      - name: "项目管理流程"
+        steps: ["立项 → WBS → 排期 → 分配 → 每日跟进 → 风险管理 → 周报 → 里程碑 → 复盘"]
+
+    collaboration:
+      receives_from: ["制作人", "各团队"]
+      sends_to: ["制作人", "各团队"]
+      needs_approval_from: ["制作人"]
+      approves: ["项目计划", "进度调整"]
+
+  # ---------------- 版本管理 ----------------
+  - role_id: "release_manager"
+    name: "版本管理"
+    en_name: "Release Manager"
+    department: "项目管理"
+    level: "执行岗"
+    agent_priority: 71
+    status: "agent_enabled"
+
+    responsibilities:
+      - "版本规划与发版流程"
+      - "版本质量门禁控制"
+      - "发布风险管理"
+
+    tasks:
+      - id: "rm.plan"
+        name: "版本规划"
+        inputs: ["开发计划", "业务需求"]
+        process: "版本范围 → 时间排期 → 优先级 → 输出"
+        outputs: ["版本计划"]
+        trigger: "版本规划"
+
+      - id: "rm.gate"
+        name: "版本门禁检查"
+        inputs: ["QA报告", "功能清单", "风险项"]
+        process: "质量评估 → 门禁判定 → 放行/拦截"
+        outputs: ["门禁结论"]
+        trigger: "发版前"
+
+      - id: "rm.release"
+        name: "发版执行"
+        inputs: ["构建包", "门禁结论"]
+        process: "灰度 → 全量 → 回滚预案 → 记录"
+        outputs: ["发版记录"]
+        trigger: "门禁通过"
+
+    workflows:
+      - name: "发版流程"
+        steps: ["版本规划 → 功能冻结 → QA验证 → 门禁检查 → 灰度发布 → 全量 → 监控 → 回滚预案"]
+
+    collaboration:
+      receives_from: ["项目经理", "QA"]
+      sends_to: ["运维", "运营"]
+      needs_approval_from: ["项目经理"]
+      approves: ["发版放行"]
+
+  # ============================================================
+  # 六、运营线 (Operation)
+  # ============================================================
+
+  # ---------------- 数据分析师 ----------------
+  - role_id: "data_analyst"
+    name: "数据分析师"
+    en_name: "Data Analyst"
+    department: "运营线"
+    level: "执行岗"
+    agent_priority: 80
+    status: "agent_enabled"
+
+    responsibilities:
+      - "数据埋点方案设计"
+      - "用户行为分析与留存优化"
+      - "游戏数据洞察与决策支持"
+
+    tasks:
+      - id: "da.tracking"
+        name: "数据埋点设计"
+        inputs: ["业务目标", "数据需求"]
+        process: "指标体系 → 埋点方案 → 验收"
+        outputs: ["埋点方案文档"]
+        trigger: "立项"
+
+      - id: "da.analysis"
+        name: "数据分析"
+        inputs: ["数据", "业务问题"]
+        process: "数据提取 → 分析 → 洞察 → 报告"
+        outputs: ["分析报告"]
+        trigger: "持续"
+
+      - id: "da.insight"
+        name: "产品洞察"
+        inputs: ["分析结果", "玩家反馈"]
+        process: "趋势识别 → 归因 → 建议 → 反馈"
+        outputs: ["洞察建议"]
+        trigger: "定期"
+
+    workflows:
+      - name: "数据分析流程"
+        steps: ["埋点设计 → 数据采集 → 清洗 → 分析 → 洞察 → 建议 → 决策反馈"]
+
+    collaboration:
+      receives_from: ["服务端程序员", "运营"]
+      sends_to: ["策划", "制作人", "运营"]
+      needs_approval_from: ["制作人"]
+      approves: ["数据报告"]
+
+  # ---------------- 游戏运营 ----------------
+  - role_id: "game_operator"
+    name: "游戏运营"
+    en_name: "Game Operator"
+    department: "运营线"
+    level: "执行岗"
+    agent_priority: 81
+    status: "agent_enabled"
+
+    responsibilities:
+      - "玩家运营与社区管理"
+      - "活动策划与执行"
+      - "用户反馈收集与处理"
+
+    tasks:
+      - id: "go.activity"
+        name: "活动策划"
+        inputs: ["运营目标", "游戏数据"]
+        process: "目标 → 活动设计 → 排期 → 执行 → 复盘"
+        outputs: ["活动方案"]
+        trigger: "运营节点"
+
+      - id: "go.community"
+        name: "社区运营"
+        inputs: ["玩家反馈", "社区动态"]
+        process: "内容发布 → 互动管理 → 舆情监控"
+        outputs: ["社区内容"]
+        trigger: "持续"
+
+      - id: "go.feedback"
+        name: "用户反馈处理"
+        inputs: ["玩家反馈", "问题分类"]
+        process: "收集 → 分类 → 转交 → 跟进 → 回复"
+        outputs: ["反馈处理记录"]
+        trigger: "玩家反馈"
+
+    workflows:
+      - name: "运营流程"
+        steps: ["目标设定 → 活动设计 → 上线执行 → 数据监控 → 复盘优化"]
+
+    collaboration:
+      receives_from: ["数据分析师", "版本管理"]
+      sends_to: ["策划", "数据分析师"]
+      needs_approval_from: ["制作人"]
+      approves: ["运营活动"]
+
+# ============================================================
+# 全局协作规则
+# ============================================================
+global:
+  collaboration_rules:
+    - "所有岗位通过结构化消息通信，消息格式统一为 JSON"
+    - "每个岗位有明确的状态机，状态转换由事件驱动"
+    - "任务完成必须提交产出物并触发下游岗位"
+    - "跨岗位决策需要上级审批的必须走审批流程"
+    - "所有任务有明确的验收标准，验收通过才算完成"
+
+  message_bus:
+    type: "事件驱动消息总线"
+    message_types: ["TASK", "REVIEW", "REPORT", "BUG", "APPROVAL", "NOTIFICATION"]
+    message_format:
+      - id: "唯一消息ID"
+      - type: "消息类型"
+      - from: "发送岗位"
+      - to: "接收岗位"
+      - task_id: "关联任务"
+      - content: "消息内容(JSON)"
+      - timestamp: "时间戳"
+      - priority: "优先级"
+
+  iteration_strategy:
+    - "v0.1: 岗位定义与行为逻辑框架"
+    - "v0.2: Agent间消息通信与协作流程"
+    - "v0.3: 核心岗位自动执行（策划→程序→测试流水线）"
+    - "v0.4: 全流程自动执行与质量闭环"
+    - "v0.5: 数据驱动决策与持续优化"
