@@ -926,12 +926,160 @@ class HypothesisVerifier:
 
 
 # ============================================================
-# 15. 强化层：统一入口（Capability Boost Hub）
-# 汇总路由 + 科研探索 + 博弈，供 reference_learner 调用。
+# 15. 校验机制：探索多模式（Exploration Planner）
+# 进入分析前决定 渠道广度 × 信息类型 × 探索深度。
+# 对应 docs/09-exploration-modes.md
+# ============================================================
+
+class ExplorationPlanner:
+    """探索多模式规划：决定借鉴时从哪些渠道、哪些信息类型、多深去探索。"""
+
+    PRESETS = {
+        "art_style":          {"channel_breadth": "multi", "info_types": ["art"], "depth": "glance"},
+        "gameplay_loop":      {"channel_breadth": "multi", "info_types": ["video", "motion", "numeric", "mindset"], "depth": "dig"},
+        "code_logic":         {"channel_breadth": "multi", "info_types": ["code", "numeric"], "depth": "full"},
+        "full_clone":         {"channel_breadth": "all", "info_types": ["art", "video", "motion", "numeric", "code", "mindset"], "depth": "full"},
+        "competitive_bench":  {"channel_breadth": "all", "info_types": ["numeric", "mindset", "compliance"], "depth": "dig"},
+        "anti_pattern":       {"channel_breadth": "all", "info_types": ["video", "mindset", "numeric", "compliance"], "depth": "dig"},
+    }
+
+    def __init__(self, default="gameplay_loop"):
+        self.default = default
+
+    def plan(self, request, mode=None):
+        """根据诉求决策探索模式，返回探索计划。mode 缺省时从 request 意图推断。"""
+        mode = mode or self._infer_mode(request)
+        preset = self.PRESETS.get(mode, self.PRESETS[self.default])
+        anti = "avoid" in request or "避免" in request or mode == "anti_pattern"
+        return {
+            "request": request,
+            "mode_preset": mode,
+            "channel_breadth": preset["channel_breadth"],
+            "info_types": preset["info_types"],
+            "depth": preset["depth"],
+            "anti_reference": anti,
+            "collected": False,
+        }
+
+    def _infer_mode(self, request):
+        """从请求文本推断合适的探索模式。"""
+        kw = request.lower()
+        if any(k in kw for k in ["avoid", "避免", "踩坑", "别像", "失败"]):
+            return "anti_pattern"
+        if any(k in kw for k in ["美术", "视觉", "风格", "art"]):
+            return "art_style"
+        if any(k in kw for k in ["代码", "逻辑", "code"]):
+            return "code_logic"
+        if any(k in kw for k in ["复刻", "一模一样", "clone"]):
+            return "full_clone"
+        if any(k in kw for k in ["对标", "benchmark", "竞品"]):
+            return "competitive_bench"
+        return self.default
+
+    def budget_for(self, mode):
+        """返回某模式的预算（渠道上限/时长/调用）。"""
+        budgets = {
+            "art_style": {"max_channels": 3, "max_tool_calls": 12},
+            "code_logic": {"max_channels": 3, "max_tool_calls": 30},
+            "full_clone": {"max_channels": 6, "max_tool_calls": 60},
+        }
+        return budgets.get(mode, {"max_channels": 4, "max_tool_calls": 20})
+
+
+# ============================================================
+# 16. 校准机制：相似度检测与档位控制（Calibration Engine）
+# 相似度可检测 + 相似度可控档位 + 多轮迭代校准。
+# 对应 docs/10-calibration.md
+# ============================================================
+
+class CalibrationEngine:
+    """校准引擎：衡量借鉴相似度、控制相似度档位、迭代校准到目标。"""
+
+    DIMS = ["mechanics", "numeric", "visual", "code", "mindset"]
+
+    # 相似度控制档位：各维度目标值（None=不强约束）
+    PRESETS = {
+        "full_clone":  {"mechanics": 0.95, "numeric": 0.95, "visual": 0.90, "code": 0.95, "mindset": 0.90, "tol": 0.06},
+        "high":        {"mechanics": 0.70, "numeric": 0.55, "visual": None, "code": 0.65, "mindset": 0.50, "tol": 0.08},
+        "code_only":   {"mechanics": 0.50, "numeric": 0.60, "visual": 0.20, "code": 0.90, "mindset": 0.30, "tol": 0.08},
+        "anti_pattern":{"mechanics": 0.15, "numeric": 0.15, "visual": 0.10, "code": 0.10, "mindset": 0.20, "tol": 0.06},
+    }
+
+    def __init__(self, default="high", max_rounds=3, converge_epsilon=0.03):
+        self.default = default
+        self.max_rounds = max_rounds
+        self.converge_epsilon = converge_epsilon
+
+    def measure(self, mod, target):
+        """计算借鉴产物与目标的逐维度相似度(0~1)。"""
+        sim = {}
+        for dim in self.DIMS:
+            a = float(mod.get(dim, 0) or 0)
+            b = float(target.get(dim, 0) or 0)
+            # 简单相似度：|a-b| 越小越像
+            sim[dim] = max(0.0, min(1.0, 1.0 - abs(a - b)))
+        return sim
+
+    def calibrate(self, current, preset="high"):
+        """将当前相似度与目标档位对比，输出调整指令。返回 (status, adjustments)。"""
+        goal = self.PRESETS[preset]
+        tol = goal["tol"]
+        adjustments = []
+        status = "stable"
+        for dim in self.DIMS:
+            g = goal.get(dim)
+            if g is None:
+                continue
+            cur = current.get(dim, 0)
+            if cur > g + tol:
+                status = "adjusting"
+                adjustments.append({"dim": dim, "action": "decouple",
+                                    "note": f"相似度{cur:.2f}过高(目标{g:.2f})，解耦为自有风格"})
+            elif cur < g - tol:
+                status = "adjusting"
+                adjustments.append({"dim": dim, "action": "enrich",
+                                    "note": f"相似度{cur:.2f}不足(目标{g:.2f})，补足素材/加深拆解"})
+        return status, adjustments
+
+    def iterate(self, mod, target, preset="high"):
+        """多轮迭代校准：每轮检测相似度→对比目标→调整，直到达标/收敛/达上限。"""
+        history = []
+        for rnd in range(1, self.max_rounds + 1):
+            sim = self.measure(mod, target)
+            status, adjustments = self.calibrate(sim, preset)
+            history.append({"round": rnd, "similarity": sim, "status": status, "adjustments": adjustments})
+            if status == "stable":
+                return {"converged": True, "status": status, "history": history}
+            # 收敛检测：与上一轮相似度几乎不变则停止
+            if len(history) >= 2:
+                prev = history[-2]["similarity"]
+                delta = max(abs(sim[d] - prev.get(d, 0)) for d in self.DIMS)
+                if delta < self.converge_epsilon:
+                    return {"converged": True, "status": "converged_stalled", "history": history}
+            # 应用调整：模拟下一轮（此处用简化近似，真实场景会触发新一轮探索）
+            mod = self._apply(mod, adjustments)
+        return {"converged": False, "status": "PARTIAL", "history": history,
+                "note": "达到最大轮数仍未达标，保留最佳轮次上报人工"}
+
+    def _apply(self, mod, adjustments):
+        """模拟应用调整指令，推进相似度向目标收敛。"""
+        m = dict(mod)
+        for adj in adjustments:
+            d = adj["dim"]
+            if adj["action"] == "decouple" and d in m:
+                m[d] = (m[d] + 0.0) / 2.0      # 解耦：向自有风格拉低
+            elif adj["action"] == "enrich" and d in m:
+                m[d] = min(1.0, m[d] + 0.1)    # 补足：向目标加深
+        return m
+
+
+# ============================================================
+# 17. 强化层：统一入口（Capability Boost Hub）
+# 汇总路由 + 科研探索 + 博弈 + 校验/校准，供 reference_learner 调用。
 # ============================================================
 
 class CapabilityBoost:
-    """强化层统一入口。"""
+    """强化层统一入口（含校验/校准引擎）。"""
 
     def __init__(self, model_id=None):
         self.router = ReasoningModeRouter(model_id)
@@ -939,6 +1087,8 @@ class CapabilityBoost:
         self.meta = MetaLearner()
         self.tree = TreeSearch()
         self.hypothesis = HypothesisVerifier()
+        self.exploration = ExplorationPlanner()   # 校验：探索多模式
+        self.calibration = CalibrationEngine()    # 校准：相似度控制与多轮迭代
 
     def route_session(self, session, first_user_message):
         """对会话路由思维模式（首请求锁定）。"""
@@ -951,3 +1101,11 @@ class CapabilityBoost:
     def reflect_learning(self, session, feedback):
         """借鉴结束后元学习复盘。"""
         return self.meta.reflect(session, feedback)
+
+    def plan_exploration(self, request, mode=None):
+        """[校验] 决策探索模式（渠道/类型/深度）。"""
+        return self.exploration.plan(request, mode)
+
+    def calibrate_similarity(self, mod, target, preset="high"):
+        """[校准] 检测相似度并控制到目标档位（多轮迭代）。"""
+        return self.calibration.iterate(mod, target, preset)

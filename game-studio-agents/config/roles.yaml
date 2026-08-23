@@ -1423,11 +1423,49 @@ roles:
         - "该机制是否值得借鉴？→ 依据: 契合度评分(默认≥60) + 收益/成本"
         - "整体搬 or 裁剪 or 改造？→ 依据: 类型匹配/技术约束/定位一致"
         - "Mod是否可发布？→ 依据: 沙盒验证通过 + 合规审查 + 人工审核(L2)"
+        - "用什么探索模式？→ 依据: 渠道广度×信息类型×深度(见docs/09)"
+        - "相似度控到哪个档位？→ 依据: full_clone/high/code_only/anti_pattern(见docs/10)"
       knowledge_base:
         - "借鉴知识库(已评估/已落地/已放弃)"
         - "竞品玩法库"
         - "自有游戏基线版本与Mod清单"
+        - "校准档案(每轮相似度与档位记录)"
       response_format: "结构化决策单 + 机制分析报告 + Mod交付物"
+
+    # ---- 校验机制：探索多模式（见 docs/09）----
+    exploration:
+      preset: "config/agent_boost/exploration_preset.yaml"
+      default: "gameplay_loop"
+      dimensions: [channel_breadth, info_types, depth]
+      channel_breadth: [single, multi, all]      # 渠道广度
+      info_types: [art, video, motion, numeric, code, mindset, compliance]  # 信息类型
+      depth: [glance, dig, full]                 # 探索深度
+      presets:
+        - {name: "art_style",        types: [art],                        depth: glance, note: "借鉴美术风格"}
+        - {name: "gameplay_loop",    types: [video, motion, numeric, mindset], depth: dig,    note: "借鉴核心玩法循环(默认)"}
+        - {name: "code_logic",       types: [code, numeric],             depth: full,   note: "借鉴代码逻辑"}
+        - {name: "full_clone",       types: [art, video, motion, numeric, code, mindset], depth: full, note: "全维度复刻"}
+        - {name: "competitive_bench",types: [numeric, mindset, compliance], depth: dig,  note: "竞品对标"}
+        - {name: "anti_pattern",     types: [video, mindset, numeric, compliance], depth: dig, note: "反向借鉴避开失败点"}
+      rules:
+        - "信息类型必须显式声明，未声明的维度不采集"
+        - "反参考模式只产出负面清单，不复制受保护内容"
+
+    # ---- 校准机制：相似度控制与多轮迭代（见 docs/10）----
+    calibration:
+      preset: "config/agent_boost/calibration_preset.yaml"
+      default: "high"                           # 默认7成参考
+      similarity_presets: [full_clone, high, code_only, anti_pattern]
+      dims: [mechanics, numeric, visual, code, mindset]
+      iteration:
+        max_rounds: 3                            # 一次参考不完善可多轮
+        converge_epsilon: 0.03
+        on_timeout: "PARTIAL"                    # 保留最佳轮次上报人工
+      continuous:
+        enabled: true
+        review_after: "7d"                       # 上线后持续校准
+        trigger_decouple_on: "相似度过高/雷同感"
+        trigger_enrich_on: "相似度不足/价值未体现"
 
     # ---- 强化层（Capability Boost，见 docs/06-08）----
     boost:

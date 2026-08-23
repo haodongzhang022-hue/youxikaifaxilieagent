@@ -56,6 +56,9 @@
 | [06-boost-capabilities.md](./06-boost-capabilities.md) | **强化层总览**（开源能力：dsh-routing-suite / superpowers） |
 | [07-routing-modes.md](./07-routing-modes.md) | **思维模式路由强化**（spec/react/weak 三波段） |
 | [08-scientific-exploration.md](./08-scientific-exploration.md) | **科研探索能力**（元学习/树探索/假设求证/多Agent博弈） |
+| [09-exploration-modes.md](./09-exploration-modes.md) | **校验机制·探索多模式**（渠道广度×信息类型×探索深度） |
+| [10-calibration.md](./10-calibration.md) | **校准机制·相似度控制**（相似度检测/档位控制/多轮迭代） |
+| [11-boost-usage.md](./11-boost-usage.md) | **强化能力使用标注**（怎么用/何时用/如何开关·独立Issue跟踪） |
 
 ## 3.1 强化层（Capability Boost）
 
@@ -69,6 +72,20 @@
 - **可插拔强化 Mod**：强化能力封装为可注入/回滚的 Mod（借鉴 dsh-super-injector）。
 
 实现见 `config/agent_boost/`（路由预设、科研引擎、博弈评审配置）。
+
+> **注意**：强化能力（boost：路由/科研探索/博弈）因其**功能独立、可单独使用**，已拆分为单独的
+> Issue 跟踪其标注与用法（见仓库 Issues），不在本 Issue 的"借鉴管线"范围内混排。
+> **使用标注见 [11-boost-usage.md](./11-boost-usage.md)**（怎么用/何时用/如何开关/分级/风险）。
+
+## 3.2 校验与校准机制（探索多模式 + 相似度控制）
+
+在进入分析前，`reference_learner` 先做**校验决策**（怎么探索），落地前做**校准控制**（像到什么程度）：
+
+- **探索多模式**（09）：从多少渠道（single/multi/all）× 包含哪些信息类型（美术/视频/动效/数值/代码/心智/合规）× 多深（glance/dig/full）三维组合，内置 6 个档位，并支持"反向借鉴/避坑"模式。
+- **相似度校准**（10）：可检测借鉴相似度（逐维度打分），可控制相似度档位（一模一样 / 7 成参考 / 只近似代码逻辑 / 只了解避免踩坑），并支持多轮迭代校准直到达到目标档位，且上线后持续校准。
+
+实现见 `config/agent_boost/exploration_preset.yaml`、`config/agent_boost/calibration_preset.yaml` 与
+`agent_behavior.py` 中的 `ExplorationPlanner`、`CalibrationEngine` 类。
 
 ## 4. 与岗位体系的关系
 
