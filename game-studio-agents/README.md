@@ -19,6 +19,8 @@ game-studio-agents/
 │   └── api-layer.md               # 信息接口层（接口层与人工可视层分离）
 ├── config/
 │   ├── roles.yaml               # Agent 岗位定义文件（职责/任务/协作/状态机，含 reference_learner 强化层）
+│   ├── role_presets.yaml        # ⭐ 角色分层预设体系（角色级/技术栈级/小组级，按需启用）
+│   ├── project_type_presets.yaml # ⭐ 项目类型/产品阶段/团队规模选型预设（与 role_presets 互补）
 │   ├── agent_behavior.py        # Agent 行为逻辑框架（决策/通信/协作/异常 + 强化层机制）
 │   ├── agent_core.py            # ⭐ 通用 Agent 内核基类（生命周期/状态机/决策，v0.3，可运行）
 │   ├── message_bus.py           # ⭐ 通用消息总线（事件驱动通信，v0.3，可运行）
@@ -92,6 +94,52 @@ python3 api/main.py   # http://localhost:8000/docs
 # 接口层测试信号灯
 bash api/test_api.sh
 ```
+
+## 🎭 角色分层预设体系（可扩展备用预设）
+
+> **背景**：为支持可扩展性，无需把每种可能都做成正式角色（每个岗位 >3 个会过度膨胀）。
+> 本体系把**同一岗位/岗位族的多种变体**作为**备用预设**预置，按需启用。
+
+定义文件：`config/role_presets.yaml`，分**三个层级**（已大幅扩充）：
+
+| 层级 | 类型 | 说明 | 示例（含扩充） |
+|------|------|------|------|
+| **L1** | 角色级预设 `role_presets` | 针对单个岗位的变体（风格/技术栈/侧重） | 美术风格（像素/水墨/赛博朋克/PBR/Toon/体素/扁平/2.5D/剪影/蒸汽朋克/水彩/哥特/街机/Q版/黑色电影/手绘/剪纸）、玩法侧重（肉鸽/生存/开放世界/射击/卡牌/MOBA/派对/塔防/叙事/解谜/竞速/音律/放置/模拟/大逃杀/社交）、技术栈（UE5/Unity/Godot/React/Vue/页面引擎/Go/Java/Node/Python/Rust/渲染/数据/云原生/LLM-AI/音频/测试自动化/原生移动端） |
+| **L2** | 技术栈级预设 `stack_presets` | 针对程序线岗位族的整套技术方案 | UE5生态 / Godot生态 / Web(React) / 页面引擎 / Unity生态 / AI智能体 / 数据云原生 / **Node.js生态** / **Rust高性能** / **原生移动端** |
+| **L3** | 小组级预设 `team_presets` | 面向某一生态组织的小组，可整体启用 | UE5小组 / Godot小组 / Web前端小组 / 页面引擎小组 / Unity小组 / AI智能体小组 / 质量自动化小组 / 运营增长小组 / **Node实时对战小组** / **Rust高性能小组** / **原生移动端小组** / **内容本地化小组** / **美术资产管线小组** |
+
+**启用方式（按需求启用即可）**：
+1. **只读参考**：读取 preset 字段并入现有正式角色
+2. **实例化**：将 preset 复制为 `roles.yaml` 中的正式角色（`status: agent_enabled`）
+3. **小组编排**：通过 L3 `team_presets` 组合多角色/技术栈，作为一组 Agent 整体启用
+
+> **可扩展约定**：预设为**轻量定义**，只给差异化字段（personality/风格/技术栈/工具链/侧重），
+> 复用 `base_role` 的正式定义（responsibilities/tasks/状态机），从而支持低成本横向扩展。
+
+## 🎯 项目类型/产品阶段/团队规模预设（选型维度）
+
+> `role_presets.yaml` 解决"这个岗位/技术栈要配什么样的变体"；
+> 本文件补充另一层可扩展维度，回答"**这个类型的项目 / 这个产品阶段 / 多大团队，应启用哪些岗位与侧重**"，二者可叠加组合。
+
+定义文件：`config/project_type_presets.yaml`，分**三个维度**（已扩充）：
+
+| 维度 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| **P1** | 项目类型预设 `project_types` | 按平台/形态组织的选型建议 | 移动端手游 / PC/主机 / 网页H5 / 小游戏 / 独立游戏 / AI创新 / **VR-AR沉浸式** / **教育严肃游戏** |
+| **P2** | 产品阶段预设 `phases` | 按生命周期组织的投入侧重 | 原型验证 / 正式开发 / 上线发布 / 长线运营 / **停运过渡** |
+| **P3** | 团队规模预设 `team_scales` | 按团队体量组织的岗位配置 | **极简团队(1-5)** / 小团队(5-15) / 中型(15-60) / 大型(60+) |
+
+**组合用法**：先按项目类型选 P1 → 按产品阶段选 P2 → 按团队规模选 P3 → 再叠加 `role_presets.yaml` 的技术栈/风格角色。
+
+```
+移动端手游(P1) + 开发阶段(P2) + 中型团队(P3) → team_unity + team_quality_automation + Unity技术栈角色
+VR/AR(P1) + 原型验证(P2) + 小团队(P3)       → team_unity + team_quality_automation + 空间交互角色
+AI创新(P1) + 开发阶段(P2) + 中型团队(P3)     → team_ai_agent + team_unity + LLM/AI技术栈角色
+独立游戏(P1) + 原型阶段(P2) + 极简团队(P3)  → team_godot + team_ai_agent + 多面手角色预设
+```
+
+> **可扩展约定**：与 role_presets 一致为备用预设（`status: preset_standby`），按需启用；
+> 本文件只做选型建议、不新增正式角色，通过引用 role_presets 的 preset_id / team_preset_id 组合启用，天然支持横向扩展。
 
 ## 🎭 岗位体系总览（六大板块）
 
@@ -168,6 +216,12 @@ python3 config/reference_learner_agent.py
 ```bash
 # 查看所有岗位定义
 cat config/roles.yaml
+
+# 查看角色分层预设体系（可扩展备用预设）
+cat config/role_presets.yaml
+
+# 查看项目类型/产品阶段/团队规模选型预设
+cat config/project_type_presets.yaml
 
 # 查看Agent行为逻辑框架
 cat config/agent_behavior.py
