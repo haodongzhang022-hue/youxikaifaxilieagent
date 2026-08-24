@@ -1,0 +1,140 @@
+# ============================================================
+# 机制驱动自动化流水线（非手动 / 命令推进）
+# 说明: 本项目流程推进全部由事件机制驱动，无需人工手动发 / 命令。
+#   触发链：
+#     1. 新建 Issue（issue.open）→ 游戏向经理 NPC 自动拆解架构
+#        并派发工作包给各部门，自动协同（无需 / 命令）。
+#     2. 提交 PR（pull_request）→ 自动分配评审人 + NPC 代码审查。
+#     3. PR 满足合并条件（pull_request.mergeable）→ git:auto-merge 自动合并。
+#     4. 合并后（pull_request.merged）→ 自动解锁下游部门 / 更新 Issue。
+# 镜像复用：所有 npc:go 阶段共用下方锚点镜像，改动一处即可全局生效，
+#   避免每个 pipeline 各自硬编码镜像（供应链一致性）。
+# ============================================================
+
+# ---- 事件驱动：Issue 新建 → 游戏向经理自动拆解派单 ----
+$:
+  issue.open:
+    - name: game-manager-orchestrate
+      docker:
+        image: &npc_image cnbcool/default-npc:latest
+      stages:
+        - name: 游戏向经理自动拆解
+          type: npc:go
+          options:
+            role: 游戏向经理
+            systemPrompt: |
+              你是游戏开发项目的"游戏向经理"（制作人 + 项目经理融合）。
+              职责：把架构蓝图拆解为部门可执行的工作包，按部门分配任务与资源，
+              并通过事件驱动机制自动推进部门间协作，不依赖任何手动 / 命令。
+              使用 config/game_producer_agent.py 的拆分逻辑。
+            userPrompt: |
+              收到新 Issue 需求，请作为游戏向经理执行以下机制化编排：
+              1. 分析 Issue 描述中的架构/需求目标；
+              2. 按 config/roles.yaml 的六大部门（策划/程序/美术/测试/项目管理/运营）
+                 把架构拆解为可执行工作包；
+              3. 为每个工作包分配责任部门、主责角色与资源优先级；
+              4. 通过 task_scheduler 事件驱动派发，按依赖自动推进部门协作；
+              5. 在 Issue 评论中输出工作包拆分表与部门协作依赖图。
+              全程机制驱动，无需人工手动推进度。
+
+# ---- 事件驱动：PR 提交 → 自动分配评审人 + NPC 代码审查 ----
+# 借鉴架构师 Agent 的“测试信号灯”护栏：PR 提交先跑测试断言，
+# 未通过即红灯阻塞，不放行后续评审/合并，避免“半成品”进入流水线。
+  pull_request:
+    - name: auto-review
+      docker:
+        image: *npc_image
+      stages:
+        - name: 测试信号灯
+          script: |
+            bash game-studio-agents/tests/test_producer_agent.sh
+            pip install -q -r game-studio-agents/api/requirements.txt
+            bash game-studio-agents/api/test_api.sh
+        - name: 自动分配评审人
+          type: git:reviewer
+          options:
+            type: add-reviewer
+            count: 1
+        - name: NPC 代码审查
+          type: npc:go
+          options:
+            role: 代码审查员
+            systemPrompt: |
+              你是游戏开发项目的资深代码审查员，负责审查各部门提交的代码质量、
+              架构合理性、潜在 Bug 与安全漏洞，并给出可落地的改进建议。
+            userPrompt: |
+              请审查本次 PR 的代码变更，重点检查：
+              1. 是否符合 config/roles.yaml 与 config/game_producer_agent.py 的架构约束；
+              2. 机制化编排逻辑是否正确（消息总线 / 调度器 / 依赖解锁）；
+              3. 是否存在 Bug、安全漏洞或资源泄漏；
+              4. 给出"通过 / 需修改"结论及具体修改点。
+              在 PR 评论中输出审查结论。
+
+# ---- 事件驱动：PR 可合并 → 自动合并（满足门禁后无需人工）----
+# 说明: pull_request.mergeable 只代表“代码可合并”（无冲突/CI 通过），
+#      不代表“评审已通过”。因此在 auto-merge 之前增加一道“评审门禁”：
+#      由代码审查员 NPC 校验评审状态与打回项，只有评审通过才放行自动合并；
+#      否则中断流水线，避免与 NPC 评审 / changes_requested 打回产生竞争。
+  pull_request.mergeable:
+    - name: auto-merge
+      docker:
+        image: *npc_image
+      stages:
+        - name: 合并门禁检查
+          type: npc:go
+          options:
+            role: 代码审查员
+            systemPrompt: |
+              你是合并门禁把关人。pull_request.mergeable 只代表代码可合并，
+              不代表评审已通过。你的职责是在自动合并前校验评审门禁。
+            userPrompt: |
+              本次 PR 已达到可合并条件，请在校验后才放行自动合并：
+              1. 检查本 PR 的评审状态是否为 approved；
+              2. 检查是否存在 changes_requested / 未解决的打回评论；
+              3. 只有评审通过且无未解决阻塞项时，才输出“放行”并结束本阶段；
+              4. 若评审未通过或存在打回项，必须中断流水线（返回失败），
+                 禁止自动合并，等待打回修复后再走门禁。
+        - name: 自动合并
+          type: git:auto-merge
+          options:
+            mergeType: squash
+            removeSourceBranch: true
+
+# ---- 事件驱动：PR 合并后 → 自动更新 Issue 并解锁下游 ----
+  pull_request.merged:
+    - name: post-merge-orchestrate
+      docker:
+        image: *npc_image
+      stages:
+        - name: 合并后联动
+          type: npc:go
+          options:
+            role: 游戏向经理
+            systemPrompt: |
+              你是游戏开发项目的"游戏向经理"，负责在 PR 合并后自动推进后续部门工作。
+            userPrompt: |
+              本次 PR 已合并，请作为游戏向经理：
+              1. 分析合并后的新代码对各部门工作包的影响；
+              2. 解锁依赖本 PR 产出的下游部门工作包并自动派发；
+              3. 更新对应 Issue 状态（标注进展/下一阶段）；
+              4. 在 Issue 中评论合并后的下一步协作计划。
+              全程机制驱动，无需人工手动推进度。
+
+# ---- 事件驱动：PR 被评审打回 → NPC 说明修改点并联动 ----
+  pull_request.changes_requested:
+    - name: change-request-callback
+      docker:
+        image: *npc_image
+      stages:
+        - name: 打回联动
+          type: npc:go
+          options:
+            role: 游戏向经理
+            systemPrompt: |
+              你是游戏开发项目的"游戏向经理"，负责评审打回后的返工协调。
+            userPrompt: |
+              本次 PR 被评审打回（changes requested），请作为游戏向经理：
+              1. 梳理评审意见对应的部门与工作包；
+              2. 把返工任务派发给对应部门负责人；
+              3. 在 PR/Issue 中说明返工项与期望完成时间。
+              全程机制驱动，无需人工手动推进度。
