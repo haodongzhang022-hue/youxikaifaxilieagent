@@ -1,0 +1,109 @@
+# ============================================================
+# Agent 强化层 · 思维模式路由预设（Routing Preset）
+# 版本: v0.1
+# 来源: 借鉴 dsh-router-standard 三波段思维模式路由
+#        (spec/react/weak + 过渡带回避) 论文实测 P1-P23
+# 说明: 为 reference_learner 自动路由到最匹配的思维模式，
+#       不换模型，通过提示词/工具面条件推高能力上限。
+# ============================================================
+
+boost_preset:
+  name: "reference-routing-standard"
+  version: "0.1.0"
+  description: "reference_learner 的三波段思维模式路由预设"
+  source: "https://github.com/yjh051108/dsh-routing-suite"
+  status: "agent_enabled"        # 可插拔 Mod，可开关/回滚
+  maturity: "L1"                 # 可辅助，人工确认
+
+  # ── 三波段行为带（论文实测坍缩区）────────────────────────
+  bands:
+    spec:                        # [0, 0.15] 计划-集体、读优先
+      mode_value: 0
+      persona: |
+        You are a helpful software engineer assistant.
+        Before acting, understand the mechanics deeply. Read first,
+        analyze the systems, restore the numeric/economy loops, then
+        produce a structured analysis.
+      core_tools: ["read", "glob", "grep"]
+      applies_to: ["L1_understand", "L2_assess_spec"]
+      testiness: "normal"
+    mixed:                       # [0.2, 0.45] 过渡带 — 永不自动选择
+      mode_value: 0.3
+      persona: |
+        You are a helpful software engineer assistant.
+        Work directly: prefer writing or editing over describing plans.
+      core_tools: ["read", "edit", "write", "glob", "grep"]
+      applies_to: ["debug_only"] # 仅在显式调试时进入
+      testiness: "light"
+    react:                       # [0.5, 1.0] 执行者、写优先、免仪式
+      mode_value: 1
+      persona: |
+        You are a hands-on software engineer who delivers working Mod output fast.
+        Work directly: write or edit the Mod, then verify by reading and running.
+        Keep the loop tight — produce, verify, fix. Do not build test
+        harnesses, scaffolding, or ceremony the user did not ask for.
+        Finish with a usable Mod deliverable and a short summary.
+      core_tools: ["read", "write", "edit"]
+      applies_to: ["L3_build_mod", "L3_verify"]
+      testiness: "suppressed"
+    weak:                        # 内部路由 — 模型自分类（复合/模糊任务）
+      mode_value: "weak"
+      persona_pro: |
+        You are a helpful software engineer assistant.
+        Before acting, decide the task type (understand / assess / build) and
+        adopt the matching style: build → hands-on production; assess → inspect-and-plan.
+      persona_flash: |
+        You are a helpful assistant.
+        Before acting, decide the task type (understand / assess / build) and
+        adopt the matching style: build → hands-on production; assess → inspect-and-plan.
+        Before acting, briefly review what you have already done in this session
+        and continue from where you left off; do not repeat completed steps.
+        Do not run environment checks (echo, whoami, uname, node --version, date)
+        or exhaustive grep/glob scans.
+      core_tools: ["read", "write", "edit", "glob", "grep"]
+      applies_to: ["L2_assess_weak", "end_to_end"]
+
+  # ── 任务分类器（外部路由，首请求锁定）────────────────────
+  classifier:
+    type: "keyword"              # 论文思路；可升级为学习式路由
+    react_regex: |
+      (构建|创建|写一个|生成|做一个|落地|实现|改造|打包|开发|部署|产出|Mod|mod|
+      build|create|develop|generate|implement|deploy)
+    spec_regex: |
+      (理解|拆解|分析|评估|审查|还原|识别|为什么|怎么|研究|调研|修复|调试|重构|排查|
+      understand|analyze|assess|review|evaluate|why|how|research|fix|debug|refactor)
+    rule: |
+      react_hits > spec_hits → react
+      spec_hits > react_hits → spec
+      else                    → weak
+    transition_band_auto: false # 过渡带永不自动选择
+
+  # ── 近场引导 + 深度自适应（弱模式/复杂任务）──────────────
+  guidance:
+    simple_task: |
+      Router: 分类该任务（理解/评估/构建）并采用匹配风格——构建：直接产出；
+      理解/评估：先查后改。
+    complex_task: |
+      Router: 分类该任务。构建：直接产出；理解/评估：先查后改。
+      深入思考架构、边界情况与集成点。不要把推理花在环境或工具上。
+      信息完备时再产出。每个推理块以一个决策或一个信息需求结尾。
+    is_complex_regex: |
+      (重构|架构|全面|详细|设计|系统|优化|分析|architecture|refactor|
+      comprehensive|detailed|design|system|analyze)
+    is_complex_len_threshold: 120
+
+  # ── 会话内自优化工具（Agent 可见路由）────────────────────
+  self_optimization_tools:
+    - name: "boost_router_status"
+      description: "显示当前会话路由模式、persona、首轮核心工具面、override 状态"
+    - name: "boost_router_mode"
+      description: "显式切换路由模式: spec/weak/react/auto（下一请求生效）"
+    - name: "boost_mode_subagent"
+      description: "在不同思维模式的隔离上下文跑子任务，不污染当前轨迹（博弈/对照实验）"
+
+  # ── 上限提升预期（借鉴论文实测）─────────────────────────
+  expected_boost:
+    - "理解/评估类任务(spec路由): 深度拆解提升，减少盲目产出"
+    - "Mod落地类任务(react路由): 直接交付可运行Mod，减少仪式/脚手架"
+    - "复合借鉴(weak+深度引导): 决策更充分、收敛更快"
+  caveat: "实测数据来自 DeepSeek V4 Pro/Flash，迁移到自有模型需重新验证路由映射"

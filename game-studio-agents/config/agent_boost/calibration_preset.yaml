@@ -1,0 +1,84 @@
+# ============================================================
+# Agent 校准机制 · 相似度控制预设（Calibration Preset）
+# 版本: v0.1
+# 说明: 为 reference_learner 提供 相似度检测 + 档位控制 + 多轮迭代。
+#       可精确控制借鉴相似度（一模一样/7成/只代码/只避坑）。
+# 对应文档: docs/reference-learning-agent/10-calibration.md
+# ============================================================
+
+calibration_preset:
+  name: "reference-calibration-preset"
+  version: "0.1.0"
+  description: "reference_learner 相似度控制与多轮迭代校准"
+  status: "agent_enabled"
+  maturity: "L1"                    # 可辅助，校准结果可被人工确认
+
+  # ── 相似度维度 ──────────────────────────────────────
+  dimensions:
+    mechanics: {note: "核心玩法循环相似度"}
+    numeric:   {note: "数值曲线/倍率相似度"}
+    visual:    {note: "美术风格/UI/动效相似度"}
+    code:      {note: "实现逻辑/结构相似度"}
+    mindset:   {note: "玩家体验/情绪节奏相似度"}
+
+  # ── 相似度控制档位 ──────────────────────────────────
+  presets:
+    full_clone:         # 一模一样：逐维度追高相似度
+      similarity_goal:
+        mechanics: 0.95
+        numeric:   0.95
+        visual:    0.90
+        code:      0.95
+        mindset:   0.90
+      tolerance: 0.06
+      note: "完整复刻某个玩法系统"
+    high:               # 7成参考：主干像，细节差异化（默认推荐）
+      similarity_goal:
+        mechanics: 0.70
+        numeric:   0.55
+        visual:    null          # null = 不强约束该维度
+        code:      0.65
+        mindset:   0.50
+      tolerance: 0.08
+      note: "默认档位，平衡借鉴与创新"
+    code_only:          # 只近似代码逻辑：code高，其余低/自有
+      similarity_goal:
+        mechanics: 0.50
+        numeric:   0.60
+        visual:    0.20          # 视觉刻意压低
+        code:      0.90          # 代码高度相似
+        mindset:   0.30
+      tolerance: 0.08
+      note: "只要实现思路像，美术/数值完全自主"
+    anti_pattern:       # 只了解避免踩坑：相似度刻意压低
+      similarity_goal:
+        mechanics: 0.15
+        numeric:   0.15
+        visual:    0.10
+        code:      0.10
+        mindset:   0.20
+      tolerance: 0.06
+      note: "反向借鉴，只吸收'别踩的坑'"
+
+  # ── 调整动作映射 ────────────────────────────────────
+  adjustment_actions:
+    above_target: ["decouple", "trim"]   # 高于目标 → 解耦/裁剪
+    below_target: ["enrich", "deepen"]   # 低于目标 → 补足/加深
+    within_tolerance: "stable"           # 在容差内 → 达标
+
+  # ── 多轮迭代参数 ────────────────────────────────────
+  iteration:
+    max_rounds: 3             # 最大迭代轮数（默认3，可配置）
+    converge_epsilon: 0.03    # 相邻两轮相似度变化小于此值视为收敛
+    on_timeout: "PARTIAL"     # 达到上限仍未达标 → 保留最佳轮次并上报人工
+
+  # ── 持续校准（上线后）───────────────────────────────
+  continuous:
+    enabled: true
+    review_after: "7d"        # 上线后1周复测
+    feedback_sources: [player_satisfaction, similarity_recheck, compliance_flag]
+    trigger_decouple_on: "相似度超标导致雷同感/抄袭投诉"
+    trigger_enrich_on: "相似度不足导致未体现借鉴价值"
+
+  # ── 默认档位 ────────────────────────────────────────
+  default: "high"

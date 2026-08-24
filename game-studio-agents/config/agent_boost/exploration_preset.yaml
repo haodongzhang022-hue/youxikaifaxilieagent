@@ -1,0 +1,77 @@
+# ============================================================
+# Agent 校验机制 · 探索多模式预设（Exploration Preset）
+# 版本: v0.1
+# 说明: 为 reference_learner 在"进入分析前"做探索模式决策。
+#       定义 渠道广度 × 信息类型 × 探索深度 三维组合档位。
+# 对应文档: docs/reference-learning-agent/09-exploration-modes.md
+# ============================================================
+
+exploration_preset:
+  name: "reference-exploration-preset"
+  version: "0.1.0"
+  description: "reference_learner 探索多模式预设（渠道/类型/深度三维）"
+  status: "agent_enabled"
+  maturity: "L1"                    # 可辅助，探索模式决策可被人工确认
+
+  # ── 维度一：渠道广度 ────────────────────────────────
+  channel_breadth:
+    single: {min: 1, max: 1, note: "单渠道（如官方宣传片）"}
+    multi:  {min: 2, max: 4, note: "多渠道交叉核验"}
+    all:    {min: 5, max: null, note: "全渠道核验（官方/实机/图文/代码/玩家/竞品）"}
+
+  # ── 维度二：信息类型 ────────────────────────────────
+  info_types:
+    art:        {note: "美术风格/UI/配色/图标",   carrier: "截图/原画/UI展示"}
+    video:      {note: "玩法表现/镜头语言/节奏",  carrier: "宣传片/实机/录屏"}
+    motion:     {note: "反馈动效/转场/粒子",     carrier: "录屏/演示/GIF"}
+    numeric:    {note: "数值曲线/经济循环",      carrier: "设计文档/拆解贴"}
+    code:       {note: "玩法逻辑/事件循环",      carrier: "源码/开源仓库"}
+    mindset:    {note: "玩家动机/情绪曲线",      carrier: "社区/评测/问卷"}
+    compliance: {note: "版权/专利/商标风险",     carrier: "专利库/法务评审"}
+
+  # ── 维度三：探索深度 ────────────────────────────────
+  depth:
+    glance: {note: "浅：整体认知/核心卖点/一眼印象"}
+    dig:    {note: "中：拆解某个子系统/结构/循环"}
+    full:   {note: "深：全维度还原，可供直接迁移"}
+
+  # ── 内置档位 ────────────────────────────────────────
+  presets:
+    art_style:          # 借鉴美术风格
+      channel_breadth: "multi"
+      info_types: ["art"]
+      depth: "glance"
+      budget: {max_channels: 3, max_duration: "20min", max_tool_calls: 12}
+    gameplay_loop:      # 借鉴核心玩法循环（默认）
+      channel_breadth: "multi"
+      info_types: ["video", "motion", "numeric", "mindset"]
+      depth: "dig"
+      budget: {max_channels: 4, max_duration: "40min", max_tool_calls: 20}
+    code_logic:         # 借鉴代码逻辑（无美术干扰）
+      channel_breadth: "multi"
+      info_types: ["code", "numeric"]
+      depth: "full"
+      budget: {max_channels: 3, max_duration: "60min", max_tool_calls: 30}
+    full_clone:         # 全维度复刻一个玩法系统
+      channel_breadth: "all"
+      info_types: ["art", "video", "motion", "numeric", "code", "mindset"]
+      depth: "full"
+      budget: {max_channels: 6, max_duration: "120min", max_tool_calls: 60}
+    competitive_bench:  # 竞品对标（只求客观数据）
+      channel_breadth: "all"
+      info_types: ["numeric", "mindset", "compliance"]
+      depth: "dig"
+      budget: {max_channels: 5, max_duration: "40min", max_tool_calls: 20}
+    anti_pattern:       # 反向借鉴：避开它的失败点
+      channel_breadth: "all"
+      info_types: ["video", "mindset", "numeric", "compliance"]
+      depth: "dig"
+      budget: {max_channels: 5, max_duration: "40min", max_tool_calls: 20}
+
+  # ── 默认档位与约束 ──────────────────────────────────
+  default: "gameplay_loop"
+  rules:
+    - "信息类型必须显式声明，未声明的维度不采集"
+    - "反参考模式(anti_pattern)只产出负面清单，不复制受保护内容"
+    - "每个档位带预算，防止探索过度/信息过载"
+    - "channel_breadth / info_types / depth 可自由组合为自定义档位"

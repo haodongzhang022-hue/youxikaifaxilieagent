@@ -582,5 +582,530 @@ ITERATION_ROADMAP = {
     "v0.4": "多Agent协作流水线（策划→程序→测试自动流转）",
     "v0.5": "质量闭环（自动测试+自动反馈+自动迭代）",
     "v0.6": "数据驱动决策（数值调优自动化）",
-    "v0.7": "全流程Agent替代 + 人工监督模式"
+    "v0.7": "全流程Agent替代 + 人工监督模式",
+    "v0.8": "能力强化层（思维模式路由 + 科研探索 + 可插拔强化Mod）"
 }
+
+
+# ============================================================
+# 11. 强化层：思维模式路由（Reasoning-Mode Routing）
+# 借鉴 dsh-router-standard 三波段（spec/react/weak），为任务路由
+# 到最匹配的思维模式，不换模型，通过提示词/工具面条件推高上限。
+# ============================================================
+
+class ReasoningModeRouter:
+    """
+    三波段思维模式路由器。
+    - spec: 计划-集体，读优先（理解/评估/修复）
+    - react: 执行者，写优先，免仪式（构建/产出）
+    - weak: 模型自分类（复合/模糊任务）
+    过渡带(mixed)永不自动选择。
+    """
+
+    BANDS = ["spec", "mixed", "react", "weak"]
+    # 论文实测坍缩区（DeepSeek V4 Pro）
+    SPEC_UPPER = 0.15      # spec 带 [0, 0.15]
+    MIXED_RANGE = (0.2, 0.45)  # 过渡带，回避
+    REACT_LOWER = 0.5      # react 带 [0.5, 1.0]
+
+    # 任务分类关键词
+    REACT_RE = r"(构建|创建|写一个|生成|做一个|落地|实现|改造|打包|开发|部署|产出|Mod|mod|build|create|develop|generate|implement|deploy)"
+    SPEC_RE = r"(理解|拆解|分析|评估|审查|还原|识别|为什么|怎么|研究|调研|修复|调试|重构|排查|understand|analyze|assess|review|evaluate|why|how|research|fix|debug|refactor)"
+
+    def __init__(self, model_id=None):
+        self.model_id = model_id
+        self.overrides = {}   # session_id -> mode
+
+    def classify_task(self, text):
+        """外部路由：关键词分类。返回 spec/react/weak。"""
+        import re
+        react = len(re.findall(self.REACT_RE, text, re.I))
+        spec = len(re.findall(self.SPEC_RE, text, re.I))
+        if react > spec:
+            return "react"
+        if spec > react:
+            return "spec"
+        return "weak"   # 复合/模糊 → 模型自分类
+
+    def band_of(self, mode):
+        """将模式量化到行为带。接受 band 名(spec/react/weak)或数值。"""
+        if isinstance(mode, str):
+            m = mode.lower()
+            if m in ("weak", "router"):
+                return "weak"
+            if m in ("spec", "spec-lean"):
+                return "spec"
+            if m in ("react", "react-lean"):
+                return "react"
+            if m in ("mixed", "balanced"):
+                return "transition"
+            # 数值字符串（"0.5" / "50"）
+            try:
+                m = float(m)
+                if m > 1:
+                    m = m / 100
+            except ValueError:
+                return "weak"
+        else:
+            m = float(mode or 0)
+        m = max(0, min(1, m))
+        if m < 0.2:
+            return "spec"
+        if m < 0.5:
+            return "transition"  # 过渡带，回避
+        return "react"
+
+    def persona_for(self, mode):
+        """按模式返回 persona。"""
+        band = self.band_of(mode)
+        if band == "spec":
+            return ("You are a helpful software engineer assistant. "
+                    "Read first, analyze deeply, then produce a structured analysis.")
+        if band == "transition":
+            return ("You are a helpful software engineer assistant. "
+                    "Work directly: prefer writing or editing over describing plans.")
+        if band == "weak":
+            return ("You are a helpful assistant. Before acting, decide the task type "
+                    "(understand / assess / build) and adopt the matching style.")
+        return ("You are a hands-on engineer who delivers working Mod output fast. "
+                "Work directly: write or edit the Mod, then verify by reading and running. "
+                "Keep the loop tight — produce, verify, fix.")
+
+    def core_tools_for(self, mode):
+        """按模式返回首轮核心工具面。"""
+        band = self.band_of(mode)
+        if band == "spec":
+            return ["read", "glob", "grep"]       # 读优先
+        if band == "transition":
+            return ["read", "edit", "write", "glob", "grep"]
+        return ["read", "write", "edit"]          # 写优先
+
+    def route(self, session, first_user_message):
+        """
+        首请求路由：锁定本会话模式（路径承诺，中途不切换）。
+        返回 (mode, persona, core_tools)。
+        """
+        mode = self.overrides.get(session, self.classify_task(first_user_message))
+        return {
+            "mode": mode,
+            "band": self.band_of(mode),
+            "persona": self.persona_for(mode),
+            "core_tools": self.core_tools_for(mode),
+            "locked": True,          # 首请求锁定
+        }
+
+    def set_mode(self, session, mode):
+        """显式覆盖模式（下一请求生效）。"""
+        self.overrides[session] = mode
+
+    def is_complex_task(self, text):
+        """深度自适应：复杂任务判定。"""
+        import re
+        complex_re = r"(重构|架构|全面|详细|设计|系统|优化|分析|architecture|refactor|comprehensive|detailed|design|system|analyze)"
+        return len(text) > 120 or bool(re.search(complex_re, text, re.I))
+
+    def guidance_for(self, text):
+        """近场引导：简单任务快速收敛，复杂任务深度探索。"""
+        if self.is_complex_task(text):
+            return ("深入思考架构、边界情况与集成点。不要把推理花在环境或工具上。"
+                    "信息完备时再产出。每个推理块以一个决策或一个信息需求结尾。")
+        return ("分类该任务（理解/评估/构建）并采用匹配风格——"
+                "构建：直接产出；理解/评估：先查后改。")
+
+
+# ============================================================
+# 12. 强化层：多 Agent 博弈（Multi-agent Debate）
+# 不同思维模式/不同 persona 的 Agent 对同一决策辩论、评审、投票。
+# 借鉴 dsh-router-standard 的"模式隔离子代理"。
+# ============================================================
+
+class DebateCoordinator:
+    """多 Agent 博弈评审器。"""
+
+    DEFAULT_WEIGHTS = {
+        "advocate": 0.3,   # 辩手 (react)
+        "reviewer": 0.3,   # 评审 (spec)
+        "skeptic": 0.2,    # 怀疑者 (weak)
+    }
+    SCORE_MAP = {
+        "support": 1.0, "conditional_support": 0.6,
+        "neutral": 0.5, "oppose": 0.0,
+    }
+    ROLES = {
+        "advocate": "react",
+        "reviewer": "spec",
+        "skeptic": "weak",
+        "arbiter": "spec",
+    }
+
+    def __init__(self, router):
+        self.router = router
+        self.weights = dict(self.DEFAULT_WEIGHTS)
+
+    def spawn(self, decision):
+        """生成各角色的隔离配置（各跑独立 context）。"""
+        prompts = {
+            "advocate": f"论证借鉴决策「{decision}」值得落地：收益/亮点/实现路径。",
+            "reviewer": f"评估借鉴决策「{decision}」的可行性/结构完整性/路线图契合。",
+            "skeptic": f"质疑借鉴决策「{decision}」：风险/反例/边界/合规漏洞。",
+        }
+        return {
+            role: {
+                "mode": self.ROLES[role],
+                "persona": self.router.persona_for(self.ROLES[role]),
+                "question": prompts.get(role, ""),
+                "isolated": True,   # 模式隔离
+            }
+            for role in ["advocate", "reviewer", "skeptic"]
+        }
+
+    def arbitrate(self, decision, verdicts):
+        """
+        加权综合三方意见，产出最终决策与置信度。
+        - verdicts: {"advocate": {"verdict":"support","confidence":0.8,"conditions":[...]}}
+        """
+        total_w = 0
+        weighted = 0
+        conditions = []
+        for role, v in verdicts.items():
+            w = self.weights.get(role, 0)
+            total_w += w
+            weighted += w * self.SCORE_MAP.get(v.get("verdict"), 0.5)
+            conditions.extend(v.get("conditions", []))
+        confidence = weighted / total_w if total_w else 0.5
+
+        if confidence >= 0.75:
+            action = "采纳落地"
+        elif confidence >= 0.5:
+            action = "有条件采纳" + (f"（条件: {'; '.join(conditions)}）" if conditions else "")
+        else:
+            action = "建议不落地 / 重新设计"
+
+        return {
+            "decision": decision,
+            "participants": [{"role": r, **v} for r, v in verdicts.items()],
+            "weighted_confidence": round(confidence, 2),
+            "action": action,
+            "conditions": conditions,
+        }
+
+    def boost_weight(self, role, weight):
+        """高风险决策可加大某角色权重。"""
+        self.weights[role] = weight
+
+
+# ============================================================
+# 13. 强化层：元学习（Meta-learning）
+# 从每次借鉴的复盘结果中，迭代"借鉴策略"（评估权重、阈值、取舍规则）。
+# ============================================================
+
+class MetaLearner:
+    """从"如何借鉴"中学习，优化借鉴策略。策略更新需人工审核(L2)。"""
+
+    def __init__(self):
+        self.strategy = {
+            "fit_weights": {
+                "game_type": 0.3, "audience": 0.2, "tech_stack": 0.2,
+                "battle_depth": 0.15, "learning_curve": 0.15,
+            },
+            "fit_threshold": 60,
+        }
+        self.meta_knowledge = []
+
+    def reflect(self, session, actual_feedback):
+        """复盘：评估本次评估是否准确，提出策略更新建议。"""
+        predicted = session.get("fit_score")
+        actual = actual_feedback.get("satisfaction", 0)
+        delta = predicted - actual
+        if abs(delta) < 5:
+            verdict = "accurate"
+            updates = []
+        elif delta > 5:
+            verdict = "over_estimated"
+            updates = [{"key": d, "action": "decrease", "step": 0.05}
+                       for d, w in self.strategy["fit_weights"].items() if w >= 0.25]
+        else:
+            verdict = "under_estimated"
+            updates = [{"key": d, "action": "increase", "step": 0.05}
+                       for d, w in self.strategy["fit_weights"].items() if w <= 0.15]
+        self.meta_knowledge.append({"session_id": session.get("session_id"),
+                                    "verdict": verdict, "delta": delta,
+                                    "proposal": updates, "pending_review": True})
+        return {"verdict": verdict, "delta": delta, "proposal": updates}
+
+    def apply_approved_update(self, updates):
+        """人工审核通过后应用策略更新(L2)。"""
+        for u in updates:
+            dim = u["key"]
+            if dim in self.strategy["fit_weights"]:
+                if u["action"] == "increase":
+                    self.strategy["fit_weights"][dim] += u["step"]
+                elif u["action"] == "decrease":
+                    self.strategy["fit_weights"][dim] = max(
+                        0, self.strategy["fit_weights"][dim] - u["step"])
+
+
+# ============================================================
+# 14. 强化层：树探索 + 假设求证思维链
+# ============================================================
+
+class TreeSearch:
+    """借鉴决策的多分支推演 + 剪枝。"""
+
+    def __init__(self, max_depth=2, prune_threshold=0.4):
+        self.max_depth = max_depth
+        self.prune_threshold = prune_threshold
+
+    def explore(self, root_question, branch_generator, evaluator):
+        root = {"question": root_question, "branches": [], "depth": 0}
+        self._expand(root, branch_generator, evaluator, 0)
+        self._prune(root)
+        ranked = sorted(root["branches"], key=lambda b: -b["score"])
+        return {
+            "root_question": root_question,
+            "branches": ranked,
+            "recommended": ranked[0]["id"] if ranked else None,
+            "backup": ranked[1]["id"] if len(ranked) > 1 else None,
+            "depth": root["depth"],
+            "confidence": ranked[0]["score"] / 100 if ranked else 0,
+        }
+
+    def _expand(self, node, branch_generator, evaluator, depth):
+        if depth >= self.max_depth:
+            return
+        for branch in branch_generator(node["question"]):
+            result = evaluator(branch)
+            entry = {"id": branch.get("id"), "label": branch.get("label"),
+                     "score": result.get("score", 0),
+                     "reason": result.get("reason", ""),
+                     "pruned": False, "sub_branches": []}
+            node["branches"].append(entry)
+            if result.get("sub_branches"):
+                self._expand({"question": f"{node['question']} -> {branch['label']}",
+                              "branches": entry["sub_branches"], "depth": depth + 1},
+                             branch_generator, evaluator, depth + 1)
+            node["depth"] = max(node["depth"], depth + 1)
+
+    def _prune(self, node):
+        if not node["branches"]:
+            return
+        best = max(b["score"] for b in node["branches"])
+        for b in node["branches"]:
+            if b["score"] < best * self.prune_threshold:
+                b["pruned"] = True
+            self._prune({"branches": b["sub_branches"], "depth": 0})
+
+
+class HypothesisVerifier:
+    """假设求证思维链：先提可证伪假设，再收集证据求证。"""
+
+    def verify(self, mechanism, hypotheses, evidence):
+        scores = {h["id"]: 0 for h in hypotheses}
+        for ev in evidence:
+            for hid in ev.get("supports", []):
+                scores[hid] += ev.get("weight", 1)
+        best_h = max(hypotheses, key=lambda h: scores.get(h["id"], 0))
+        total = sum(scores.values()) or 1
+        unverified = [h["id"] for h in hypotheses if not scores.get(h["id"])]
+        return {
+            "winner": best_h["id"],
+            "confidence": scores.get(best_h["id"], 0) / total,
+            "scores": scores,
+            "unverified_hypotheses": unverified,
+        }
+
+    def build_chain(self, mechanism, hypotheses, evidence):
+        """生成可读的假设求证思维链文本。"""
+        r = self.verify(mechanism, hypotheses, evidence)
+        lines = "\n".join(
+            f"  E{i+1}: {ev['text']} (支持:{','.join(ev.get('supports', []))})"
+            for i, ev in enumerate(evidence))
+        return (f"对借鉴点 {mechanism}，我假设 H1/H2。\n"
+                f"收集证据：\n{lines}\n"
+                f"最佳假设 {r['winner']} 置信度 {r['confidence']:.2f}。")
+
+
+# ============================================================
+# 15. 校验机制：探索多模式（Exploration Planner）
+# 进入分析前决定 渠道广度 × 信息类型 × 探索深度。
+# 对应 docs/09-exploration-modes.md
+# ============================================================
+
+class ExplorationPlanner:
+    """探索多模式规划：决定借鉴时从哪些渠道、哪些信息类型、多深去探索。"""
+
+    PRESETS = {
+        "art_style":          {"channel_breadth": "multi", "info_types": ["art"], "depth": "glance"},
+        "gameplay_loop":      {"channel_breadth": "multi", "info_types": ["video", "motion", "numeric", "mindset"], "depth": "dig"},
+        "code_logic":         {"channel_breadth": "multi", "info_types": ["code", "numeric"], "depth": "full"},
+        "full_clone":         {"channel_breadth": "all", "info_types": ["art", "video", "motion", "numeric", "code", "mindset"], "depth": "full"},
+        "competitive_bench":  {"channel_breadth": "all", "info_types": ["numeric", "mindset", "compliance"], "depth": "dig"},
+        "anti_pattern":       {"channel_breadth": "all", "info_types": ["video", "mindset", "numeric", "compliance"], "depth": "dig"},
+    }
+
+    def __init__(self, default="gameplay_loop"):
+        self.default = default
+
+    def plan(self, request, mode=None):
+        """根据诉求决策探索模式，返回探索计划。mode 缺省时从 request 意图推断。"""
+        mode = mode or self._infer_mode(request)
+        preset = self.PRESETS.get(mode, self.PRESETS[self.default])
+        anti = "avoid" in request or "避免" in request or mode == "anti_pattern"
+        return {
+            "request": request,
+            "mode_preset": mode,
+            "channel_breadth": preset["channel_breadth"],
+            "info_types": preset["info_types"],
+            "depth": preset["depth"],
+            "anti_reference": anti,
+            "collected": False,
+        }
+
+    def _infer_mode(self, request):
+        """从请求文本推断合适的探索模式。"""
+        kw = request.lower()
+        if any(k in kw for k in ["avoid", "避免", "踩坑", "别像", "失败"]):
+            return "anti_pattern"
+        if any(k in kw for k in ["美术", "视觉", "风格", "art"]):
+            return "art_style"
+        if any(k in kw for k in ["代码", "逻辑", "code"]):
+            return "code_logic"
+        if any(k in kw for k in ["复刻", "一模一样", "clone"]):
+            return "full_clone"
+        if any(k in kw for k in ["对标", "benchmark", "竞品"]):
+            return "competitive_bench"
+        return self.default
+
+    def budget_for(self, mode):
+        """返回某模式的预算（渠道上限/时长/调用）。"""
+        budgets = {
+            "art_style": {"max_channels": 3, "max_tool_calls": 12},
+            "code_logic": {"max_channels": 3, "max_tool_calls": 30},
+            "full_clone": {"max_channels": 6, "max_tool_calls": 60},
+        }
+        return budgets.get(mode, {"max_channels": 4, "max_tool_calls": 20})
+
+
+# ============================================================
+# 16. 校准机制：相似度检测与档位控制（Calibration Engine）
+# 相似度可检测 + 相似度可控档位 + 多轮迭代校准。
+# 对应 docs/10-calibration.md
+# ============================================================
+
+class CalibrationEngine:
+    """校准引擎：衡量借鉴相似度、控制相似度档位、迭代校准到目标。"""
+
+    DIMS = ["mechanics", "numeric", "visual", "code", "mindset"]
+
+    # 相似度控制档位：各维度目标值（None=不强约束）
+    PRESETS = {
+        "full_clone":  {"mechanics": 0.95, "numeric": 0.95, "visual": 0.90, "code": 0.95, "mindset": 0.90, "tol": 0.06},
+        "high":        {"mechanics": 0.70, "numeric": 0.55, "visual": None, "code": 0.65, "mindset": 0.50, "tol": 0.08},
+        "code_only":   {"mechanics": 0.50, "numeric": 0.60, "visual": 0.20, "code": 0.90, "mindset": 0.30, "tol": 0.08},
+        "anti_pattern":{"mechanics": 0.15, "numeric": 0.15, "visual": 0.10, "code": 0.10, "mindset": 0.20, "tol": 0.06},
+    }
+
+    def __init__(self, default="high", max_rounds=3, converge_epsilon=0.03):
+        self.default = default
+        self.max_rounds = max_rounds
+        self.converge_epsilon = converge_epsilon
+
+    def measure(self, mod, target):
+        """计算借鉴产物与目标的逐维度相似度(0~1)。"""
+        sim = {}
+        for dim in self.DIMS:
+            a = float(mod.get(dim, 0) or 0)
+            b = float(target.get(dim, 0) or 0)
+            # 简单相似度：|a-b| 越小越像
+            sim[dim] = max(0.0, min(1.0, 1.0 - abs(a - b)))
+        return sim
+
+    def calibrate(self, current, preset="high"):
+        """将当前相似度与目标档位对比，输出调整指令。返回 (status, adjustments)。"""
+        goal = self.PRESETS[preset]
+        tol = goal["tol"]
+        adjustments = []
+        status = "stable"
+        for dim in self.DIMS:
+            g = goal.get(dim)
+            if g is None:
+                continue
+            cur = current.get(dim, 0)
+            if cur > g + tol:
+                status = "adjusting"
+                adjustments.append({"dim": dim, "action": "decouple",
+                                    "note": f"相似度{cur:.2f}过高(目标{g:.2f})，解耦为自有风格"})
+            elif cur < g - tol:
+                status = "adjusting"
+                adjustments.append({"dim": dim, "action": "enrich",
+                                    "note": f"相似度{cur:.2f}不足(目标{g:.2f})，补足素材/加深拆解"})
+        return status, adjustments
+
+    def iterate(self, mod, target, preset="high"):
+        """多轮迭代校准：每轮检测相似度→对比目标→调整，直到达标/收敛/达上限。"""
+        history = []
+        for rnd in range(1, self.max_rounds + 1):
+            sim = self.measure(mod, target)
+            status, adjustments = self.calibrate(sim, preset)
+            history.append({"round": rnd, "similarity": sim, "status": status, "adjustments": adjustments})
+            if status == "stable":
+                return {"converged": True, "status": status, "history": history}
+            # 收敛检测：与上一轮相似度几乎不变则停止
+            if len(history) >= 2:
+                prev = history[-2]["similarity"]
+                delta = max(abs(sim[d] - prev.get(d, 0)) for d in self.DIMS)
+                if delta < self.converge_epsilon:
+                    return {"converged": True, "status": "converged_stalled", "history": history}
+            # 应用调整：模拟下一轮（此处用简化近似，真实场景会触发新一轮探索）
+            mod = self._apply(mod, adjustments)
+        return {"converged": False, "status": "PARTIAL", "history": history,
+                "note": "达到最大轮数仍未达标，保留最佳轮次上报人工"}
+
+    def _apply(self, mod, adjustments):
+        """模拟应用调整指令，推进相似度向目标收敛。"""
+        m = dict(mod)
+        for adj in adjustments:
+            d = adj["dim"]
+            if adj["action"] == "decouple" and d in m:
+                m[d] = (m[d] + 0.0) / 2.0      # 解耦：向自有风格拉低
+            elif adj["action"] == "enrich" and d in m:
+                m[d] = min(1.0, m[d] + 0.1)    # 补足：向目标加深
+        return m
+
+
+# ============================================================
+# 17. 强化层：统一入口（Capability Boost Hub）
+# 汇总路由 + 科研探索 + 博弈 + 校验/校准，供 reference_learner 调用。
+# ============================================================
+
+class CapabilityBoost:
+    """强化层统一入口（含校验/校准引擎）。"""
+
+    def __init__(self, model_id=None):
+        self.router = ReasoningModeRouter(model_id)
+        self.debate = DebateCoordinator(self.router)
+        self.meta = MetaLearner()
+        self.tree = TreeSearch()
+        self.hypothesis = HypothesisVerifier()
+        self.exploration = ExplorationPlanner()   # 校验：探索多模式
+        self.calibration = CalibrationEngine()    # 校准：相似度控制与多轮迭代
+
+    def route_session(self, session, first_user_message):
+        """对会话路由思维模式（首请求锁定）。"""
+        return self.router.route(session, first_user_message)
+
+    def review_decision(self, decision, verdicts):
+        """对借鉴决策做多 Agent 博弈评审。"""
+        return self.debate.arbitrate(decision, verdicts)
+
+    def reflect_learning(self, session, feedback):
+        """借鉴结束后元学习复盘。"""
+        return self.meta.reflect(session, feedback)
+
+    def plan_exploration(self, request, mode=None):
+        """[校验] 决策探索模式（渠道/类型/深度）。"""
+        return self.exploration.plan(request, mode)
+
+    def calibrate_similarity(self, mod, target, preset="high"):
+        """[校准] 检测相似度并控制到目标档位（多轮迭代）。"""
+        return self.calibration.iterate(mod, target, preset)

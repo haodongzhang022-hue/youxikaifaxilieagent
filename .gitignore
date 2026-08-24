@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.pyo
+# 参考克隆项目（探索用，非交付物）
+claude-code-game-studios/
+dongjiagoushi/

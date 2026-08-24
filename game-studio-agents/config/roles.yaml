@@ -1354,6 +1354,243 @@ roles:
       needs_approval_from: ["制作人"]
       approves: ["数据报告"]
 
+  # ---------------- 游戏借鉴学习 Agent ----------------
+  - role_id: "reference_learner"
+    name: "游戏借鉴学习Agent"
+    en_name: "Reference Learner"
+    department: "运营线"
+    level: "研究岗"
+    agent_priority: 82
+    status: "agent_enabled"
+
+    responsibilities:
+      - "从其他游戏借鉴玩法经验（机制理解/拆解/迁移）"
+      - "评估借鉴机制与自有游戏的适配度并做取舍"
+      - "以创意工坊模组(Mod)方式落地借鉴（视觉/展现/功能）"
+      - "维护借鉴知识库与玩法雷达"
+
+    tasks:
+      - id: "rl.understand"
+        name: "游戏机制理解"
+        inputs: ["目标游戏素材(视频/文档/代码/截图)"]
+        process: "玩法识别 → 系统拆解 → 数值/循环还原 → 心智模型 → 视觉语言提取"
+        outputs: ["机制分析报告"]
+        trigger: "触发信号/指令"
+
+      - id: "rl.assess"
+        name: "适配评估与取舍"
+        inputs: ["机制分析报告", "自有游戏基线"]
+        process: "契合度评分 → 取舍裁剪(keep/trim/adapt/drop) → 融合设计 → 创新点 → 风险审查"
+        outputs: ["契合度评分卡", "取舍矩阵"]
+        trigger: "分析完成"
+
+      - id: "rl.build_mod"
+        name: "模组落地"
+        inputs: ["决策单", "Mod规范"]
+        process: "视觉改造 → 展现改造 → 功能模块 → 模组打包(Manifest)"
+        outputs: [".mod 包", "Mod清单"]
+        trigger: "评估通过"
+
+      - id: "rl.verify"
+        name: "沙盒验证与回滚"
+        inputs: ["Mod包", "主游戏基线"]
+        process: "隔离加载 → 功能验证 → 开关/回滚测试 → 通过/打回"
+        outputs: ["验证报告"]
+        trigger: "Mod构建完成"
+
+      - id: "rl.radar"
+        name: "玩法雷达"
+        inputs: ["竞品动态", "社区话题", "运营数据"]
+        process: "扫描热门/同品类玩法 → 生成借鉴候选 → 写入队列"
+        outputs: ["玩法雷达周报", "借鉴候选队列"]
+        trigger: "定期/事件"
+
+      - id: "rl.knowledge"
+        name: "借鉴知识库维护"
+        inputs: ["决策单", "分析报告", "Mod"]
+        process: "归档 → 索引 → 去重 → 回写知识库"
+        outputs: ["知识库更新"]
+        trigger: "每次借鉴结束"
+
+    workflows:
+      - name: "借鉴落地流程"
+        steps: ["触发 → 准入GATE → 理解分析 → 适配评估 → 决策 → 构建Mod → 沙盒验证 → 审核合入 → 归档知识库"]
+
+      - name: "玩法雷达流程"
+        steps: ["定期扫描 → 生成借鉴候选 → 准入评估 → 排队/推荐"]
+
+    collaboration:
+      receives_from: ["制作人", "数据分析师", "游戏运营"]
+      sends_to: ["系统策划", "数值策划", "UI/UX设计师", "客户端程序员", "主美"]
+      needs_approval_from: ["制作人"]
+      approves: ["借鉴决策单", "Mod发布"]
+
+    # 行为状态机
+    state_machine:
+      states: ["IDLE", "INPUT_PENDING", "ANALYSIS", "ASSESS", "DECIDE", "BUILD_MOD", "SANDBOX_VERIFY", "REVIEW_COMMIT", "ARCHIVING"]
+      transitions:
+        - {from: "IDLE", event: "TRIGGER", to: "INPUT_PENDING"}
+        - {from: "INPUT_PENDING", event: "MATERIAL_READY", to: "ANALYSIS"}
+        - {from: "INPUT_PENDING", event: "GATE_FAIL", to: "IDLE"}
+        - {from: "ANALYSIS", event: "REPORT_READY", to: "ASSESS"}
+        - {from: "ASSESS", event: "FIT_LOW", to: "IDLE"}
+        - {from: "ASSESS", event: "FIT_HIGH", to: "DECIDE"}
+        - {from: "DECIDE", event: "DECISION_MADE", to: "BUILD_MOD"}
+        - {from: "BUILD_MOD", event: "MOD_READY", to: "SANDBOX_VERIFY"}
+        - {from: "SANDBOX_VERIFY", event: "VERIFY_FAIL", to: "BUILD_MOD"}
+        - {from: "SANDBOX_VERIFY", event: "VERIFY_PASS", to: "REVIEW_COMMIT"}
+        - {from: "REVIEW_COMMIT", event: "REJECTED", to: "BUILD_MOD"}
+        - {from: "REVIEW_COMMIT", event: "APPROVED", to: "ARCHIVING"}
+        - {from: "ARCHIVING", event: "ARCHIVED", to: "IDLE"}
+
+    # Agent行为逻辑
+    agent_logic:
+      decision_points:
+        - "该机制是否值得借鉴？→ 依据: 契合度评分(默认≥60) + 收益/成本"
+        - "整体搬 or 裁剪 or 改造？→ 依据: 类型匹配/技术约束/定位一致"
+        - "Mod是否可发布？→ 依据: 沙盒验证通过 + 合规审查 + 人工审核(L2)"
+        - "用什么探索模式？→ 依据: 渠道广度×信息类型×深度(见docs/09)"
+        - "相似度控到哪个档位？→ 依据: full_clone/high/code_only/anti_pattern(见docs/10)"
+      knowledge_base:
+        - "借鉴知识库(已评估/已落地/已放弃)"
+        - "竞品玩法库"
+        - "自有游戏基线版本与Mod清单"
+        - "校准档案(每轮相似度与档位记录)"
+      response_format: "结构化决策单 + 机制分析报告 + Mod交付物"
+
+    # ---- 校验机制：探索多模式（见 docs/09）----
+    exploration:
+      preset: "config/agent_boost/exploration_preset.yaml"
+      default: "gameplay_loop"
+      dimensions: [channel_breadth, info_types, depth]
+      channel_breadth: [single, multi, all]      # 渠道广度
+      info_types: [art, video, motion, numeric, code, mindset, compliance]  # 信息类型
+      depth: [glance, dig, full]                 # 探索深度
+      presets:
+        - {name: "art_style",        types: [art],                        depth: glance, note: "借鉴美术风格"}
+        - {name: "gameplay_loop",    types: [video, motion, numeric, mindset], depth: dig,    note: "借鉴核心玩法循环(默认)"}
+        - {name: "code_logic",       types: [code, numeric],             depth: full,   note: "借鉴代码逻辑"}
+        - {name: "full_clone",       types: [art, video, motion, numeric, code, mindset], depth: full, note: "全维度复刻"}
+        - {name: "competitive_bench",types: [numeric, mindset, compliance], depth: dig,  note: "竞品对标"}
+        - {name: "anti_pattern",     types: [video, mindset, numeric, compliance], depth: dig, note: "反向借鉴避开失败点"}
+      rules:
+        - "信息类型必须显式声明，未声明的维度不采集"
+        - "反参考模式只产出负面清单，不复制受保护内容"
+
+    # ---- 校准机制：相似度控制与多轮迭代（见 docs/10）----
+    calibration:
+      preset: "config/agent_boost/calibration_preset.yaml"
+      default: "high"                           # 默认7成参考
+      similarity_presets: [full_clone, high, code_only, anti_pattern]
+      dims: [mechanics, numeric, visual, code, mindset]
+      iteration:
+        max_rounds: 3                            # 一次参考不完善可多轮
+        converge_epsilon: 0.03
+        on_timeout: "PARTIAL"                    # 保留最佳轮次上报人工
+      continuous:
+        enabled: true
+        review_after: "7d"                       # 上线后持续校准
+        trigger_decouple_on: "相似度过高/雷同感"
+        trigger_enrich_on: "相似度不足/价值未体现"
+
+    # ---- 强化层（Capability Boost，见 docs/06-08）----
+    boost:
+      routing:                       # 思维模式路由（借鉴 dsh-router-standard 三波段）
+        preset: "config/agent_boost/routing_preset.yaml"
+        bands: [spec, react, weak]   # 过渡带(mixed)永不自动选择
+        mapping:
+          - {stage: "L1_understand", mode: spec,   note: "读优先，计划-集体"}
+          - {stage: "L2_assess",     mode: spec,   note: "适配评估/取舍，读优先"}
+          - {stage: "L3_build_mod",  mode: react,  note: "直接交付Mod，免仪式"}
+          - {stage: "L3_verify",     mode: react,  note: "沙盒验证，免测试仪式"}
+          - {stage: "composite",     mode: weak,   note: "复合/模糊任务，模型自分类"}
+        first_request_lock: true      # 首请求锁定模式，中途不切换
+        self_optimization: [boost_router_status, boost_router_mode, boost_mode_subagent]
+
+      scientific_exploration:        # 科研探索（见 docs/08）
+        engine: "config/agent_boost/research_engine.py"
+        meta_learning:
+          enabled: true
+          review_level: L2           # 策略更新需人工审核
+          output: "元学习策略卡(meta_learning)"
+        tree_search:
+          enabled: true
+          max_depth: 2               # 复杂机制可加深到3
+          prune_threshold: 0.4
+          output: "探索树(tree_search)"
+        hypothesis_verify:
+          enabled: true
+          evidence_sources: [player_feedback, operational_data, competitor, technical]
+          output: "假设求证思维链"
+        multi_agent_debate:
+          enabled: true
+          config: "config/agent_boost/debate_reviewer.yaml"
+          roles: [advocate(react), reviewer(spec), skeptic(weak), arbiter(spec)]
+          mode_isolated: true        # 各角色隔离上下文
+          output: "决策评审单(debate)"
+
+      boost_mods:                    # 可插拔强化Mod（借鉴 dsh-super-injector）
+        - {name: "routing-standard", source: "dsh-routing-suite", injectable: true, rollback: true}
+        - {name: "methodology-skills", source: "superpowers", injectable: true, rollback: true}
+      maturity: L1                   # 可辅助，人工确认，随信任度升级
+
+    # ---- 对接通用基础设施（v0.3，见 README）----
+    infrastructure:
+      kernel: "config/agent_core.py::BaseAgent"      # 继承通用内核，覆写 handle_task
+      message_bus: "config/message_bus.py::MessageBus"  # 事件驱动协作（DIRECT/TOPIC/ANYCAST）
+      scheduler: "config/task_scheduler.py::Scheduler"  # 任务队列/优先级/依赖派发
+      implementation: "config/reference_learner_agent.py::ReferenceLearnerAgent"
+      demo: "python3 config/reference_learner_agent.py"
+      boost_hub: "config/agent_behavior.py::CapabilityBoost"  # 强化层统一入口（路由/科研/博弈/探索/校准）
+
+  # ---------------- 游戏借鉴学习Agent（灵感雷达型） ----------------
+  - role_id: "reference_learner_alt"
+    name: "游戏借鉴学习Agent（灵感雷达型）"
+    en_name: "Reference Learner (Inspiration Radar)"
+    department: "运营线"
+    level: "研究岗"
+    agent_priority: 84
+    status: "agent_enabled"
+    personality: "灵感雷达：以捕捉前沿玩法与行业风向为核心，嗅觉敏锐、行动快速，风格先锋且大胆，善于从碎片信息中快速提炼可迁移的灵感点并轻量试错，追求敏捷而不是大而全的落地。"
+
+    responsibilities:
+      - "快速捕捉行业前沿玩法与热点风向"
+      - "轻量级灵感提炼与快速原型验证"
+      - "低成本试错与快速取舍（验证失败即弃）"
+      - "维护灵感雷达周报与借鉴定向线索"
+
+    tasks:
+      - id: "rla.scan"
+        name: "前沿玩法扫描"
+        inputs: ["行业动态", "榜单新品", "社区热点"]
+        process: "快速扫描 → 热点识别 → 灵感点标注 → 写入雷达"
+        outputs: ["灵感雷达周报"]
+        trigger: "定期/事件"
+
+      - id: "rla.quickproto"
+        name: "快速原型验证"
+        inputs: ["灵感点", "目标用户画像"]
+        process: "精简还原 → 最小原型 → 内测反馈 → 通过/放弃"
+        outputs: ["原型验证结论"]
+        trigger: "灵感点入选"
+
+      - id: "rla.transfer"
+        name: "灵感点迁移"
+        inputs: ["验证通过的灵感", "自有游戏基线"]
+        process: "轻量裁剪 → 定向改造 → 迁移评估 → 移交策划/程序"
+        outputs: ["迁移建议单"]
+        trigger: "原型通过"
+
+    workflows:
+      - name: "灵感雷达流程"
+        steps: ["扫描 → 灵感标注 → 快速原型 → 内测反馈 → 迁移/放弃"]
+
+    collaboration:
+      receives_from: ["数据分析师", "游戏运营"]
+      sends_to: ["系统策划", "数值策划", "主美"]
+      needs_approval_from: ["制作人"]
+      approves: ["迁移建议单", "灵感雷达周报"]
+
   # ---------------- 游戏运营 ----------------
   - role_id: "game_operator"
     name: "游戏运营（用户向）"

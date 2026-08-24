@@ -1,0 +1,86 @@
+# ============================================================
+# Agent 强化层 · 多 Agent 博弈评审配置（Debate Reviewer）
+# 版本: v0.1
+# 说明: 为 reference_learner 的借鉴决策提供多视角博弈评审。
+#       不同思维模式/不同 persona 的 Agent 对同一决策辩论，
+#       仲裁加权综合后产出最终决策与置信度。
+# 来源: 借鉴 dsh-router-standard 的思维模式路由 + 模式隔离子代理
+# ============================================================
+
+debate_reviewer:
+  name: "reference-debate-reviewer"
+  version: "0.1.0"
+  description: "reference_learner 借鉴决策的多 Agent 博弈评审"
+  status: "agent_enabled"
+  maturity: "L1"          # 可辅助，仲裁结果作为决策依据，最终人工确认
+
+  # ── 参与角色（思维模式隔离）─────────────────────────────
+  participants:
+    advocate:             # 辩手 — 主张落地
+      mode: "react"       # 执行者，直接产出
+      persona: |
+        You are a hands-on engineer who delivers working Mod output fast.
+        Advocate FOR borrowing decision {decision}. List benefits, highlights,
+        and implementation path clearly.
+      default_verdict: "support"
+      weight: 0.3
+    reviewer:             # 评审 — 评估可行性
+      mode: "spec"        # 计划-集体，读优先
+      persona: |
+        You are a helpful software engineer assistant.
+        Evaluate the borrowing decision {decision}: feasibility, structural
+        completeness, roadmap fit. Read first, then assess.
+      default_verdict: "conditional_support"
+      weight: 0.3
+    skeptic:              # 怀疑者 — 找风险/反例
+      mode: "weak"        # 中性 + 分类
+      persona: |
+        You are a helpful assistant.
+        Challenge the borrowing decision {decision}: find risks, counterexamples,
+        edge cases, and compliance holes.
+      default_verdict: "oppose"
+      weight: 0.2
+    arbiter:              # 仲裁 — 聚合
+      mode: "spec"
+      persona: |
+        You are a helpful software engineer assistant.
+        Aggregate the three perspectives and produce a final decision with
+        weighted confidence and any required conditions.
+      weight: null        # 仲裁不参与原始评分，只聚合
+
+  # ── 仲裁规则 ────────────────────────────────────────────
+  arbitration:
+    verdict_score_map:
+      support: 1.0
+      conditional_support: 0.6
+      neutral: 0.5
+      oppose: 0.0
+    action_thresholds:
+      adopt: 0.75                 # ≥ 采纳落地
+      conditional_adopt: 0.5      # ≥ 有条件采纳
+      reject: "<0.5"              # 建议不落地 / 重新设计
+    adjust_weights:
+      high_risk:                  # 高风险决策（涉及核心数值/经济循环）
+        skeptic: 0.4
+        reviewer: 0.3
+        advocate: 0.2
+
+  # ── 关键规则 ────────────────────────────────────────────
+  rules:
+    - "每个博弈 Agent 在隔离上下文跑（fresh system prompt），避免相互污染"
+    - "辩手(reactive) 与 评审/怀疑者(spec/weak) 形成'产出 vs 审视'张力"
+    - "高风险决策加大怀疑者权重（见 adjust_weights.high_risk）"
+    - "仲裁结果作为决策依据，最终仍需人工确认（L2 人机共治）"
+
+  # ── 对接科研引擎 ────────────────────────────────────────
+  integration:
+    engine: "config/agent_boost/research_engine.py"
+    entrypoint: "DebateCoordinator.arbitrate(decision, verdicts)"
+    invoked_in_state: "DECIDE"    # 在借鉴决策状态触发
+    output_schema: |
+      debate:
+        decision: <借鉴决策>
+        participants: [{role, mode, verdict, weight, key_points}]
+        weighted_confidence: <0-1>
+        action: <采纳落地/有条件采纳/建议不落地>
+        conditions: [<验证条件>]
