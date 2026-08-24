@@ -12,14 +12,20 @@
 ```
 game-studio-agents/
 ├── docs/
-│   └── 岗位体系调研.md          # 游戏开发行业岗位调研报告
+│   ├── 岗位体系调研.md          # 游戏开发行业岗位调研报告
+│   └── reference-learning-agent/  # 游戏借鉴学习 Agent 设计（能力/行为逻辑/触发时机/Mod规范/强化层）
 ├── config/
-│   ├── roles.yaml               # Agent 岗位定义文件（职责/任务/协作/状态机）
-│   ├── agent_behavior.py        # Agent 行为逻辑框架（决策/通信/协作/异常，架构定义）
-│   │
+│   ├── roles.yaml               # Agent 岗位定义文件（职责/任务/协作/状态机，含 reference_learner 强化层）
+│   ├── agent_behavior.py        # Agent 行为逻辑框架（决策/通信/协作/异常 + 强化层机制）
+│   ├── agent_core.py            # ⭐ 通用 Agent 内核基类（生命周期/状态机/决策，v0.3，可运行）
 │   ├── message_bus.py           # ⭐ 通用消息总线（事件驱动通信，v0.3，可运行）
-│   ├── agent_core.py            # ⭐ 通用 Agent 内核基类（生命周期/状态机/决策，可运行）
-│   └── task_scheduler.py        # ⭐ 任务队列与事件驱动调度器（优先级/依赖，可运行）
+│   ├── task_scheduler.py        # ⭐ 任务队列与事件驱动调度器（优先级/依赖，v0.3，可运行）
+│   └── agent_boost/             # 能力强化层（思维模式路由 / 科研探索 / 博弈评审 / 探索 / 校准）
+│       ├── routing_preset.yaml  #   三波段思维模式路由预设（spec/react/weak）
+│       ├── research_engine.py   #   科研探索引擎（元学习/树探索/假设求证/多Agent博弈）
+│       ├── debate_reviewer.yaml #   多 Agent 博弈评审配置
+│       ├── exploration_preset.yaml # 探索多模式预设（渠道×类型×深度）
+│       └── calibration_preset.yaml # 相似度控制与多轮迭代校准预设
 └── README.md                    # 本文件
 ```
 
@@ -52,7 +58,7 @@ python3 config/task_scheduler.py   # 调度器：优先级 / 依赖解锁 / 事�
 | **美术线** | 主美、原画、3D建模、动画、特效、UI/UX、TA、音频 | ★★☆ |
 | **测试线** | 测试工程师、自动化测试 | ★★★ |
 | **项目管理** | 项目经理、版本管理 | ★★★ |
-| **运营线** | 数据分析师、游戏运营 | ★★☆ |
+| **运营线** | 数据分析师、游戏运营、**游戏借鉴学习Agent** | ★★☆ |
 
 ## 🧠 每个岗位包含的内容
 
@@ -70,11 +76,40 @@ python3 config/task_scheduler.py   # 调度器：优先级 / 依赖解锁 / 事�
   - agent_logic: Agent行为逻辑（决策点/知识库/输出格式）
 ```
 
+## ✨ 游戏借鉴学习 Agent（reference_learner）
+
+`reference_learner` 是运营线新增的研究岗，负责**从其他游戏借鉴玩法经验，并以创意工坊模组（Mod）方式落地**。
+
+它已在 `config/roles.yaml` 中完整定义（职责 / 任务 / 协作 / 状态机 / `agent_logic`），并引入**开源能力强化层**
+（借鉴 dsh-routing-suite / superpowers / 科研方法）：
+
+- **思维模式路由**：按任务自动路由到 spec/react/weak，不换模型即推高上限（见 `07-routing-modes.md`）
+- **科研探索**：元学习、树探索、假设求证思维链、多 Agent 博弈（见 `08-scientific-exploration.md`）
+- **探索多模式**：渠道×信息类型×深度三维档位（见 `09-exploration-modes.md`）
+- **相似度校准**：控制借鉴相似度档位（一模一样/7成/只代码/只避坑）并多轮迭代（见 `10-calibration.md`）
+- **可插拔强化 Mod**：强化能力封装为可注入/回滚的 Mod（见 `11-boost-usage.md`）
+
+### 与通用基础设施的对接
+
+`reference_learner` 基于升级后的通用内核 `agent_core.BaseAgent` 落地为可运行实现：
+
+| 基础设施 | 对接方式 |
+|---------|---------|
+| `agent_core.BaseAgent` | `ReferenceLearnerAgent(BaseAgent)` 继承通用内核，覆写 `handle_task` 实现借鉴落地状态机 |
+| `message_bus.MessageBus` | 通过总线收发 `TASK_ASSIGN` / `REVIEW_RESULT` / `ARTIFACT_DELIVERY` 等消息，与上下游岗位协作 |
+| `task_scheduler.Scheduler` | 借鉴任务入调度队列，按优先级/依赖自动派发，完成/失败发布事件 |
+| 强化层 `agent_boost` | 在 `DECIDE` 状态调用科研探索（树探索/博弈），在分析前调用探索规划，在构建后调用相似度校准 |
+
+```bash
+# 运行 reference_learner 的可运行实现（含演示）
+python3 config/reference_learner_agent.py
+```
+
 ## 🔄 迭代路线
 
 - **v0.1** ✅ 岗位定义 + 行为逻辑框架
 - **v0.3** ✅ 通用基础设施：消息总线 / Agent 内核 / 任务调度（解耦补充）
-- **v0.4** 🔜 单个 Agent 自动执行（基于内核实现具体岗位）
+- **v0.4** ✅ reference_learner 对接基础设施，落地为可运行 Agent（复用强化层）
 - **v0.5** 🔜 多 Agent 协作流水线（接入消息总线 + 调度器）
 - **v0.6** 🔜 质量闭环与数据驱动
 
@@ -88,6 +123,9 @@ cat config/roles.yaml
 # 查看Agent行为逻辑框架
 cat config/agent_behavior.py
 
+# 查看 reference_learner 可运行实现
+cat config/reference_learner_agent.py
+
 # 查看岗位体系调研报告
 cat docs/岗位体系调研.md
 ```
@@ -95,6 +133,6 @@ cat docs/岗位体系调研.md
 ---
 
 **下一步迭代方向**：
-1. ✅ 消息总线 / Agent 内核 / 任务调度已落地为可运行模块（本 PR）
-2. 基于 `agent_core.BaseAgent` 实现具体岗位 Agent（如系统策划、QA）的最小可用版本
-3. 接入 `message_bus` + `task_scheduler`，建立「策划→程序→测试」自动流水线
+1. ✅ 消息总线 / Agent 内核 / 任务调度已落地为可运行模块
+2. ✅ reference_learner 对接基础设施并复用强化层，落地为可运行 Agent
+3. 🔜 接入 `message_bus` + `task_scheduler`，建立「策划→程序→测试」自动流水线
