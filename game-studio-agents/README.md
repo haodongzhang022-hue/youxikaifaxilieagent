@@ -16,6 +16,7 @@ game-studio-agents/
 │   └── reference-learning-agent/  # 游戏借鉴学习 Agent 设计（能力/行为逻辑/触发时机/Mod规范/强化层）
 ├── config/
 │   ├── roles.yaml               # Agent 岗位定义文件（职责/任务/协作/状态机，含 reference_learner 强化层）
+│   ├── role_presets.yaml        # ⭐ 角色分层预设体系（角色级/技术栈级/小组级，按需启用）
 │   ├── agent_behavior.py        # Agent 行为逻辑框架（决策/通信/协作/异常 + 强化层机制）
 │   ├── agent_core.py            # ⭐ 通用 Agent 内核基类（生命周期/状态机/决策，v0.3，可运行）
 │   ├── message_bus.py           # ⭐ 通用消息总线（事件驱动通信，v0.3，可运行）
@@ -48,6 +49,29 @@ python3 config/task_scheduler.py   # 调度器：优先级 / 依赖解锁 / 事�
 ```
 
 **设计原则**：三者互相解耦、可独立替换；`agent_core` 与 `task_scheduler` 依赖 `message_bus` 作为统一通信层，但彼此不互相依赖，方便架构师审查后按需重组。
+
+## 🎭 角色分层预设体系（可扩展备用预设）
+
+> **背景**：为支持可扩展性，无需把每种可能都做成正式角色（每个岗位 >3 个会过度膨胀）。
+> 本体系把**同一岗位/岗位族的多种变体**作为**备用预设**预置，按需启用。
+> 例如：同样的美工，不同美术风格可预设进美工角色；技术岗不同技术栈可预设；
+> 还能按生态组织成**小组**（UE5小组 / Godot小组 / Web React小组 / 页面引擎小组）。
+
+定义文件：`config/role_presets.yaml`，分**三个层级**：
+
+| 层级 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| **L1** | 角色级预设 `role_presets` | 针对单个岗位的变体（风格/技术栈/侧重） | 原画师·水墨风、客户端·UE5、数值·肉鸽向 |
+| **L2** | 技术栈级预设 `stack_presets` | 针对程序线岗位族的整套技术方案 | UE5生态 / Godot生态 / Web(React) / 页面引擎 |
+| **L3** | 小组级预设 `team_presets` | 面向某一生态组织的小组，可整体启用 | UE5小组 / Godot小组 / Web前端小组 / 页面引擎小组 |
+
+**启用方式（按需求启用即可）**：
+1. **只读参考**：读取 preset 字段并入现有正式角色
+2. **实例化**：将 preset 复制为 `roles.yaml` 中的正式角色（`status: agent_enabled`）
+3. **小组编排**：通过 L3 `team_presets` 组合多角色/技术栈，作为一组 Agent 整体启用
+
+> **可扩展约定**：预设为**轻量定义**，只给差异化字段（personality/风格/技术栈/工具链/侧重），
+> 复用 `base_role` 的正式定义（responsibilities/tasks/状态机），从而支持低成本横向扩展。
 
 ## 🎭 岗位体系总览（六大板块）
 
@@ -122,6 +146,9 @@ python3 config/reference_learner_agent.py
 ```bash
 # 查看所有岗位定义
 cat config/roles.yaml
+
+# 查看角色分层预设体系（可扩展备用预设）
+cat config/role_presets.yaml
 
 # 查看Agent行为逻辑框架
 cat config/agent_behavior.py
