@@ -5,6 +5,19 @@
 核心框架位于 [game-studio-agents/](./game-studio-agents/)，
 参考其 [README](./game-studio-agents/README.md) 了解岗位体系总览。
 
+## 机制驱动自动化编排（游戏向经理）
+
+本仓库流程推进**由事件机制驱动，非手动 / 命令**。
+
+- **游戏向经理**（[game_producer_agent.py](./game-studio-agents/config/game_producer_agent.py)）：把架构蓝图拆解为部门工作包，按部门分配任务与资源，自动推进分工协作。
+- **自动化流水线**（[.cnb.yml](./.cnb.yml)）：Issue 新建自动拆解派单、PR 提交自动评审、满足门禁自动合并、合并后自动解锁下游。
+- **详细说明**：见 [docs/game-orchestration.md](./game-studio-agents/docs/game-orchestration.md)
+
+```bash
+# 运行游戏向经理演示
+python3 game-studio-agents/config/game_producer_agent.py
+```
+
 ## 当前聚焦：游戏借鉴学习 Agent
 
 当前首个聚焦的子 Agent 为 **游戏借鉴学习 Agent（Game Reference Learning Agent）**，

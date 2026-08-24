@@ -13,13 +13,15 @@
 game-studio-agents/
 ├── docs/
 │   ├── 岗位体系调研.md          # 游戏开发行业岗位调研报告
-│   └── reference-learning-agent/  # 游戏借鉴学习 Agent 设计（能力/行为逻辑/触发时机/Mod规范/强化层）
+│   ├── reference-learning-agent/  # 游戏借鉴学习 Agent 设计（能力/行为逻辑/触发时机/Mod规范/强化层）
+│   └── game-orchestration.md      # 游戏向经理 + 机制驱动自动化编排
 ├── config/
 │   ├── roles.yaml               # Agent 岗位定义文件（职责/任务/协作/状态机，含 reference_learner 强化层）
 │   ├── agent_behavior.py        # Agent 行为逻辑框架（决策/通信/协作/异常 + 强化层机制）
 │   ├── agent_core.py            # ⭐ 通用 Agent 内核基类（生命周期/状态机/决策，v0.3，可运行）
 │   ├── message_bus.py           # ⭐ 通用消息总线（事件驱动通信，v0.3，可运行）
 │   ├── task_scheduler.py        # ⭐ 任务队列与事件驱动调度器（优先级/依赖，v0.3，可运行）
+│   ├── game_producer_agent.py   # ⭐ 游戏向经理 Agent（架构拆解→部门分工→机制驱动派发，v0.1，可运行）
 │   └── agent_boost/             # 能力强化层（思维模式路由 / 科研探索 / 博弈评审 / 探索 / 校准）
 │       ├── routing_preset.yaml  #   三波段思维模式路由预设（spec/react/weak）
 │       ├── research_engine.py   #   科研探索引擎（元学习/树探索/假设求证/多Agent博弈）
@@ -48,6 +50,17 @@ python3 config/task_scheduler.py   # 调度器：优先级 / 依赖解锁 / 事�
 ```
 
 **设计原则**：三者互相解耦、可独立替换；`agent_core` 与 `task_scheduler` 依赖 `message_bus` 作为统一通信层，但彼此不互相依赖，方便架构师审查后按需重组。
+
+## 🎮 游戏向经理与机制驱动编排
+
+> 新增 `game_producer_agent.py`：把架构蓝图拆解为部门工作包，按部门分配任务与资源，
+> 并通过 `message_bus` + `task_scheduler` 事件驱动自动推进部门协作，全程无需手动 / 命令。
+> 详见 [docs/game-orchestration.md](./docs/game-orchestration.md)。
+
+```bash
+# 运行游戏向经理演示（架构拆解 → 部门分配 → 事件驱动派发）
+python3 config/game_producer_agent.py
+```
 
 ## 🎭 岗位体系总览（六大板块）
 
@@ -110,8 +123,9 @@ python3 config/reference_learner_agent.py
 - **v0.1** ✅ 岗位定义 + 行为逻辑框架
 - **v0.3** ✅ 通用基础设施：消息总线 / Agent 内核 / 任务调度（解耦补充）
 - **v0.4** ✅ reference_learner 对接基础设施，落地为可运行 Agent（复用强化层）
-- **v0.5** 🔜 多 Agent 协作流水线（接入消息总线 + 调度器）
-- **v0.6** 🔜 质量闭环与数据驱动
+- **v0.5** ✅ 游戏向经理 Agent：架构拆解 + 部门分工协作（game_producer_agent.py）
+- **v0.6** ✅ 机制驱动自动化编排（.cnb.yml 事件驱动，非手动 / 命令）
+- **v0.7** 🔜 多部门 Agent 端到端联动跑通全流程
 
 ## 🚀 快速开始
 
