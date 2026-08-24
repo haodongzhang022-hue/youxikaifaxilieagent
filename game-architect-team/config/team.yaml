@@ -1,0 +1,213 @@
+# ============================================================
+# 游戏向架构师团队 · 团队角色与 DAG 流水线配置
+# 仓库：youxikaifaxilieagent / game-architect-team
+# 说明：融合 Claude-Code-Game-Studios（49 agents 游戏领域）
+#       + dongjiagoushi（架构八步/DAG/分形/数据库/条件触发/共享记忆）
+# 命名规范：所有角色统一「游戏·」前缀命名空间，@后输入「游戏」即补全。
+# 调度引擎：DAG（有向无环图）+ 分形扩展（多小组并行）
+# 记忆：共享记忆库（只增不改只追加，见 src/shared_memory.py）
+# ============================================================
+
+# 团队角色清单
+roles:
+  # ---- 管理层（架构师 + 经理，游戏向改版重点）----
+  - name: "游戏·架构·总师"
+    module: "roles.architect"
+    step: "游戏系统顶层架构（玩法→系统→数值→关卡→经济）/ 架构八步 / 主线维护 / 门禁裁决"
+    trigger_words: ["架构", "总师", "顶层", "主线", "门禁", "GDD", "系统架构"]
+    slogan: "游戏向架构八步——建模玩法/数值/关卡/经济，定主线，掌门禁。"
+  - name: "游戏·制作·经理"
+    module: "roles.manager"
+    step: "游戏排期(里程碑/垂直切片/软硬封)/ DAG调度 / 分形小组并行 / 资源协调"
+    trigger_words: ["经理", "排期", "里程碑", "调度", "分配", "切片", "软封", "硬封"]
+    slogan: "游戏制作调度——里程碑到分形小组，并行推进不跑主线。"
+  - name: "游戏·创意·总监"
+    module: "roles.creative_director"
+    step: "游戏愿景/支柱(pillars)/调性/玩家体验(MDA)/创作方向裁决"
+    trigger_words: ["创意", "愿景", "支柱", "调性", "MDA", "玩家体验", "方向"]
+    slogan: "创作最高裁决——支柱守护者，冲突升级在此拍板。"
+  - name: "游戏·技术·总监"
+    module: "roles.technical_director"
+    step: "技术选型/引擎架构/性能/安全/技术门禁"
+    trigger_words: ["技术", "引擎", "选型", "性能", "安全", "架构评审"]
+    slogan: "技术总把关——引擎、性能、安全一条线。"
+  - name: "游戏·数据管理员"
+    module: "roles.data_admin"
+    step: "共享记忆写入/校验/归档/统计（统一口径）/ 数据库承载"
+    trigger_words: ["数据", "存档", "统计", "归档", "记忆", "入库"]
+    slogan: "共享记忆唯一入口——只增不改只追加，统一口径。"
+
+  # ---- 部门主管层 ----
+  - name: "游戏·策划·主管"
+    module: "roles.design_lead"
+    step: "玩法方向/系统架构/策划团队分工"
+    trigger_words: ["策划", "玩法", "系统", "主管"]
+    slogan: "策划线统筹——从玩法到系统。"
+  - name: "游戏·程序·主管"
+    module: "roles.program_lead"
+    step: "程序实现统筹/技术分解/CodeReview门禁"
+    trigger_words: ["程序", "开发", "实现", "代码", "CR"]
+    slogan: "程序线统筹——从方案到可运行。"
+  - name: "游戏·美术·主管"
+    module: "roles.art_lead"
+    step: "美术风格/资源规划/品质审核"
+    trigger_words: ["美术", "风格", "资源", "品质", "审核"]
+    slogan: "美术线统筹——风格定调，品质把关。"
+  - name: "游戏·测试·主管"
+    module: "roles.qa_lead"
+    step: "测试策略/质量报告/放行门禁(信号灯)"
+    trigger_words: ["测试", "验收", "质量", "放行", "信号灯", "阻塞"]
+    slogan: "测试线统筹——信号灯亮起才放行。"
+  - name: "游戏·发行·主管"
+    module: "roles.release_lead"
+    step: "版本/发布/本地化/社区统筹"
+    trigger_words: ["发布", "版本", "发行", "本地化", "社区", "上线"]
+    slogan: "发行统筹——从版本到玩家。"
+
+  # ---- 专家层（策划域）----
+  - name: "游戏·系统策划"
+    module: "roles.designer"
+    step: "游戏系统设计(背包/商城/任务/成就等)"
+    trigger_words: ["系统设计", "背包", "商城", "任务系统", "成就"]
+    slogan: "系统设计——背包到商城，一个不落。"
+  - name: "游戏·数值策划"
+    module: "roles.balance_designer"
+    step: "经济系统/成长曲线/平衡性/数值表"
+    trigger_words: ["数值", "经济", "平衡", "成长", "产出", "消耗", "方差"]
+    slogan: "数值与平衡——产出消耗循环，防膨胀。"
+  - name: "游戏·关卡策划"
+    module: "roles.level_designer"
+    step: "关卡结构/地图布局/难度曲线/白盒验证"
+    trigger_words: ["关卡", "地图", "难度", "白盒", "寻路"]
+    slogan: "关卡设计——从结构到白盒。"
+  - name: "游戏·剧情策划"
+    module: "roles.narrative_designer"
+    step: "世界观/剧情/角色/任务文案"
+    trigger_words: ["剧情", "世界观", "叙事", "文案", "角色"]
+    slogan: "叙事设计——从世界观到对白。"
+  - name: "游戏·战斗策划"
+    module: "roles.combat_designer"
+    step: "战斗机制/技能/NPC AI/战斗数值"
+    trigger_words: ["战斗", "技能", "AI行为", "战斗平衡"]
+    slogan: "战斗设计——机制到手感。"
+
+  # ---- 专家层（程序域）----
+  - name: "游戏·客户端程序员"
+    module: "roles.client_dev"
+    step: "客户端功能实现/性能优化/联调"
+    trigger_words: ["客户端", "UI实现", "表现", "联调"]
+    slogan: "客户端实现——从设计到可玩。"
+  - name: "游戏·服务端程序员"
+    module: "roles.server_dev"
+    step: "网络协议/游戏逻辑/数据存储/安全"
+    trigger_words: ["服务端", "协议", "网络", "数据", "后端"]
+    slogan: "服务端实现——协议到稳定。"
+  - name: "游戏·引擎程序员"
+    module: "roles.engine_dev"
+    step: "引擎底层/渲染管线/性能优化"
+    trigger_words: ["引擎", "渲染", "底层", "优化"]
+    slogan: "引擎底层——渲染与性能。"
+  - name: "游戏·游戏AI程序员"
+    module: "roles.ai_programmer"
+    step: "NPC行为/寻路/敌人AI"
+    trigger_words: ["AI", "NPC", "寻路", "行为树"]
+    slogan: "游戏AI——从行为树到敌人。"
+  - name: "游戏·工具链程序员"
+    module: "roles.tools_dev"
+    step: "开发工具/构建管线/工作流优化"
+    trigger_words: ["工具", "构建", "管线", "CI"]
+    slogan: "工具链——效率提升。"
+  - name: "游戏·性能分析师"
+    module: "roles.performance_analyst"
+    step: "帧率/内存/CPU性能分析与优化"
+    trigger_words: ["性能", "帧率", "内存", "profiling", "卡顿"]
+    slogan: "性能分析——卡顿克星。"
+  - name: "游戏·安全工程师"
+    module: "roles.security_engineer"
+    step: "安全审计/漏洞修复/防护"
+    trigger_words: ["安全", "漏洞", "审计", "防护"]
+    slogan: "安全守护——防作弊防漏洞。"
+
+  # ---- 专家层（美术域）----
+  - name: "游戏·技术美术"
+    module: "roles.tech_artist"
+    step: "Shader/渲染效果/美术管线优化"
+    trigger_words: ["TA", "Shader", "渲染效果", "美术管线"]
+    slogan: "技术美术——美术与程序桥梁。"
+  - name: "游戏·音频设计师"
+    module: "roles.audio_designer"
+    step: "音效/背景音乐/音频整合"
+    trigger_words: ["音频", "音效", "BGM", "音乐"]
+    slogan: "音频设计——从音效到BGM。"
+  - name: "游戏·UX设计师"
+    module: "roles.ux_designer"
+    step: "界面交互体验/UI规范"
+    trigger_words: ["UX", "交互", "UI", "体验"]
+    slogan: "UX设计——从交互到体验。"
+
+  # ---- 专家层（测试域）----
+  - name: "游戏·测试工程师"
+    module: "roles.qa_tester"
+    step: "测试用例/执行/Bug管理/回归"
+    trigger_words: ["测试用例", "执行", "Bug", "回归"]
+    slogan: "测试执行——从用例到回归。"
+  - name: "游戏·自动化测试"
+    module: "roles.auto_qa"
+    step: "自动化框架/脚本/CI回归"
+    trigger_words: ["自动化", "脚本", "CI回归", "框架"]
+    slogan: "自动化测试——从框架到CI回归。"
+
+  # ---- 专家层（运营域）----
+  - name: "游戏·数据分析师"
+    module: "roles.data_analyst"
+    step: "数据埋点/用户行为/留存转化"
+    trigger_words: ["数据", "埋点", "留存", "行为", "转化"]
+    slogan: "数据洞察——从埋点到决策。"
+  - name: "游戏·游戏运营"
+    module: "roles.game_operator"
+    step: "活动策划/社区管理/用户反馈"
+    trigger_words: ["运营", "活动", "社区", "反馈"]
+    slogan: "游戏运营——从活动到社区。"
+
+# ------------------------------------------------------------
+# DAG 流水线（常规流程主线）
+# ------------------------------------------------------------
+pipeline:
+  name: "游戏开发主线"
+  dag:
+    - {id: "arch",   role: "游戏·架构·总师", desc: "架构八步：玩法→系统→数值→关卡→经济全链路"}
+    - {id: "plan",   role: "游戏·制作·经理", desc: "里程碑规划 + DAG派活 + 分形小组", depends_on: ["arch"]}
+    - {id: "design", role: "游戏·策划·主管", desc: "玩法/系统/数值/关卡/剧情/战斗设计", depends_on: ["plan"]}
+    - {id: "program",role: "游戏·程序·主管", desc: "引擎/客户端/服务端/AI/工具链实现", depends_on: ["design"]}
+    - {id: "art",    role: "游戏·美术·主管", desc: "原画/3D/动画/特效/UI/TA", depends_on: ["design"]}
+    - {id: "qa",     role: "游戏·测试·主管", desc: "用例/执行/回归/性能/放行门禁", depends_on: ["program", "art"]}
+    - {id: "release",role: "游戏·发行·主管", desc: "版本/发布/本地化/社区", depends_on: ["qa"]}
+
+# ------------------------------------------------------------
+# 条件触发映射（三层触发）
+# ------------------------------------------------------------
+conditional_triggers:
+  - {signal: "平衡性异常/数值失衡", role: "游戏·数值策划", mode: "semantic"}
+  - {signal: "经济/产出/消耗循环", role: "游戏·数值策划", mode: "semantic"}
+  - {signal: "关卡难度/地图/白盒", role: "游戏·关卡策划", mode: "semantic"}
+  - {signal: "剧情/世界观/对白", role: "游戏·剧情策划", mode: "semantic"}
+  - {signal: "战斗机制/技能/NPC AI", role: "游戏·战斗策划", mode: "semantic"}
+  - {signal: "性能/帧率/卡顿/profiling", role: "游戏·性能分析师", mode: "semantic"}
+  - {signal: "安全漏洞/防作弊", role: "游戏·安全工程师", mode: "semantic"}
+  - {signal: "Shader/渲染效果", role: "游戏·技术美术", mode: "semantic"}
+  - {signal: "自动化测试/CI回归", role: "游戏·自动化测试", mode: "semantic"}
+  - {signal: "数据埋点/留存/用户行为", role: "游戏·数据分析师", mode: "semantic"}
+  - {signal: "支柱冲突/创作方向分歧", role: "游戏·创意·总监", mode: "semantic"}
+  - {signal: "技术选型/引擎冲突", role: "游戏·技术·总监", mode: "semantic"}
+
+# ------------------------------------------------------------
+# 共享记忆：按功能单位隔离
+# ------------------------------------------------------------
+shared_memory:
+  enabled: true
+  module: "src/shared_memory.py"
+  granularity: "功能单位(space)"
+  immutability: "只增不改不减，修改只追加"
+  weight: "追加的新版本权重更高(relevance×weight)"
+  kinds: [content, task, skill]
+  acl: "空间级权限(r|w|rw|none)"
