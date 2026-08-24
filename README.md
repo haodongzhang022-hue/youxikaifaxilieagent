@@ -14,6 +14,7 @@
 - **测试信号灯**（[test_producer_agent.sh](./game-studio-agents/tests/test_producer_agent.sh)）：借鉴架构师 Agent 护栏，对架构蓝图消费 / 打回阻塞 / 状态机等关键链路做断言，未通过即红灯阻塞。
 - **系统化改进**（借鉴 [dongjiagoushi](https://cnb.cool/dongdongxiaozu/dongjiagoushi) 架构师方法论）：见 [docs/architect-improvement.md](./game-studio-agents/docs/architect-improvement.md)
 - **详细说明**：见 [docs/game-orchestration.md](./game-studio-agents/docs/game-orchestration.md)
+- **统一可视化指挥中枢**（渐进式 / 可溯源 / 降熵决策）：见 [docs/unified-command-center.md](./game-studio-agents/docs/unified-command-center.md)
 
 ```bash
 # 运行游戏向经理演示

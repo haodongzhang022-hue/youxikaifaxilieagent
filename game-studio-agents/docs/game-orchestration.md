@@ -86,3 +86,4 @@ python3 config/game_producer_agent.py
 - **v0.5** ✅ 游戏向经理 Agent：架构拆解 + 部门分工协作
 - **v0.6** ✅ 机制驱动自动化流水线（.cnb.yml 事件驱动，非手动 / 命令）
 - **v0.7** 🔜 多部门 Agent 端到端联动跑通全流程
+- **v0.9** 🔜 统一可视化指挥中枢（信息分层模型 + 降熵聚合，见 [unified-command-center.md](./unified-command-center.md)）
