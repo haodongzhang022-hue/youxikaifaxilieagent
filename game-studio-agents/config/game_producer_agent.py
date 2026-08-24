@@ -104,7 +104,14 @@ class GameProducerAgent(BaseAgent):
     def handle_task(self, msg: Message):
         """处理主业务消息：驱动架构拆解 → 分配 → 派发 → 验收。"""
         if msg.type == "TASK_ASSIGN":
-            self._start_orchestration(msg.content.get("architecture", {}))
+            # 关键：build_task_assign 把入参写入 content['inputs']，
+            # 架构蓝图位于 content['inputs']['architecture']，必须从该路径读取。
+            inputs = msg.content.get("inputs", {}) or {}
+            architecture = inputs.get("architecture", {}) or {}
+            # 防御式兜底：兼容历史直写 content['architecture'] 的消息
+            if not architecture:
+                architecture = msg.content.get("architecture", {}) or {}
+            self._start_orchestration(architecture)
 
         elif msg.type == "REVIEW_RESULT":
             self._on_department_delivery(msg.content)
@@ -118,6 +125,9 @@ class GameProducerAgent(BaseAgent):
     # ---------- 编排各阶段 ----------
     def _start_orchestration(self, architecture: Dict[str, Any]):
         """收到架构蓝图 → 拆解模块 → 拆分工作包 → 分配资源 → 派发。"""
+        # 断言：架构蓝图必须真正被消费，避免出现未命名项目/模块静默回退
+        assert architecture, ("架构蓝图为空：build_task_assign 的 inputs['architecture'] "
+                              "未被 handle_task 正确读取")
         project = architecture.get("project", "未命名项目")
         modules = architecture.get("modules", list(ARCHITECTURE_MODULES.keys()))
         self.biz_state = "INPUT_PENDING"
@@ -206,8 +216,9 @@ class GameProducerAgent(BaseAgent):
 
     # ---------- 部门交付回调 ----------
     def _on_department_delivery(self, content: Dict[str, Any]):
-        """收到部门产出物验收结果：通过则解锁下游并归档，打回则标记阻塞。"""
+        """收到部门产出物验收结果：通过则解锁下游并归档，打回则真正阻塞下游。"""
         wp_id = content.get("work_package_id")
+        reason = content.get("reason") or "部门产出未达验收标准"
         if content.get("approved"):
             self.biz_state = "ACCEPT"
             self.accepted.append(wp_id)
@@ -219,7 +230,17 @@ class GameProducerAgent(BaseAgent):
             self.biz_state = "IDLE"
         else:
             self.biz_state = "TRACK_DEPS"
-            self._log("blocked", f"部门产出 {wp_id} 被打回，阻塞下游待返工")
+            # 真正阻塞下游：标记任务失败 + 阻塞，而不是只写日志
+            blocked = False
+            for task in self.scheduler.queue.tasks.values():
+                if task.payload.get("work_package", {}).get("id") == wp_id:
+                    self.scheduler.on_fail(task.id, self.role_id, reason=reason)
+                    self.scheduler.queue.block(task.id, reason=reason)
+                    blocked = True
+            if blocked:
+                self._log("blocked", f"部门产出 {wp_id} 被打回，已阻塞下游待返工（原因：{reason}）")
+            else:
+                self._log("blocked", f"部门产出 {wp_id} 被打回，但未在队列中找到对应任务")
             self.biz_state = "IDLE"
 
     # ---------- 汇报 ----------

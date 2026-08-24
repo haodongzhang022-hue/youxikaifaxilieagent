@@ -11,6 +11,8 @@
 
 - **游戏向经理**（[game_producer_agent.py](./game-studio-agents/config/game_producer_agent.py)）：把架构蓝图拆解为部门工作包，按部门分配任务与资源，自动推进分工协作。
 - **自动化流水线**（[.cnb.yml](./.cnb.yml)）：Issue 新建自动拆解派单、PR 提交自动评审、满足门禁自动合并、合并后自动解锁下游。
+- **测试信号灯**（[test_producer_agent.sh](./game-studio-agents/tests/test_producer_agent.sh)）：借鉴架构师 Agent 护栏，对架构蓝图消费 / 打回阻塞 / 状态机等关键链路做断言，未通过即红灯阻塞。
+- **系统化改进**（借鉴 [dongjiagoushi](https://cnb.cool/dongdongxiaozu/dongjiagoushi) 架构师方法论）：见 [docs/architect-improvement.md](./game-studio-agents/docs/architect-improvement.md)
 - **详细说明**：见 [docs/game-orchestration.md](./game-studio-agents/docs/game-orchestration.md)
 
 ```bash

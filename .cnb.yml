@@ -36,11 +36,15 @@ $:
               全程机制驱动，无需人工手动推进度。
 
 # ---- 事件驱动：PR 提交 → 自动分配评审人 + NPC 代码审查 ----
+# 借鉴架构师 Agent 的“测试信号灯”护栏：PR 提交先跑测试断言，
+# 未通过即红灯阻塞，不放行后续评审/合并，避免“半成品”进入流水线。
   pull_request:
     - name: auto-review
       docker:
         image: cnbcool/default-npc:latest
       stages:
+        - name: 测试信号灯
+          script: bash game-studio-agents/tests/test_producer_agent.sh
         - name: 自动分配评审人
           type: git:reviewer
           options:
@@ -62,11 +66,29 @@ $:
               在 PR 评论中输出审查结论。
 
 # ---- 事件驱动：PR 可合并 → 自动合并（满足门禁后无需人工）----
+# 说明: pull_request.mergeable 只代表“代码可合并”（无冲突/CI 通过），
+#      不代表“评审已通过”。因此在 auto-merge 之前增加一道“评审门禁”：
+#      由代码审查员 NPC 校验评审状态与打回项，只有评审通过才放行自动合并；
+#      否则中断流水线，避免与 NPC 评审 / changes_requested 打回产生竞争。
   pull_request.mergeable:
     - name: auto-merge
       docker:
         image: cnbcool/default-npc:latest
       stages:
+        - name: 合并门禁检查
+          type: npc:go
+          options:
+            role: 代码审查员
+            systemPrompt: |
+              你是合并门禁把关人。pull_request.mergeable 只代表代码可合并，
+              不代表评审已通过。你的职责是在自动合并前校验评审门禁。
+            userPrompt: |
+              本次 PR 已达到可合并条件，请在校验后才放行自动合并：
+              1. 检查本 PR 的评审状态是否为 approved；
+              2. 检查是否存在 changes_requested / 未解决的打回评论；
+              3. 只有评审通过且无未解决阻塞项时，才输出“放行”并结束本阶段；
+              4. 若评审未通过或存在打回项，必须中断流水线（返回失败），
+                 禁止自动合并，等待打回修复后再走门禁。
         - name: 自动合并
           type: git:auto-merge
           options:

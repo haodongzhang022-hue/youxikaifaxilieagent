@@ -54,13 +54,19 @@ python3 config/game_producer_agent.py
 | 触发事件 | 自动动作 | 说明 |
 |---------|---------|------|
 | `issue.open` | 游戏向经理 NPC 拆解架构并派单 | 新需求进来自动拆解分发 |
-| `pull_request` | 自动分配评审人 + NPC 代码审查 | 提交自动评审 |
-| `pull_request.mergeable` | `git:auto-merge` 自动合并 | 满足门禁自动合并 |
+| `pull_request` | 测试信号灯 → 分配评审人 → NPC 评审 | 提交先跑断言，未通过即红灯阻塞 |
+| `pull_request.mergeable` | 评审门禁 → `git:auto-merge` 自动合并 | 评审通过且无打回项才放行合并 |
 | `pull_request.merged` | 解锁下游 + 更新 Issue | 合并后自动推进下一阶段 |
 | `pull_request.changes_requested` | 返工协调派单 | 打回自动派返工任务 |
 
 > 通过这套流水线，项目的每个阶段都会在事件触发后**自动推进**，
 > 人工只需关注评审意见与里程碑验收，无需手动维护进度。
+
+**两道机器护栏**（借鉴架构师 Agent）：
+1. **测试信号灯**：PR 提交先跑 `test_producer_agent.sh`，断言失败即红灯阻塞，不放行评审/合并；
+2. **合并门禁**：`pull_request.mergeable` 在 `git:auto-merge` 前增加评审门禁 NPC 校验，避免与 NPC 评审 / changes_requested 打回竞争。
+
+> 系统化改进方法与跨库借鉴详见 [architect-improvement.md](./architect-improvement.md)。
 
 ## 四、与通用基础设施的对接
 
