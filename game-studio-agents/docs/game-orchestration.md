@@ -96,5 +96,56 @@ python3 config/game_producer_agent.py
 - **v0.5** ✅ 游戏向经理 Agent：架构拆解 + 部门分工协作
 - **v0.6** ✅ 机制驱动自动化流水线（.cnb.yml 事件驱动，非手动 / 命令）
 - **v0.6.2** ✅ 打回仅阻塞+返工通知、状态终态可观测、岗位对齐 roles.yaml、心跳督导
-- **v0.7** 🔜 多部门 Agent 端到端联动跑通全流程
+- **v0.7** ✅ 多部门 Agent 端到端联动跑通全流程（六部门执行 Agent + 全链路编排 + 返工闭环）
 - **v0.9** 🔜 统一可视化指挥中枢（信息分层模型 + 降熵聚合，见 [unified-command-center.md](./unified-command-center.md)）
+
+---
+
+## 七、多部门 Agent 端到端联动（v0.7）
+
+v0.5/v0.6 实现了「游戏向经理」的拆解与派发，但工作包派发后**没有真正的执行者**去接收、产出、回传，无法跑通「验收→解锁下游」闭环。
+v0.7 补齐这一关键短板：**为六大部门实现执行 Agent**，让部门真正承接并执行被派发的工作包，跑通「策划→程序→美术→测试→发版→运营」全链路。
+
+### 7.1 六部门执行 Agent（`config/department_agents.py`）
+
+| 部门 Agent | role_id | 承接模块 | 交付物 |
+|-----------|---------|---------|-------|
+| 策划线 | lead_designer | gameplay / numeric_model | 设计文档 / 数值表 |
+| 程序线 | cto | client / server / engine / ai_logic | 技术实现 |
+| 美术线 | art_director | art_direction / ui_ux / audio | 美术资源 |
+| 测试线 | qa_engineer | testing | 测试报告 |
+| 项目管理 | project_manager | release | 发版计划 |
+| 运营线 | data_analyst | data_ops | 运营报告 |
+
+**统一执行机制（`DepartmentAgent` 基类）**：
+- 接收 `TASK_ASSIGN` 派单 → 从 `payload['work_package']` 取工作包；
+- 调用子类 `_execute` 产出部门交付物 → `_verify` 自检 → 上报 `REVIEW_RESULT` 给经理；
+- **幂等**：已执行过的工作包不重复执行，避免依赖解锁引起的重复派单。
+
+### 7.2 端到端编排（`config/run_end_to_end.py`）
+
+把「游戏向经理 + 六部门执行 Agent + task_scheduler + message_bus」装配在同一总线上：
+
+```
+下发架构蓝图 → 经理拆解 12 个工作包 → 策划线（无依赖）先执行
+  → 上报 REVIEW_RESULT → 经理验收 → 自动解锁程序/美术
+  → 程序/美术执行 → 验收 → 解锁测试 → 解锁发版 → 解锁运营
+  → 全部 DONE，形成「策划→程序→美术→测试→发版→运营」自动流水线
+```
+
+```bash
+python3 config/run_end_to_end.py   # 端到端联动演示（12 工作包全 DONE）
+```
+
+### 7.3 返工闭环（v0.7 增强）
+
+部门产出被打回时，经理发出 `rework` 返工通知；部门 Agent 收到后：
+1. 把工作包记入 `pending_rework` 待返工清单，并**从 `done_packages` 解除幂等拦截**；
+2. 经理/调度器重新派发该工作包时，部门 Agent 跳过幂等判断，**重新执行并再次上报验收**；
+3. `rework_count` 记录返工次数，`biz_state=REWORK` 标识返工中，全程可观测。
+
+> 返工闭环保证「评审打回 → 部门返工 → 重新验收」可自动循环，而非打回即停滞。
+
+### 7.4 测试信号灯（`tests/test_end_to_end.sh`）
+
+22 项断言覆盖：六部门 Agent 就绪、12 工作包全链路 DONE、依赖解锁、幂等执行、返工闭环。已接入 `.cnb.yml` 测试信号灯。
