@@ -139,8 +139,9 @@ class GameProducerAgent(BaseAgent):
                 role_id = (r.get("role_id") or "").strip()
                 if not dept_name or not role_id:
                     continue
-                # 排除经理自身融合岗位（producer）：经理是编排者，不作为工作包执行人
-                if role_id == self.role_id:
+                # 排除经理自身融合岗位及其变体（producer / producer_alt 等）：
+                # 经理是编排者，不作为工作包执行人，其多态变体同样不应被派单。
+                if role_id == self.role_id or role_id.startswith(self.role_id + "_"):
                     continue
                 key = DEPT_KEY_BY_NAME.get(dept_name)
                 if key is None:
