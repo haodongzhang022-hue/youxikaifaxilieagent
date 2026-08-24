@@ -35,6 +35,9 @@
 | 项目管理 pm | 版本/发版与里程碑 | project_manager | 版本计划、门禁结论 |
 | 运营线 ops | 数据分析、借鉴学习 | data_analyst 等 | 数据报告、玩法 Mod |
 
+> 部门角色表在 `boot()` 时从 `config/roles.yaml` **动态解析**，并对齐 `producer`（制作人）为
+> 默认经理岗位（排除经理自派单），避免硬编码与架构约束偏离。
+
 ### 部门间依赖（自动解锁）
 
 程序/美术依赖策划先给设计 → 测试依赖程序+美术产出 → 发版依赖测试通过 → 运营依赖全链路。
@@ -63,12 +66,19 @@ python3 config/game_producer_agent.py
 > 人工只需关注评审意见与里程碑验收，无需手动维护进度。
 
 **两道机器护栏**（借鉴架构师 Agent）：
-1. **测试信号灯**：PR 提交先跑 `test_producer_agent.sh`，断言失败即红灯阻塞，不放行评审/合并；
+1. **测试信号灯**：PR 提交先跑 `test_producer_agent.sh`（12 项断言），断言失败即红灯阻塞，不放行评审/合并；
 2. **合并门禁**：`pull_request.mergeable` 在 `git:auto-merge` 前增加评审门禁 NPC 校验，避免与 NPC 评审 / changes_requested 打回竞争。
 
-> 系统化改进方法与跨库借鉴详见 [architect-improvement.md](./architect-improvement.md)。
+> 所有 `npc:go` 阶段共用 `.cnb.yml` 中的 **YAML 锚点镜像**（`&npc_image` / `*npc_image`），
+> 一处修改全局生效，保证供应链一致。
 
-## 四、与通用基础设施的对接
+## 四、编排状态可观测与督导（v0.6.2）
+
+- **打回仅阻塞 + 返工通知**：部门产出打回时仅 `queue.block`（不再产生 FAILED 瞬时态），并另发 `rework` 返工通知给责任部门。
+- **终态保留**：`ACCEPT`（验收通过）/ `TRACK_DEPS`（打回跟踪）作为业务终态保留，`report()` 可真实反映最近一次验收结果，直至下一次编排重置。
+- **心跳督导**：`heartbeat()` 定期扫描 `BLOCKED`/逾期工作包，向责任部门广播 `supervise` 督导通知，让"阻塞/逾期扫描"真正落地。
+
+## 五、与通用基础设施的对接
 
 游戏向经理基于升级后的通用内核落地：
 
@@ -78,12 +88,13 @@ python3 config/game_producer_agent.py
 | `message_bus.MessageBus` | 通过总线收发 `TASK_ASSIGN` / `REVIEW_RESULT` / `NOTIFICATION`，实现部门协作 |
 | `task_scheduler.Scheduler` | 工作包入调度队列，按依赖自动派发，完成/失败发布事件解锁下游 |
 
-## 五、迭代路线
+## 六、迭代路线
 
 - **v0.1** ✅ 岗位定义 + 行为逻辑框架
 - **v0.3** ✅ 通用基础设施：消息总线 / Agent 内核 / 任务调度
 - **v0.4** ✅ reference_learner 对接基础设施
 - **v0.5** ✅ 游戏向经理 Agent：架构拆解 + 部门分工协作
 - **v0.6** ✅ 机制驱动自动化流水线（.cnb.yml 事件驱动，非手动 / 命令）
+- **v0.6.2** ✅ 打回仅阻塞+返工通知、状态终态可观测、岗位对齐 roles.yaml、心跳督导
 - **v0.7** 🔜 多部门 Agent 端到端联动跑通全流程
 - **v0.9** 🔜 统一可视化指挥中枢（信息分层模型 + 降熵聚合，见 [unified-command-center.md](./unified-command-center.md)）

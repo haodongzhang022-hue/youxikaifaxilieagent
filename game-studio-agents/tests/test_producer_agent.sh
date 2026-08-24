@@ -42,17 +42,17 @@ else
   report "无 [state_fail] 告警" 1
 fi
 
-echo "== 3. 打回阻塞（评审点2：on_fail + queue.block 真正落地）=="
+echo "== 3. 打回阻塞（评审点2：仅 block，非 FAILED + 返工通知）=="
 out=$($PY - <<'PYEOF'
 from game_producer_agent import GameProducerAgent
 from message_bus import MessageBus, build_task_assign, build_message
 bus = MessageBus()
-m = GameProducerAgent(role_id='game_manager', bus=bus)
+m = GameProducerAgent(bus=bus)   # 默认 producer（对齐 roles.yaml）
 m.boot()
 arch = {'project': 't', 'modules': ['gameplay','client']}
-bus.publish(build_task_assign('architect','game_manager','o1',{'architecture': arch}))
+bus.publish(build_task_assign('architect', m.role_id, 'o1', {'architecture': arch}))
 bus.process_all()
-bus.publish(build_message('REVIEW_RESULT','qa','game_manager',
+bus.publish(build_message('REVIEW_RESULT','qa', m.role_id,
                           {'work_package_id':'wp_gameplay','approved':False,'reason':'设计不完整'}))
 bus.process_all()
 for t in m.scheduler.queue.tasks.values():
@@ -61,6 +61,7 @@ for t in m.scheduler.queue.tasks.values():
 for e in m.log:
     if e['event']=='blocked':
         print('BLOCK_LOG=' + e['note'])
+print('BIZ_STATE=' + m.biz_state)
 PYEOF
 )
 if echo "$out" | grep -q "GAMEPLAY_STATE=BLOCKED"; then
@@ -68,11 +69,96 @@ if echo "$out" | grep -q "GAMEPLAY_STATE=BLOCKED"; then
 else
   report "打回后任务被标记 BLOCKED" 1
 fi
+if ! echo "$out" | grep -q "GAMEPLAY_STATE=FAILED"; then
+  report "打回不再产生 FAILED 瞬时态" 0
+else
+  report "打回不再产生 FAILED 瞬时态" 1
+fi
 if echo "$out" | grep -q "BLOCK_LOG=.*已阻塞下游"; then
   report "打回分支真正阻塞下游（非仅日志）" 0
 else
   report "打回分支真正阻塞下游（非仅日志）" 1
 fi
+if echo "$out" | grep -q "BIZ_STATE=TRACK_DEPS"; then
+  report "打回后保留 TRACK_DEPS 终态（可观测）" 0
+else
+  report "打回后保留 TRACK_DEPS 终态（可观测）" 1
+fi
+
+echo "== 4. 岗位对齐 roles.yaml（评审点3：默认 producer）=="
+out=$($PY - <<'PYEOF'
+from game_producer_agent import GameProducerAgent, DEPARTMENTS
+from message_bus import MessageBus
+m = GameProducerAgent(bus=MessageBus())
+m.boot()
+print('ROLE_ID=' + m.role_id)
+print('DESIGN_ROLES=' + ','.join(DEPARTMENTS['design']['roles']))
+PYEOF
+)
+if echo "$out" | grep -q "ROLE_ID=producer"; then
+  report "默认岗位对齐 producer（经理融合岗）" 0
+else
+  report "默认岗位对齐 producer（经理融合岗）" 1
+fi
+if ! echo "$out" | grep -q "DESIGN_ROLES=.*producer"; then
+  report "设计部角色不含经理岗 producer（非自派单）" 0
+else
+  report "设计部角色不含经理岗 producer（非自派单）" 1
+fi
+if echo "$out" | grep -q "DESIGN_ROLES=.*lead_designer"; then
+  report "设计部角色来自 roles.yaml（lead_designer）" 0
+else
+  report "设计部角色来自 roles.yaml（lead_designer）" 1
+fi
+
+echo "== 5. 验收保留 ACCEPT 终态（评审点2：可观测）=="
+out=$($PY - <<'PYEOF'
+from game_producer_agent import GameProducerAgent
+from message_bus import MessageBus, build_task_assign, build_message
+bus = MessageBus()
+m = GameProducerAgent(bus=bus)
+m.boot()
+arch = {'project': 't', 'modules': ['gameplay']}
+bus.publish(build_task_assign('architect', m.role_id, 'o1', {'architecture': arch}))
+bus.process_all()
+bus.publish(build_message('REVIEW_RESULT','qa', m.role_id,
+                          {'work_package_id':'wp_gameplay','approved':True}))
+bus.process_all()
+print('BIZ_STATE=' + m.biz_state)
+PYEOF
+)
+if echo "$out" | grep -q "BIZ_STATE=ACCEPT"; then
+  report "验收后保留 ACCEPT 终态（可观测）" 0
+else
+  report "验收后保留 ACCEPT 终态（可观测）" 1
+fi
+
+echo "== 6. 心跳督导落地（评审点4：阻塞扫描）=="
+out=$($PY - <<'PYEOF'
+from game_producer_agent import GameProducerAgent
+from message_bus import MessageBus, build_task_assign, build_message
+bus = MessageBus()
+m = GameProducerAgent(bus=bus)
+m.boot()
+arch = {'project': 't', 'modules': ['gameplay','client']}
+bus.publish(build_task_assign('architect', m.role_id, 'o1', {'architecture': arch}))
+bus.process_all()
+bus.publish(build_message('REVIEW_RESULT','qa', m.role_id,
+                          {'work_package_id':'wp_gameplay','approved':False,'reason':'不完整'}))
+bus.process_all()
+m.last_heartbeat = 0
+m.heartbeat()
+for e in m.log:
+    if e['event']=='supervise':
+        print('SUPERVISE_LOG=' + e['note'])
+PYEOF
+)
+if echo "$out" | grep -q "SUPERVISE_LOG=.*wp_gameplay.*阻塞"; then
+  report "心跳扫描到阻塞并督导下游" 0
+else
+  report "心跳扫描到阻塞并督导下游" 1
+fi
+
 
 echo ""
 echo "测试信号灯结果: $pass 通过 / $fail 失败"

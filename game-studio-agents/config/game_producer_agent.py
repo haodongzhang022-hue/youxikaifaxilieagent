@@ -15,18 +15,34 @@
 # ============================================================
 from __future__ import annotations
 
+import os
+import time
 from typing import Any, Dict, List, Optional
 
 from agent_core import BaseAgent
 from message_bus import Message, MessageBus, build_task_assign, build_message
 from task_scheduler import Scheduler, Task, TaskState
 
+# 尝试加载 PyYAML 用于从 roles.yaml 解析部门角色（缺失时回退到内置默认表）
+try:
+    import yaml as _yaml
+except Exception:  # pragma: no cover
+    _yaml = None
+
 
 # ============================================================
 # 部门编排模型
 # ============================================================
 
+# 部门中文名 → 内部键（与 roles.yaml 的 department 字段对应）
+DEPT_KEY_BY_NAME = {
+    "策划线": "design", "程序线": "program", "美术线": "art",
+    "测试线": "qa", "项目管理": "pm", "运营线": "ops",
+}
+
 # 游戏开发六大板块及其可承接的工作类型（供经理拆分派单）
+# 优先从 config/roles.yaml 动态解析，解析失败时回退到本内置默认表，
+# 避免硬编码与 roles.yaml 架构约束偏离。
 DEPARTMENTS = {
     "design":   {"name": "策划线",   "roles": ["lead_designer", "system_designer", "balance_designer", "level_designer"]},
     "program":  {"name": "程序线",   "roles": ["cto", "client_dev", "server_dev", "engine_dev", "ai_programmer", "tools_dev"]},
@@ -35,6 +51,9 @@ DEPARTMENTS = {
     "pm":       {"name": "项目管理", "roles": ["project_manager", "release_manager"]},
     "ops":      {"name": "运营线",   "roles": ["data_analyst", "reference_learner", "game_operator"]},
 }
+
+# 制作人/项目经理 融合岗位的 role_id（对齐 roles.yaml：经理岗位为 producer）
+MANAGER_ROLE_ID = "producer"
 
 # 架构模块 → 主要承接部门（供经理把架构拆成部门工作包）
 ARCHITECTURE_MODULES = {
@@ -80,25 +99,92 @@ class GameProducerAgent(BaseAgent):
     全部通过 message_bus 事件 + task_scheduler 依赖调度自动触发。
     """
 
-    def __init__(self, role_id: str = "game_manager",
+    def __init__(self, role_id: Optional[str] = None,
                  bus: Optional[MessageBus] = None,
                  scheduler: Optional[Scheduler] = None):
-        super().__init__(role_id, bus)
+        # 对齐 roles.yaml：经理融合岗位默认使用制作人 producer
+        super().__init__(role_id or MANAGER_ROLE_ID, bus)
         self.scheduler = scheduler or Scheduler(bus=self.bus)
         self.biz_state = "IDLE"
         self.work_packages: List[Dict[str, Any]] = []   # 已拆分的工作包
         self.accepted: List[str] = []                    # 已验收的部门产出
+        self.last_heartbeat = 0.0
+        self.heartbeat_interval = 5.0   # 心跳间隔（秒）
 
     # ---------- 覆写 BaseAgent 钩子 ----------
     def on_boot(self):
         """加载架构蓝图库与部门能力基线。"""
+        self._load_departments()
         self.knowledge.add_doc("架构蓝图库", {"note": "待拆解的游戏架构蓝图"})
         self.knowledge.add_doc("部门能力表", DEPARTMENTS)
         self.knowledge.add_doc("模块映射表", ARCHITECTURE_MODULES)
 
+    def _load_departments(self):
+        """从 config/roles.yaml 动态解析部门角色表，对齐架构约束。
+
+        优先读取仓库角色定义（department + role_id），把角色归集到六大部门；
+        解析失败或字段缺失时，保留内置默认 DEPARTMENTS 表作为回退，
+        避免硬编码与 roles.yaml 偏离。
+        """
+        roles_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "roles.yaml")
+        if _yaml is None or not os.path.exists(roles_path):
+            return
+        try:
+            with open(roles_path, encoding="utf-8") as f:
+                data = _yaml.safe_load(f)
+            roles = (data or {}).get("roles") or []
+            built: Dict[str, Dict[str, Any]] = {}
+            for r in roles:
+                dept_name = (r.get("department") or "").strip()
+                role_id = (r.get("role_id") or "").strip()
+                if not dept_name or not role_id:
+                    continue
+                # 排除经理自身融合岗位（producer）：经理是编排者，不作为工作包执行人
+                if role_id == self.role_id:
+                    continue
+                key = DEPT_KEY_BY_NAME.get(dept_name)
+                if key is None:
+                    continue
+                built.setdefault(key, {"name": dept_name, "roles": []})
+                if role_id not in built[key]["roles"]:
+                    built[key]["roles"].append(role_id)
+            # 仅当所有部门都有角色时才整体替换，避免部分覆盖导致不一致
+            if set(built) == set(DEPARTMENTS) and all(built[k]["roles"] for k in built):
+                DEPARTMENTS.clear()
+                DEPARTMENTS.update(built)
+        except Exception as exc:  # pragma: no cover - 解析失败回退默认表
+            self._log("roles_load_fallback", f"roles.yaml 解析失败，使用默认部门表: {exc}")
+
     def heartbeat(self):
-        """心跳：定期扫描依赖阻塞的工作包（简化：打印当前状态）。"""
-        pass
+        """心跳：定期扫描阻塞 / 逾期的工作包并督导推进。
+
+        取代空实现：对调度队列中处于 BLOCKED（依赖/缺资源）或
+        超过 DDL 的任务做督导，广播督导通知给责任部门，保证
+        "阻塞/逾期扫描" 真正落地，而非仅打印状态。
+        """
+        now = time.time()
+        if now - self.last_heartbeat < self.heartbeat_interval:
+            return
+        self.last_heartbeat = now
+        if not self.work_packages:
+            return
+        for task in self.scheduler.queue.tasks.values():
+            wp = task.payload.get("work_package") or {}
+            wp_id = wp.get("id")
+            reasons = []
+            if task.state == TaskState.BLOCKED.value:
+                reasons.append(f"阻塞({task.history[-1].get('note', '缺资源/依赖') if task.history else '缺资源/依赖'})")
+            overdue = task.overdue(now)
+            if overdue > 0:
+                reasons.append(f"逾期{overdue:.1f}天")
+            if not reasons:
+                continue
+            self.bus.publish(build_message(
+                "NOTIFICATION", self.role_id, task.owner or "*",
+                {"event": "supervise", "work_package_id": wp_id,
+                 "task_id": task.id, "reason": "; ".join(reasons)}))
+            self._log("supervise",
+                      f"督导 {wp_id or task.id}（{'; '.join(reasons)}）→ {task.owner or '相关部门'}")
 
     # ---------- 编排主流程（业务状态机） ----------
     def handle_task(self, msg: Message):
@@ -210,13 +296,18 @@ class GameProducerAgent(BaseAgent):
             tasks.append(task)
             # 广播派单通知到责任部门
             self.bus.publish(build_message(
-                "NOTIFICATION", "game_manager", wp["owner"],
+                "NOTIFICATION", self.role_id, wp["owner"],
                 {"notice": f"分配工作包 {wp['id']} 给 {wp['department_name']}（依赖 {wp['deps']}）"}))
         return tasks
 
     # ---------- 部门交付回调 ----------
     def _on_department_delivery(self, content: Dict[str, Any]):
-        """收到部门产出物验收结果：通过则解锁下游并归档，打回则真正阻塞下游。"""
+        """收到部门产出物验收结果：通过则解锁下游并归档，打回则真正阻塞下游。
+
+        状态机可观测性：ACCEPT / TRACK_DEPS 作为终态被保留（不再被 IDLE 覆盖），
+        直到下一次编排在 _start_orchestration 重新置为 INPUT_PENDING，
+        从而 report() 能真实反映最近一次验收结果。
+        """
         wp_id = content.get("work_package_id")
         reason = content.get("reason") or "部门产出未达验收标准"
         if content.get("approved"):
@@ -227,21 +318,33 @@ class GameProducerAgent(BaseAgent):
                 if task.payload.get("work_package", {}).get("id") == wp_id:
                     self.scheduler.on_complete(task.id, self.role_id)
             self._log("accept", f"部门产出 {wp_id} 验收通过，自动解锁下游")
-            self.biz_state = "IDLE"
         else:
             self.biz_state = "TRACK_DEPS"
-            # 真正阻塞下游：标记任务失败 + 阻塞，而不是只写日志
+            # 真正阻塞下游：仅 block（不先 on_fail，避免 FAILED 瞬时态 + task_failed
+            # 通知语义误导），并另发返工通知给责任部门，引导其重新加工。
             blocked = False
             for task in self.scheduler.queue.tasks.values():
                 if task.payload.get("work_package", {}).get("id") == wp_id:
-                    self.scheduler.on_fail(task.id, self.role_id, reason=reason)
                     self.scheduler.queue.block(task.id, reason=reason)
                     blocked = True
             if blocked:
+                # 返工通知：部门负责角色重新处理被打回的工作包
+                wp = self._find_work_package(wp_id)
+                owner = (wp or {}).get("owner", "*")
+                self.bus.publish(build_message(
+                    "NOTIFICATION", self.role_id, owner,
+                    {"event": "rework", "work_package_id": wp_id,
+                     "reason": reason}))
                 self._log("blocked", f"部门产出 {wp_id} 被打回，已阻塞下游待返工（原因：{reason}）")
             else:
                 self._log("blocked", f"部门产出 {wp_id} 被打回，但未在队列中找到对应任务")
-            self.biz_state = "IDLE"
+
+    def _find_work_package(self, wp_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        """按 id 查找已拆分的工作包（供打回/督导引用责任角色）。"""
+        for wp in self.work_packages:
+            if wp.get("id") == wp_id:
+                return wp
+        return None
 
     # ---------- 汇报 ----------
     def report(self) -> Dict[str, Any]:
@@ -267,7 +370,7 @@ def demo():
     print("=" * 60)
 
     bus = MessageBus()
-    manager = GameProducerAgent(role_id="game_manager", bus=bus)
+    manager = GameProducerAgent(bus=bus)   # 默认使用 producer（对齐 roles.yaml）
     manager.boot()
 
     # 模拟架构蓝图下发（真实场景由上游架构师 / 制作人提供）
@@ -276,7 +379,7 @@ def demo():
         "modules": ["gameplay", "numeric_model", "client", "server",
                     "art_direction", "ui_ux", "testing", "release"],
     }
-    msg = build_task_assign("architect", "game_manager", "orch_001",
+    msg = build_task_assign("architect", manager.role_id, "orch_001",
                             {"architecture": architecture})
     bus.publish(msg)
     bus.process_all()

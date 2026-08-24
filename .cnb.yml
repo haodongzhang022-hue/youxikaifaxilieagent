@@ -7,6 +7,8 @@
 #     2. 提交 PR（pull_request）→ 自动分配评审人 + NPC 代码审查。
 #     3. PR 满足合并条件（pull_request.mergeable）→ git:auto-merge 自动合并。
 #     4. 合并后（pull_request.merged）→ 自动解锁下游部门 / 更新 Issue。
+# 镜像复用：所有 npc:go 阶段共用下方锚点镜像，改动一处即可全局生效，
+#   避免每个 pipeline 各自硬编码镜像（供应链一致性）。
 # ============================================================
 
 # ---- 事件驱动：Issue 新建 → 游戏向经理自动拆解派单 ----
@@ -14,7 +16,7 @@ $:
   issue.open:
     - name: game-manager-orchestrate
       docker:
-        image: cnbcool/default-npc:latest
+        image: &npc_image cnbcool/default-npc:latest
       stages:
         - name: 游戏向经理自动拆解
           type: npc:go
@@ -41,7 +43,7 @@ $:
   pull_request:
     - name: auto-review
       docker:
-        image: cnbcool/default-npc:latest
+        image: *npc_image
       stages:
         - name: 测试信号灯
           script: bash game-studio-agents/tests/test_producer_agent.sh
@@ -73,7 +75,7 @@ $:
   pull_request.mergeable:
     - name: auto-merge
       docker:
-        image: cnbcool/default-npc:latest
+        image: *npc_image
       stages:
         - name: 合并门禁检查
           type: npc:go
@@ -99,7 +101,7 @@ $:
   pull_request.merged:
     - name: post-merge-orchestrate
       docker:
-        image: cnbcool/default-npc:latest
+        image: *npc_image
       stages:
         - name: 合并后联动
           type: npc:go
@@ -119,7 +121,7 @@ $:
   pull_request.changes_requested:
     - name: change-request-callback
       docker:
-        image: cnbcool/default-npc:latest
+        image: *npc_image
       stages:
         - name: 打回联动
           type: npc:go

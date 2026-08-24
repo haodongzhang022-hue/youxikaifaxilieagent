@@ -125,6 +125,7 @@ python3 config/reference_learner_agent.py
 - **v0.4** ✅ reference_learner 对接基础设施，落地为可运行 Agent（复用强化层）
 - **v0.5** ✅ 游戏向经理 Agent：架构拆解 + 部门分工协作（game_producer_agent.py）
 - **v0.6** ✅ 机制驱动自动化编排（.cnb.yml 事件驱动，非手动 / 命令）
+- **v0.6.2** ✅ 编排状态可观测与督导：打回仅阻塞+返工通知、状态终态保留、岗位对齐 roles.yaml、心跳督导、镜像锚点复用
 - **v0.7** 🔜 多部门 Agent 端到端联动跑通全流程
 
 ## 🚀 快速开始

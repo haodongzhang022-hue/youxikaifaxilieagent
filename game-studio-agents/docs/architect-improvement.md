@@ -52,10 +52,14 @@ flowchart TB
 | 改进项 | 落点 | 说明 |
 |-------|------|------|
 | 架构蓝图消费修复 | `game_producer_agent.py` | `build_task_assign` 入参在 `content['inputs']['architecture']`，修正读取路径并补断言 |
-| 打回真正阻塞 | `game_producer_agent.py` | 打回时调用 `scheduler.on_fail` + `queue.block`，下游被真正阻塞 |
+| 打回真正阻塞 | `game_producer_agent.py` | 打回时 `queue.block` 阻塞下游（不再产生 FAILED 瞬时态）并另发返工通知 |
+| 业务状态机可观测 | `game_producer_agent.py` | `ACCEPT`/`TRACK_DEPS` 保留为终态，不再被 `IDLE` 覆盖 |
+| 部门角色对齐 roles.yaml | `game_producer_agent.py` | `DEPARTMENTS` 从 `roles.yaml` 动态解析，默认岗位对齐 `producer`，排除经理自派单 |
+| 心跳督导落地 | `game_producer_agent.py` | 定期扫描 `BLOCKED`/逾期工作包并督导相关部门 |
 | 自动合并门禁 | `.cnb.yml` | `pull_request.mergeable` 前增加评审门禁 NPC 校验 |
 | 状态机告警修复 | `agent_core.py` | `ANALYZING -> IDLE` 补入 `DEFAULT_TRANSITIONS` |
-| 测试信号灯 | `tests/test_producer_agent.sh` | 5 项断言覆盖关键修复 |
+| 镜像锚点复用 | `.cnb.yml` | `npc:go` 阶段共用 YAML 锚点镜像，一处修改全局生效 |
+| 测试信号灯 | `tests/test_producer_agent.sh` | 12 项断言覆盖关键修复与新增特性 |
 
 ### 5/8 分工与协作规则（改进方向）
 
@@ -70,6 +74,7 @@ flowchart TB
 | v0.5 | 游戏向经理：架构拆解 + 部门分工协作 | ✅ |
 | v0.6 | 机制驱动自动化流水线（.cnb.yml 事件驱动） | ✅ |
 | v0.6.1 | 评审修复 + 合并门禁 + 测试信号灯 | ✅ 本 PR |
+| v0.6.2 | 打回仅阻塞+返工通知、状态终态可观测、岗位对齐 roles.yaml、心跳督导 | ✅ 本 PR |
 | v0.7 | 多部门 Agent 端到端联动跑通全流程 | 🔜 |
 | v0.8 | 接入回转/打断协议 + 经验记忆库 | 🔜 |
 
@@ -85,9 +90,16 @@ flowchart TB
 **本次改进**：修复 1 个关键功能 Bug + 2 个一致性/编排问题，引入"测试信号灯"与"合并门禁"两道机器护栏，
 并验证跨库借用架构师方法论在本仓库可落地、可复用。
 
+**第二轮评审改进（v0.6.2）**：
+- 打回分支改为**仅 `block`**（不再先 `on_fail`，消除 FAILED 瞬时态与 `task_failed` 通知误导），并**另发返工通知**引导部门重做；
+- 业务状态机保留 **`ACCEPT`/`TRACK_DEPS` 终态**（不再被 `IDLE` 覆盖），`report()` 可真实反映最近一次验收结果；
+- `DEPARTMENTS` 改为**从 `roles.yaml` 动态解析**，默认岗位对齐 `producer`，并排除经理自派单，消除与架构约束的偏离；
+- 落地 **`heartbeat()`**：定期扫描阻塞/逾期工作包并督导，取代空实现；
+- `.cnb.yml` 的 `npc:go` 镜像改为 **YAML 锚点复用**，一处修改全局生效。
+
 **风险与待办**：
 1. 部门 Agent 目前多为框架级实现，端到端真实协作（v0.7）尚未跑通；
 2. `[回转]`/`[打断]` 协议、经验记忆库（v0.8）为下一阶段演进项；
-3. `.cnb.yml` 使用 `default-npc:latest`，生产环境建议固定镜像版本。
+3. `.cnb.yml` 使用 `default-npc:latest`，生产环境建议固定镜像版本（可用锚点统一改一处）。
 
 > 借鉴来源：`dongdongxiaozu/dongjiagoushi` 的 `架构八步方法论`、`测试信号灯`、`回转/打断协议`、`Issue 版本管理`。
