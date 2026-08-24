@@ -172,6 +172,82 @@ else
 fi
 
 
+echo "== 6b. 依赖一致性（评审warning：上游打回→级联阻塞已解锁下游）=="
+out=$($PY - <<'PYEOF'
+from game_producer_agent import GameProducerAgent
+from message_bus import MessageBus, build_task_assign, build_message
+bus = MessageBus()
+m = GameProducerAgent(bus=bus)
+m.boot()
+arch = {'project': 't', 'modules': ['gameplay','numeric_model','client','server']}
+bus.publish(build_task_assign('architect', m.role_id, 'o1', {'architecture': arch}))
+bus.process_all()
+# 先验收上游 -> 解锁下游 wp_client / wp_server
+for wid in ['wp_gameplay','wp_numeric_model']:
+    bus.publish(build_message('REVIEW_RESULT','qa', m.role_id,
+                              {'work_package_id': wid, 'approved': True}))
+    bus.process_all()
+print('UNLOCKED_CLIENT=' + m.scheduler.queue.tasks['wp_client'].state)
+# 再打回上游 wp_gameplay -> 下游应被级联重新阻塞
+bus.publish(build_message('REVIEW_RESULT','qa', m.role_id,
+                          {'work_package_id':'wp_gameplay','approved':False,'reason':'返工'}))
+bus.process_all()
+print('REBLOCK_CLIENT=' + m.scheduler.queue.tasks['wp_client'].state)
+print('REBLOCK_SERVER=' + m.scheduler.queue.tasks['wp_server'].state)
+for e in m.log:
+    if e['event']=='cascade':
+        print('CASCADE_LOG=' + e['note'])
+PYEOF
+)
+if echo "$out" | grep -q "UNLOCKED_CLIENT=TODO"; then
+  report "验收上游后下游先被解锁" 0
+else
+  report "验收上游后下游先被解锁 ($out)" 1
+fi
+if echo "$out" | grep -q "REBLOCK_CLIENT=BLOCKED"; then
+  report "上游打回后代联重新阻塞下游 wp_client" 0
+else
+  report "上游打回后代联重新阻塞下游 wp_client ($out)" 1
+fi
+if echo "$out" | grep -q "REBLOCK_SERVER=BLOCKED"; then
+  report "上游打回后代联重新阻塞下游 wp_server" 0
+else
+  report "上游打回后代联重新阻塞下游 wp_server ($out)" 1
+fi
+if echo "$out" | grep -q "CASCADE_LOG=.*wp_client.*wp_server"; then
+  report "级联阻塞日志明确列出受影响下游" 0
+else
+  report "级联阻塞日志明确列出受影响下游 ($out)" 1
+fi
+
+echo "== 6c. 未知架构模块不再静默丢弃（评审info：加告警）=="
+out=$($PY - <<'PYEOF'
+from game_producer_agent import GameProducerAgent
+from message_bus import MessageBus, build_task_assign
+bus = MessageBus()
+m = GameProducerAgent(bus=bus)
+m.boot()
+arch = {'project': 't', 'modules': ['gameplay','unknown_mod_xyz']}
+bus.publish(build_task_assign('architect', m.role_id, 'o1', {'architecture': arch}))
+bus.process_all()
+for e in m.log:
+    if e['event']=='decompose_unknown':
+        print('UNKNOWN_LOG=' + e['note'])
+print('WPS=' + ','.join(w['id'] for w in m.work_packages))
+PYEOF
+)
+if echo "$out" | grep -q "UNKNOWN_LOG=.*unknown_mod_xyz.*未在 ARCHITECTURE_MODULES"; then
+  report "未知模块明确告警（不再静默丢弃）" 0
+else
+  report "未知模块明确告警（不再静默丢弃） ($out)" 1
+fi
+if echo "$out" | grep -q "WPS=wp_gameplay"; then
+  report "未知模块不进入工作包（仅告警）" 0
+else
+  report "未知模块不进入工作包（仅告警） ($out)" 1
+fi
+
+
 
 echo "== 7. 心跳督导落地（评审点4：阻塞扫描）=="
 out=$($PY - <<'PYEOF'

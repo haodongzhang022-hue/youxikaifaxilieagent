@@ -68,19 +68,31 @@ def _status_label(status: str) -> str:
 def _find_task_for_wp(tasks: Dict[str, Any], wp_id: str) -> Optional[Dict[str, Any]]:
     """按工作包 id 查找对应调度任务快照。
 
-    调度任务 id 与工作包 id 不同（task_xxx vs wp_xxx），二者通过
-    task['work_package_id'] 关联。此处先按 task_id 直查，再按
-    work_package_id 反查，兼容两种输入。
+    当前调度器已把任务 id 与工作包 id 对齐（Task(id=wp['id'])），因此任务
+    快照字典的 key 即为工作包 id（wp_xxx），可直接按 wp_id 直查；同时保留
+    通过 work_package_id 字段反查的兜底，兼容未来任务 id 与工作包 id 分离
+    或直接传 task_id 的输入，避免耦合脆弱。
     """
     if not wp_id:
         return None
-    t = tasks.get(wp_id)   # 若 key 即工作包 id
+    t = tasks.get(wp_id)   # 任务 id 与工作包 id 对齐：key 即工作包 id
     if t is not None:
         return t
     for task in tasks.values():
         if task.get("work_package_id") == wp_id:
             return task
     return None
+
+
+def _dep_state(tasks: Dict[str, Any], dep: str) -> str:
+    """解析某个依赖 id 对应任务的真实状态。
+
+    依赖 id 为工作包 id（wp_xxx）。为避免隐式依赖「任务 id = 工作包 id」的
+    脆弱耦合，统一经 _find_task_for_wp 解析（先按 key 直查，再按
+    work_package_id 反查），未命中视为未完成。
+    """
+    task = _find_task_for_wp(tasks, dep)
+    return (task or {}).get("state", "")
 
 
 def _wp_status_from_task(wp: Dict[str, Any], task: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -152,7 +164,7 @@ def build_judgment(wp: Dict[str, Any], tasks: Dict[str, Any]) -> Optional[Judgme
 
     # 依赖风险判断
     if deps:
-        locked = sum(1 for d in deps if tasks.get(d, {}).get("state") != "DONE")
+        locked = sum(1 for d in deps if _dep_state(tasks, d) != "DONE")
         if locked > 0:
             reasons.append("dep_risk")
             evidence.append(f"有 {locked}/{len(deps)} 个前置依赖未完成")
@@ -210,7 +222,7 @@ def assess_risk(wp: Dict[str, Any], tasks: Dict[str, Any]) -> Dict[str, Any]:
         reasons.append("rework")
 
     deps = wp.get("deps", [])
-    locked = sum(1 for d in deps if tasks.get(d, {}).get("state") != "DONE")
+    locked = sum(1 for d in deps if _dep_state(tasks, d) != "DONE")
     if locked > 0:
         if level != "high":
             level = "medium"

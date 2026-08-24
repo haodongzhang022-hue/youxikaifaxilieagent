@@ -257,6 +257,10 @@ class GameProducerAgent(BaseAgent):
             if mod in ARCHITECTURE_MODULES:
                 result.append({"project": project, "module": mod,
                                **ARCHITECTURE_MODULES[mod]})
+            else:
+                # 未知模块不再静默丢弃：明确告警，便于发现蓝图与模块映射的偏差
+                self._log("decompose_unknown",
+                          f"架构模块 '{mod}' 未在 ARCHITECTURE_MODULES 中定义，已跳过")
         return result
 
     def _split_work_packages(self, decomposed: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -339,7 +343,10 @@ class GameProducerAgent(BaseAgent):
         """
         wp_id = content.get("work_package_id")
         reason = content.get("reason") or "部门产出未达验收标准"
-        if content.get("approved"):
+        # 语义明确化：approved 字段缺失视为未验收（进打回分支）属隐式默认，
+        # 显式区分「通过」与「打回」，避免字段缺失被误判进打回造成语义歧义。
+        approved = bool(content.get("approved"))
+        if approved:
             self.biz_state = "ACCEPT"
             # 去重：同一产出重复验收不产生重复 id
             if wp_id not in self.accepted:
@@ -351,12 +358,22 @@ class GameProducerAgent(BaseAgent):
             self._log("accept", f"部门产出 {wp_id} 验收通过，自动解锁下游")
         else:
             self.biz_state = "TRACK_DEPS"
-            # 真正阻塞下游：仅 block（不先 on_fail，避免 FAILED 瞬时态 + task_failed
+            # 真正阻塞：仅 block（不先 on_fail，避免 FAILED 瞬时态 + task_failed
             # 通知语义误导），并另发返工通知给责任部门，引导其重新加工。
+            #
+            # 依赖一致性（评审点）：上游被打回时，其**已解锁的下游**必须被级联
+            # 重新阻塞——否则会出现「上游验收解锁下游 → 上游又被打回」后下游仍
+            # 保持就绪/推进的不一致状态。这里对直接或间接依赖该被打回上游的
+            # 下游任务统一重新 block，保证依赖关系始终一致。
             blocked = False
             if wp_id and wp_id in self.scheduler.queue.tasks:
                 self.scheduler.queue.block(wp_id, reason=reason)
                 blocked = True
+                # 级联阻塞：找出所有直接/间接依赖该被打回工作包的下游任务
+                cascaded = self._cascade_block(wp_id, reason=reason)
+                if cascaded:
+                    self._log("cascade",
+                              f"上游 {wp_id} 被打回，级联阻塞下游 {len(cascaded)} 个: {','.join(cascaded)}")
             if blocked:
                 # 返工通知：部门负责角色重新处理被打回的工作包
                 wp = self._find_work_package(wp_id)
@@ -368,6 +385,36 @@ class GameProducerAgent(BaseAgent):
                 self._log("blocked", f"部门产出 {wp_id} 被打回，已阻塞下游待返工（原因：{reason}）")
             else:
                 self._log("blocked", f"部门产出 {wp_id} 被打回，但未在队列中找到对应任务")
+
+    def _cascade_block(self, wp_id: str, reason: str = "") -> List[str]:
+        """级联阻塞依赖某被打回上游的全部下游任务，保证依赖一致性。
+
+        当上游工作包验收通过解锁下游后，又因返工被打回时，已解锁的下游若仍
+        保持就绪/推进，会导致依赖关系与状态不一致（下游基于已被否决的产出
+        继续工作）。此方法对直接或间接依赖 wp_id 的任务统一重新 block。
+        """
+        queue = self.scheduler.queue
+        # 收集所有直接/间接依赖 wp_id 的任务（BFS，避免重复遍历与环）
+        dependents: List[str] = []
+        visited = {wp_id}
+        frontier = [wp_id]
+        while frontier:
+            cur = frontier.pop()
+            for tid, task in queue.tasks.items():
+                if tid in visited:
+                    continue
+                if cur in task.depends_on:
+                    visited.add(tid)
+                    dependents.append(tid)
+                    frontier.append(tid)
+        # 对收集到的下游统一 block（已 DONE / FAILED 的不再动）
+        blocked: List[str] = []
+        for tid in dependents:
+            task = queue.tasks.get(tid)
+            if task and task.state in (TaskState.TODO.value, TaskState.IN_PROGRESS.value):
+                queue.block(tid, reason=reason or f"上游 {wp_id} 被打回")
+                blocked.append(tid)
+        return blocked
 
     def _find_work_package(self, wp_id: Optional[str]) -> Optional[Dict[str, Any]]:
         """按 id 查找已拆分的工作包（供打回/督导引用责任角色）。"""

@@ -60,6 +60,8 @@ flowchart TB
 | 状态机告警修复 | `agent_core.py` | `ANALYZING -> IDLE` 补入 `DEFAULT_TRANSITIONS` |
 | 镜像锚点复用 | `.cnb.yml` | `npc:go` 阶段共用 YAML 锚点镜像，一处修改全局生效 |
 | 测试信号灯 | `tests/test_producer_agent.sh` | 12 项断言覆盖关键修复与新增特性 |
+| 级联阻塞一致性 | `game_producer_agent.py` | 上游打回→级联重新阻塞已解锁下游 |
+| 聚合依赖解耦 | `api/aggregator.py` | 依赖判断经 `_find_task_for_wp` 统一解析，不再硬耦合 id 对齐 |
 
 ### 5/8 分工与协作规则（改进方向）
 
@@ -76,6 +78,7 @@ flowchart TB
 | v0.6.1 | 评审修复 + 合并门禁 + 测试信号灯 | ✅ 本 PR |
 | v0.6.2 | 打回仅阻塞+返工通知、状态终态可观测、岗位对齐 roles.yaml、心跳督导 | ✅ 本 PR |
 | v0.6.3 | **修复依赖解锁核心机制**、API 鉴权+本地绑定、岗位去 `_alt` 变体、DDL 逾期督导落地 | ✅ 本 PR |
+| v0.6.4 | 依赖一致性级联阻塞、聚合依赖解耦、未知模块告警、验收语义明确化 | ✅ 本 PR |
 | v0.7 | 多部门 Agent 端到端联动跑通全流程 | 🔜 |
 | v0.8 | 接入回转/打断协议 + 经验记忆库 | 🔜 |
 
@@ -104,6 +107,15 @@ flowchart TB
 - **岗位去 `_alt` 变体**：`_load_departments` 过滤 `_alt` 后缀角色，避免多态变体被当协办重复派单；且改为**实例属性**，杜绝改写模块级全局 `DEPARTMENTS` 的跨实例污染；
 - **DDL 逾期督导落地**：`_assign_resources` 为工作包设基线 DDL，heartbeat 的「逾期督导」分支不再因任务无 DDL 而成为死代码；
 - **`accepted` 去重**：同一产出重复验收不再产生重复 id。
+
+**第四轮评审改进（v0.6.4，依赖一致性 + 健壮性）**：
+- **依赖一致性（warning，核心）**：修复「上游验收解锁下游后，若该上游又被打回，下游仍保持就绪/推进」的不一致缺陷。新增 `_cascade_block()`，在打回时对**直接或间接依赖该被打回上游的下游任务统一重新 `block`**，保证依赖关系始终一致；测试新增 4 项断言覆盖「解锁→打回→级联重阻塞」全链路；
+- **聚合依赖解耦（warning）**：`aggregator.py` 的依赖判断此前用 `tasks.get(deps)` 隐式依赖「任务 id=工作包 id」对齐，改为经 `_find_task_for_wp` 统一解析（先按 key 直查、再按 `work_package_id` 反查），并新增 `_dep_state()` 辅助，避免未来 id 分离时失真；
+- **`_find_task_for_wp` 注释纠正（info）**：更新误导性注释，说明当前任务 id 已与工作包 id 对齐；
+- **未知模块告警（info）**：`_decompose` 对未在 `ARCHITECTURE_MODULES` 中定义的模块不再静默丢弃，改为显式 `decompose_unknown` 告警；
+- **验收语义明确化（info）**：`_on_department_delivery` 用 `bool(content.get("approved"))` 显式区分「通过」与「打回」，避免字段缺失被隐式误判。
+
+**测试信号灯升级**：编排测试 `tests/test_producer_agent.sh` 从 **15 → 21 项断言**（新增级联阻塞 4 项 + 未知模块告警 2 项）；API 测试 `api/test_api.sh` 保持 7 项全绿。
 
 **风险与待办**：
 1. 部门 Agent 目前多为框架级实现，端到端真实协作（v0.7）尚未跑通；
