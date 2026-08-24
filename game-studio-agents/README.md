@@ -26,6 +26,7 @@ game-studio-agents/
 │   ├── message_bus.py           # ⭐ 通用消息总线（事件驱动通信，v0.3，可运行）
 │   ├── task_scheduler.py        # ⭐ 任务队列与事件驱动调度器（优先级/依赖，v0.3，可运行）
 │   ├── game_producer_agent.py   # ⭐ 游戏向经理 Agent（架构拆解→部门分工→机制驱动派发，v0.1，可运行）
+│   ├── preset_instantiator.py   # ⭐ 预设实例化器（选型→实例化预设为正式角色→组装团队，v0.8，可运行）
 │   └── agent_boost/             # 能力强化层（思维模式路由 / 科研探索 / 博弈评审 / 探索 / 校准）
 │       ├── routing_preset.yaml  #   三波段思维模式路由预设（spec/react/weak）
 │       ├── research_engine.py   #   科研探索引擎（元学习/树探索/假设求证/多Agent博弈）
@@ -41,7 +42,8 @@ game-studio-agents/
 │   ├── requirements.txt        #   依赖
 │   └── test_api.sh             #   接口层测试信号灯
 ├── tests/
-│   └── test_producer_agent.sh  #   编排逻辑测试信号灯
+│   ├── test_producer_agent.sh  #   编排逻辑测试信号灯
+│   └── test_instantiator.sh    #   预设实例化器测试信号灯（v0.8）
 └── README.md                    # 本文件
 ```
 
@@ -140,6 +142,38 @@ AI创新(P1) + 开发阶段(P2) + 中型团队(P3)     → team_ai_agent + team_
 
 > **可扩展约定**：与 role_presets 一致为备用预设（`status: preset_standby`），按需启用；
 > 本文件只做选型建议、不新增正式角色，通过引用 role_presets 的 preset_id / team_preset_id 组合启用，天然支持横向扩展。
+
+## 🔧 预设实例化器（选型 → 实例化 → 项目团队组装，v0.8）
+
+> 承接 v0.8「预设实例化 → 真实项目团队组装与联动」：把 role_presets / project_type_presets 中选中的**备用预设，实例化为 `roles.yaml` 的正式角色**（`status: agent_enabled`），并按**六大部门**组装成可直接被 `GameProducerAgent` / 部门 Agent 承接调度的项目团队。
+
+定义文件：`config/preset_instantiator.py`
+
+**核心能力**（链式选型 + 一键实例化）：
+
+```python
+from preset_instantiator import PresetInstantiator
+
+inst = PresetInstantiator().load()
+inst.apply_project_type("ptype_mobile_game")  \   # P1 项目类型
+    .apply_phase("phase_production")          \   # P2 产品阶段
+    .apply_team_scale("scale_medium")         \   # P3 团队规模
+    .select_team("team_unity")                \   # L3 小组
+    .select_stack("stack_unity_ecosystem")    \   # L2 技术栈
+report = inst.instantiate()                       # 实例化并组装团队
+```
+
+**实例化规则**（呼应预设"轻量定义"约定）：
+- 取 `base_role` 的完整定义（responsibilities/tasks/state_machine/agent_logic），叠加预设的差异化字段（personality/风格/技术栈）；
+- `role_id` 追加后缀（如 `client_dev_unity_1`），`status` 置为 `agent_enabled` 参与调度；
+- 按 L3 小组 composition + L2 技术栈 scope + P1 项目类型/P2 阶段关键角色，自动补齐**六大部门**（策划/程序/美术/测试/项目管理/运营），保证团队可联动。
+
+**与 v0.7 多部门 Agent 端到端联动的协同**：实例化产出的正式角色按 `game_producer_agent.DEPARTMENTS` 的部门键（design/program/art/qa/pm/ops）组装，可直接被部门 Agent / 经理按工作包承接，从而把「预设选型」与「多部门端到端联动」两条线打通成同一条流水线。
+
+```bash
+python3 config/preset_instantiator.py            # 运行自测（Unity小组示例场景）
+bash game-studio-agents/tests/test_instantiator.sh  # 实例化测试信号灯
+```
 
 ## 🎭 岗位体系总览（六大板块）
 
