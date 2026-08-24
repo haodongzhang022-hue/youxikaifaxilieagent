@@ -1508,6 +1508,15 @@ roles:
         - {name: "methodology-skills", source: "superpowers", injectable: true, rollback: true}
       maturity: L1                   # 可辅助，人工确认，随信任度升级
 
+    # ---- 对接通用基础设施（v0.3，见 README）----
+    infrastructure:
+      kernel: "config/agent_core.py::BaseAgent"      # 继承通用内核，覆写 handle_task
+      message_bus: "config/message_bus.py::MessageBus"  # 事件驱动协作（DIRECT/TOPIC/ANYCAST）
+      scheduler: "config/task_scheduler.py::Scheduler"  # 任务队列/优先级/依赖派发
+      implementation: "config/reference_learner_agent.py::ReferenceLearnerAgent"
+      demo: "python3 config/reference_learner_agent.py"
+      boost_hub: "config/agent_behavior.py::CapabilityBoost"  # 强化层统一入口（路由/科研/博弈/探索/校准）
+
   # ---------------- 游戏运营 ----------------
   - role_id: "game_operator"
     name: "游戏运营"

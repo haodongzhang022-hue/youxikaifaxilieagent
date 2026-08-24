@@ -17,12 +17,37 @@ game-studio-agents/
 ├── config/
 │   ├── roles.yaml               # Agent 岗位定义文件（职责/任务/协作/状态机，含 reference_learner 强化层）
 │   ├── agent_behavior.py        # Agent 行为逻辑框架（决策/通信/协作/异常 + 强化层机制）
-│   └── agent_boost/             # 能力强化层（思维模式路由 / 科研探索 / 博弈评审）
+│   ├── agent_core.py            # ⭐ 通用 Agent 内核基类（生命周期/状态机/决策，v0.3，可运行）
+│   ├── message_bus.py           # ⭐ 通用消息总线（事件驱动通信，v0.3，可运行）
+│   ├── task_scheduler.py        # ⭐ 任务队列与事件驱动调度器（优先级/依赖，v0.3，可运行）
+│   └── agent_boost/             # 能力强化层（思维模式路由 / 科研探索 / 博弈评审 / 探索 / 校准）
 │       ├── routing_preset.yaml  #   三波段思维模式路由预设（spec/react/weak）
 │       ├── research_engine.py   #   科研探索引擎（元学习/树探索/假设求证/多Agent博弈）
-│       └── debate_reviewer.yaml #   多 Agent 博弈评审配置
+│       ├── debate_reviewer.yaml #   多 Agent 博弈评审配置
+│       ├── exploration_preset.yaml # 探索多模式预设（渠道×类型×深度）
+│       └── calibration_preset.yaml # 相似度控制与多轮迭代校准预设
 └── README.md                    # 本文件
 ```
+
+## 🧩 通用基础设施（解耦补充）
+
+> 以下是**与具体岗位 / 生态角色完全解耦**的底层基础设施，无论后续架构如何调整都必然复用。
+> 当前以 **v0.3** 落地为可运行的 Python 模块：
+
+| 模块 | 作用 | 解耦性 |
+|------|------|--------|
+| `message_bus.py` | 统一消息协议 + 事件驱动消息总线（DIRECT/TOPIC/ANYCAST 三种投递，优先级队列，拦截器，审计追踪） | 与角色无关，所有 Agent 通信的基础 |
+| `agent_core.py` | 通用 Agent 内核基类（生命周期状态机 / 混合决策引擎 / 知识库 / 消息收发 / 经验学习） | 与角色无关，任何角色继承复用 |
+| `task_scheduler.py` | 任务队列（优先级 / DDL / 依赖） + 事件驱动调度器（任务就绪自动派发） | 与角色无关，供零工池 / 进度督导复用 |
+
+```bash
+# 运行各模块自带的演示
+python3 config/message_bus.py      # 消息总线：投递 / 订阅 / 优先级 / 广播
+python3 config/agent_core.py       # Agent 内核：状态机 / 决策 / 消息处理
+python3 config/task_scheduler.py   # 调度器：优先级 / 依赖解锁 / 事件派发
+```
+
+**设计原则**：三者互相解耦、可独立替换；`agent_core` 与 `task_scheduler` 依赖 `message_bus` 作为统一通信层，但彼此不互相依赖，方便架构师审查后按需重组。
 
 ## 🎭 岗位体系总览（六大板块）
 
@@ -51,22 +76,42 @@ game-studio-agents/
   - agent_logic: Agent行为逻辑（决策点/知识库/输出格式）
 ```
 
-## 🔄 迭代路线
+## ✨ 游戏借鉴学习 Agent（reference_learner）
 
-- **v0.1** ✅ 岗位定义 + 行为逻辑框架
-- **v0.2** 🔜 Agent 消息通信协议实现
-- **v0.3** 🔜 单个 Agent 自动执行
-- **v0.4** 🔜 多 Agent 协作流水线
-- **v0.5** 🔜 质量闭环与数据驱动
-- **v0.8** 🔜 能力强化层（思维模式路由 + 科研探索 + 可插拔强化Mod）
+`reference_learner` 是运营线新增的研究岗，负责**从其他游戏借鉴玩法经验，并以创意工坊模组（Mod）方式落地**。
 
-## ✨ 强化层（Capability Boost）
-
-`reference_learner` 岗位已引入**开源能力强化层**（借鉴 dsh-routing-suite / superpowers）：
+它已在 `config/roles.yaml` 中完整定义（职责 / 任务 / 协作 / 状态机 / `agent_logic`），并引入**开源能力强化层**
+（借鉴 dsh-routing-suite / superpowers / 科研方法）：
 
 - **思维模式路由**：按任务自动路由到 spec/react/weak，不换模型即推高上限（见 `07-routing-modes.md`）
 - **科研探索**：元学习、树探索、假设求证思维链、多 Agent 博弈（见 `08-scientific-exploration.md`）
-- **可插拔强化 Mod**：强化能力封装为可注入/回滚的 Mod
+- **探索多模式**：渠道×信息类型×深度三维档位（见 `09-exploration-modes.md`）
+- **相似度校准**：控制借鉴相似度档位（一模一样/7成/只代码/只避坑）并多轮迭代（见 `10-calibration.md`）
+- **可插拔强化 Mod**：强化能力封装为可注入/回滚的 Mod（见 `11-boost-usage.md`）
+
+### 与通用基础设施的对接
+
+`reference_learner` 基于升级后的通用内核 `agent_core.BaseAgent` 落地为可运行实现：
+
+| 基础设施 | 对接方式 |
+|---------|---------|
+| `agent_core.BaseAgent` | `ReferenceLearnerAgent(BaseAgent)` 继承通用内核，覆写 `handle_task` 实现借鉴落地状态机 |
+| `message_bus.MessageBus` | 通过总线收发 `TASK_ASSIGN` / `REVIEW_RESULT` / `ARTIFACT_DELIVERY` 等消息，与上下游岗位协作 |
+| `task_scheduler.Scheduler` | 借鉴任务入调度队列，按优先级/依赖自动派发，完成/失败发布事件 |
+| 强化层 `agent_boost` | 在 `DECIDE` 状态调用科研探索（树探索/博弈），在分析前调用探索规划，在构建后调用相似度校准 |
+
+```bash
+# 运行 reference_learner 的可运行实现（含演示）
+python3 config/reference_learner_agent.py
+```
+
+## 🔄 迭代路线
+
+- **v0.1** ✅ 岗位定义 + 行为逻辑框架
+- **v0.3** ✅ 通用基础设施：消息总线 / Agent 内核 / 任务调度（解耦补充）
+- **v0.4** ✅ reference_learner 对接基础设施，落地为可运行 Agent（复用强化层）
+- **v0.5** 🔜 多 Agent 协作流水线（接入消息总线 + 调度器）
+- **v0.6** 🔜 质量闭环与数据驱动
 
 ## 🚀 快速开始
 
@@ -78,6 +123,9 @@ cat config/roles.yaml
 # 查看Agent行为逻辑框架
 cat config/agent_behavior.py
 
+# 查看 reference_learner 可运行实现
+cat config/reference_learner_agent.py
+
 # 查看岗位体系调研报告
 cat docs/岗位体系调研.md
 ```
@@ -85,6 +133,6 @@ cat docs/岗位体系调研.md
 ---
 
 **下一步迭代方向**：
-1. 选定 1-2 个核心岗位（如系统策划、QA），实现其 Agent 化的最小可用版本
-2. 设计 Agent 间消息通信协议（消息总线）
-3. 建立开发→测试的自动流水线
+1. ✅ 消息总线 / Agent 内核 / 任务调度已落地为可运行模块
+2. ✅ reference_learner 对接基础设施并复用强化层，落地为可运行 Agent
+3. 🔜 接入 `message_bus` + `task_scheduler`，建立「策划→程序→测试」自动流水线

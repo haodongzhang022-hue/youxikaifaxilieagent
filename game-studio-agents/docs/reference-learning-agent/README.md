@@ -92,3 +92,19 @@
 该 Agent 作为运营/研究线的一个新岗位 `reference_learner` 加入 `roles.yaml`，遵循既有岗位定义结构
 （`role_id` / `responsibilities` / `tasks` / `state_machine` / `agent_logic`），
 并复用全局协作规则与消息总线协议。详细岗位定义见 `config/roles.yaml`。
+
+## 4.1 对接通用基础设施（v0.3）
+
+`reference_learner` 已对接仓库升级后的通用基础设施（`agent_core` / `message_bus` / `task_scheduler`），
+并落地为**可运行实现** `config/reference_learner_agent.py::ReferenceLearnerAgent`：
+
+- **内核**：继承 `agent_core.BaseAgent`，获得生命周期 / 状态机 / 决策引擎 / 消息收发能力；
+- **协作**：通过 `message_bus.MessageBus` 收发 `TASK_ASSIGN` / `REVIEW_RESULT` / `APPROVAL_REQUEST` 等消息，
+  与制作人、上下游岗位协作；
+- **调度**：通过 `task_scheduler.Scheduler` 将借鉴任务入队，按优先级 / 依赖自动派发；
+- **强化层**：复用 `agent_behavior.CapabilityBoost` 统一入口，在对应阶段调用
+  `plan_exploration`（探索规划）/ `tree_search` + `review_decision`（科研决策）/ `calibrate_similarity`（相似度校准）/ `reflect_learning`（元学习复盘）。
+
+```bash
+python3 config/reference_learner_agent.py   # 运行可运行实现（含端到端演示）
+```
