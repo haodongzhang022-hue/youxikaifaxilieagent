@@ -1,0 +1,233 @@
+# ============================================================
+# 项目类型/产品阶段预设（Project Type & Phase Presets）
+# 版本: v0.1
+# 说明: 与 role_presets.yaml（按岗位/技术栈分层）互补的另一个可扩展维度。
+#       role_presets 回答"这个岗位/技术栈要配什么样的 Agent 变体"；
+#       本文件回答"这个类型的项目 / 这个产品阶段，应该启用哪些岗位与侧重点"。
+#       二者可叠加组合：先按项目类型选组，再按技术栈/风格选角色预设。
+#
+# 维度:
+#   P1 项目类型预设 (project_type) —— 手游/PC/主机/网页/H5小游戏/独立 等
+#   P2 产品阶段预设 (phase)       —— 原型验证/正式开发/上线发布/长线运营/停运过渡
+#   P3 团队规模预设 (team_scale)   —— 小团队/中型/大型 的岗位配置建议
+#
+# 约定: 与 role_presets 一致，默认 status: "preset_standby"（备用未启用）。
+#       本文件是"选型建议"，不新增正式角色，只说明该场景下应启用哪些 role/team preset。
+# ============================================================
+
+preset_system:
+  name: "project-type-phase-presets"
+  version: "0.1.0"
+  description: "按项目类型/产品阶段/团队规模的选型预设，与 role_presets 互补组合"
+  convention:
+    - "默认 status = preset_standby（备用未启用）"
+    - "本文件只做选型建议，不新增正式角色；通过引用 role_presets 的 preset_id / team_preset_id 组合启用"
+    - "可与 role_presets.yaml 叠加：项目类型选组 → 技术栈/风格选角色"
+
+# ============================================================
+# P1 项目类型预设（不同平台/形态的项目，岗位侧重差异）
+# ============================================================
+project_types:
+
+  - preset_id: "ptype_mobile_game"
+    level: "P1"
+    status: "preset_standby"
+    name: "移动端手游"
+    description: "面向 iOS/Android 的手游项目"
+    typical_engines: ["Unity", "Cocos Creator", "UE5(大厂手游)"]
+    art_style_hints: ["Toon卡渲", "写实PBR", "像素", "扁平"]
+    design_focus_hints: ["肉鸽", "卡牌CCG", "生存", "派对", "竞技"]
+    recommended_teams:
+      - "team_unity"          # 首选 Unity 小组
+      - "team_page_engine"    # H5小游戏/营销复用
+    key_roles: ["client_dev", "server_dev", "balance_designer", "game_operator", "data_analyst"]
+    performance_focus: ["内存/发热/耗电优化", "多机型适配", "包体控制", "热更新"]
+    enable_hint: "移动端项目启用；重点关注性能适配、包体与热更新"
+
+  - preset_id: "ptype_pc_console"
+    level: "P1"
+    status: "preset_standby"
+    name: "PC/主机端游戏"
+    description: "面向 PC/主机平台的重度或中大型游戏"
+    typical_engines: ["UE5", "Unity(中轻量)"]
+    art_style_hints: ["写实PBR", "手绘Toon", "2.5D", "剪影"]
+    design_focus_hints: ["开放世界", "射击", "动作战斗", "剧情叙事"]
+    recommended_teams:
+      - "team_ue5"            # 首选 UE5 小组
+      - "team_quality_automation"  # 质量保障
+    key_roles: ["engine_dev", "client_dev", "combat_designer", "level_designer", "tech_artist", "qa_engineer"]
+    performance_focus: ["画面上限", "多GPU适配", "载入优化", "主机平台认证"]
+    enable_hint: "PC/主机项目启用；重点关注画面品质、性能与平台认证"
+
+  - preset_id: "ptype_web_h5"
+    level: "P1"
+    status: "preset_standby"
+    name: "网页/H5 游戏"
+    description: "面向浏览器/网页的轻量游戏"
+    typical_engines: ["Web(React)", "页面引擎(Cocos/Egret/Laya)"]
+    art_style_hints: ["扁平插画", "像素", "2.5D"]
+    design_focus_hints: ["休闲", "派对", "塔防", "卡牌"]
+    recommended_teams:
+      - "team_web_frontend"   # Web 前端小组
+      - "team_page_engine"    # H5/页面引擎小组
+    key_roles: ["client_dev", "tools_dev", "ui_ux", "server_dev"]
+    performance_focus: ["首屏加载", "跨浏览器兼容", "WebGL性能", "免安装分发"]
+    enable_hint: "网页/H5项目启用；重点关注加载速度与跨端一致"
+
+  - preset_id: "ptype_mini_game"
+    level: "P1"
+    status: "preset_standby"
+    name: "小游戏（微信/字节等）"
+    description: "面向各小游戏平台的轻量游戏"
+    typical_engines: ["页面引擎(Cocos/Egret/Laya/Phaser)", "Web"]
+    art_style_hints: ["像素", "扁平", "Toon"]
+    design_focus_hints: ["休闲", "社交派对", "塔防", "放置"]
+    recommended_teams:
+      - "team_page_engine"    # H5/小游戏小组
+      - "team_growth_operation" # 运营增长
+    key_roles: ["client_dev", "tools_dev", "game_operator", "server_dev"]
+    performance_focus: ["平台包体限制", "平台SDK接入", "分享裂变", "极速上线"]
+    enable_hint: "小游戏项目启用；重点关注平台适配与社交裂变增长"
+
+  - preset_id: "ptype_indie"
+    level: "P1"
+    status: "preset_standby"
+    name: "独立游戏"
+    description: "小团队/低成本/风格化的独立游戏"
+    typical_engines: ["Godot", "Unity(轻量)", "Web"]
+    art_style_hints: ["水墨", "剪影", "像素", "体素", "扁平"]
+    design_focus_hints: ["叙事", "肉鸽", "解密", "平台跳跃"]
+    recommended_teams:
+      - "team_godot"          # Godot 轻量小组
+      - "team_ai_agent"       # 可选智能体创新
+    key_roles: ["全栈型client_dev", "narrative_designer", "system_designer", "audio_designer"]
+    performance_focus: ["低成本快速原型", "单人多面手", "风格化差异化"]
+    enable_hint: "独立项目启用；聚焦低成本、风格化与快速原型"
+
+  - preset_id: "ptype_ai_innovation"
+    level: "P1"
+    status: "preset_standby"
+    name: "AI 驱动创新游戏"
+    description: "以 LLM/智能体为核心卖点的创新型游戏"
+    typical_engines: ["AI Agent栈(叠加任意游戏引擎)"]
+    art_style_hints: ["风格不限", "通常叠加任意美术风格"]
+    design_focus_hints: ["动态叙事", "NPC互动", "内容生成"]
+    recommended_teams:
+      - "team_ai_agent"       # AI 智能体小组
+      - "team_unity"          # 叠加主游戏技术栈(Unity/UE5等)
+    key_roles: ["ai_programmer", "narrative_designer", "server_dev", "data_analyst"]
+    performance_focus: ["LLM延迟优化", "上下文/记忆管理", "内容成本控制"]
+    enable_hint: "AI创新项目启用；与主游戏技术栈小组叠加使用"
+
+# ============================================================
+# P2 产品阶段预设（不同生命周期，岗位投入侧重差异）
+# ============================================================
+phases:
+
+  - preset_id: "phase_prototype"
+    level: "P2"
+    status: "preset_standby"
+    name: "原型验证阶段"
+    description: "验证核心玩法/美术风格/技术可行性的早期阶段"
+    focus: "快速验证 + 低成本试错"
+    key_roles: ["producer", "system_designer", "client_dev", "narrative_designer"]
+    lighten_roles: ["qa_engineer", "data_analyst", "game_operator"]  # 可缩减
+    recommended_presets:
+      - "art_style_*"         # 风格快速定调
+      - "design_focus_*"      # 玩法方向试错
+    enable_hint: "原型期启用；集中火力验证核心玩法与风格"
+
+  - preset_id: "phase_production"
+    level: "P2"
+    status: "preset_standby"
+    name: "正式开发阶段"
+    description: "玩法/美术/程序全面量产的中期阶段"
+    focus: "高产能 + 质量稳定 + 版本节奏"
+    key_roles: ["全岗位", "project_manager", "release_manager", "qa_engineer"]
+    lighten_roles: []
+    recommended_presets:
+      - "对应技术栈 stack_preset"
+      - "对应开发小组 team_preset"
+    enable_hint: "开发期全量启用；按技术栈选组，质量管理上强度"
+
+  - preset_id: "phase_launch"
+    level: "P2"
+    status: "preset_standby"
+    name: "上线发布阶段"
+    description: "产品上线、渠道分发、首波用户获取"
+    focus: "稳定上线 + 首发营销 + 快速响应"
+    key_roles: ["release_manager", "game_operator", "qa_engineer", "data_analyst"]
+    lighten_roles: ["narrative_designer", "level_designer"]
+    recommended_presets:
+      - "team_quality_automation"  # 上线质量门禁
+      - "team_growth_operation"    # 首发增长
+    enable_hint: "上线期启用；质量门禁与增长运营并重"
+
+  - preset_id: "phase_longterm"
+    level: "P2"
+    status: "preset_standby"
+    name: "长线运营阶段"
+    description: "版本持续迭代、商业化、留存与精细化运营"
+    focus: "数据驱动 + 商业化 + 内容持续供给"
+    key_roles: ["game_operator", "data_analyst", "balance_designer", "system_designer"]
+    lighten_roles: []
+    recommended_presets:
+      - "team_growth_operation"  # 增长运营小组
+      - "stack_data_cloud_ecosystem" # 数据驱动
+    enable_hint: "长线运营期启用；数据驱动迭代与商业化增长"
+
+# ============================================================
+# P3 团队规模预设（不同团队体量的岗位配置建议）
+# ============================================================
+team_scales:
+
+  - preset_id: "scale_small"
+    level: "P3"
+    status: "preset_standby"
+    name: "小团队（5-15人）"
+    description: "独立/初创/快速原型团队"
+    profile: "多面手为主，一人多岗，追求极简高效"
+    typical_layout:
+      - "producer + lead_designer 合并"
+      - "client_dev 全栈兼任渲染/工具"
+      - "narrative + system + balance 合并为策划多面手"
+      - "qa 由开发兼任 + 自动化兜底"
+    recommended_teams: ["team_godot", "team_page_engine"]
+    enable_hint: "小团队启用；用轻量技术栈与多面手角色预设压缩编制"
+
+  - preset_id: "scale_medium"
+    level: "P3"
+    status: "preset_standby"
+    name: "中型团队（15-60人）"
+    description: "中小型商业/移动端项目"
+    profile: "岗位细分明确，各线设负责人，重质量与节奏"
+    typical_layout:
+      - "各线负责人（主策/技术总监/主美/测试主管）"
+      - "按技术栈选一个开发小组 + 质量小组"
+      - "设独立 game_operator / data_analyst"
+    recommended_teams: ["team_unity", "team_ue5", "team_quality_automation", "team_growth_operation"]
+    enable_hint: "中型团队启用；按技术栈选组 + 质量与运营专项"
+
+  - preset_id: "scale_large"
+    level: "P3"
+    status: "preset_standby"
+    name: "大型团队（60+人）"
+    description: "3A/大型MMO/大世界项目"
+    profile: "岗位高度细分、多小组并行、强流程管理"
+    typical_layout:
+      - "多模块并行小组（战斗/世界/系统/程序/美术管线）"
+      - "独立引擎/渲染/工具链专项小组"
+      - "独立 QA 自动化 + 性能 + 兼容小组"
+      - "专职项目经理/版本管理/数据分析团队"
+    recommended_teams: ["team_ue5", "team_quality_automation", "team_ai_agent", "stack_data_cloud_ecosystem"]
+    enable_hint: "大型团队启用；多小组并行 + 强流程与数据驱动"
+
+# ============================================================
+# 选型组合建议（项目类型 × 产品阶段 × 团队规模）
+# ============================================================
+selection_guide:
+  how_to_use: "先按项目类型选 P1，再按产品阶段选 P2，最后按团队规模选 P3，再叠加 role_presets 的技术栈/风格角色。"
+  example_1: "移动端手游(P1) + 开发阶段(P2) + 中型团队(P3) → team_unity + team_quality_automation + Unity技术栈角色"
+  example_2: "H5小游戏(P1) + 上线阶段(P2) + 小团队(P3) → team_page_engine + team_growth_operation + 页面引擎角色"
+  example_3: "PC/主机 3A(P1) + 长线运营(P2) + 大型团队(P3) → team_ue5 + team_quality_automation + stack_data_cloud_ecosystem"
+  extensibility_note: "本文件与 role_presets.yaml 互补；新增项目类型/阶段/规模即在对应分类下追加一个 preset，低成本横向扩展。"
