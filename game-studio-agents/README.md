@@ -26,6 +26,8 @@ game-studio-agents/
 │   ├── message_bus.py           # ⭐ 通用消息总线（事件驱动通信，v0.3，可运行）
 │   ├── task_scheduler.py        # ⭐ 任务队列与事件驱动调度器（优先级/依赖，v0.3，可运行）
 │   ├── game_producer_agent.py   # ⭐ 游戏向经理 Agent（架构拆解→部门分工→机制驱动派发，v0.1，可运行）
+│   ├── department_agents.py     # ⭐ 六大部门 Agent（策划/程序/美术/测试/项目管理/运营，v0.1，可运行）
+│   ├── run_end_to_end.py        # ⭐ 多部门 Agent 端到端联动（策划→程序→美术→测试→发版→运营，v0.1，可运行）
 │   ├── preset_instantiator.py   # ⭐ 预设实例化器（选型→实例化预设为正式角色→组装团队，v0.8，可运行）
 │   └── agent_boost/             # 能力强化层（思维模式路由 / 科研探索 / 博弈评审 / 探索 / 校准）
 │       ├── routing_preset.yaml  #   三波段思维模式路由预设（spec/react/weak）
@@ -42,8 +44,9 @@ game-studio-agents/
 │   ├── requirements.txt        #   依赖
 │   └── test_api.sh             #   接口层测试信号灯
 ├── tests/
-│   ├── test_producer_agent.sh  #   编排逻辑测试信号灯
-│   └── test_instantiator.sh    #   预设实例化器测试信号灯（v0.8）
+│   ├── test_producer_agent.sh   #   编排逻辑测试信号灯
+│   ├── test_instantiator.sh     #   预设实例化器测试信号灯（v0.8）
+│   └── test_end_to_end.sh       #   多部门 Agent 端到端联动测试信号灯（v0.7）
 └── README.md                    # 本文件
 ```
 
@@ -63,6 +66,8 @@ game-studio-agents/
 python3 config/message_bus.py      # 消息总线：投递 / 订阅 / 优先级 / 广播
 python3 config/agent_core.py       # Agent 内核：状态机 / 决策 / 消息处理
 python3 config/task_scheduler.py   # 调度器：优先级 / 依赖解锁 / 事件派发
+python3 config/department_agents.py  # 六大部门 Agent：策划/程序/美术/测试/项目管理/运营
+python3 config/run_end_to_end.py   # 多部门 Agent 端到端联动（全链路自动跑通）
 ```
 
 **设计原则**：三者互相解耦、可独立替换；`agent_core` 与 `task_scheduler` 依赖 `message_bus` 作为统一通信层，但彼此不互相依赖，方便架构师审查后按需重组。
