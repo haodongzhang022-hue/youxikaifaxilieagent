@@ -46,7 +46,10 @@ $:
         image: *npc_image
       stages:
         - name: 测试信号灯
-          script: bash game-studio-agents/tests/test_producer_agent.sh
+          script: |
+            bash game-studio-agents/tests/test_producer_agent.sh
+            pip install -q -r game-studio-agents/api/requirements.txt
+            bash game-studio-agents/api/test_api.sh
         - name: 自动分配评审人
           type: git:reviewer
           options:

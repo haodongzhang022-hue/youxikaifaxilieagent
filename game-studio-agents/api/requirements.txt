@@ -1,0 +1,6 @@
+# 游戏开发指挥中枢 · 信息接口层依赖
+# 安装: pip install -r requirements.txt
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+pyyaml>=6.0

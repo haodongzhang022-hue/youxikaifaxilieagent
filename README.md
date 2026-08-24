@@ -15,10 +15,15 @@
 - **系统化改进**（借鉴 [dongjiagoushi](https://cnb.cool/dongdongxiaozu/dongjiagoushi) 架构师方法论）：见 [docs/architect-improvement.md](./game-studio-agents/docs/architect-improvement.md)
 - **详细说明**：见 [docs/game-orchestration.md](./game-studio-agents/docs/game-orchestration.md)
 - **统一可视化指挥中枢**（渐进式 / 可溯源 / 降熵决策）：见 [docs/unified-command-center.md](./game-studio-agents/docs/unified-command-center.md)
+- **信息接口层**（FastAPI，接口层与人工可视层分离：AI 读 `/ai/*`，前端读 `/dashboard/*`）：见 [docs/api-layer.md](./game-studio-agents/docs/api-layer.md)
 
 ```bash
 # 运行游戏向经理演示
 python3 game-studio-agents/config/game_producer_agent.py
+
+# 启动信息接口层（AI 机器接口 + 可视化通用接口）
+pip install -r game-studio-agents/api/requirements.txt
+python3 game-studio-agents/api/main.py   # http://localhost:8000/docs
 ```
 
 ## 当前聚焦：游戏借鉴学习 Agent
