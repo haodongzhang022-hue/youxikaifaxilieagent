@@ -120,9 +120,16 @@ GET /ai/overview
 
 ```bash
 pip install -r game-studio-agents/api/requirements.txt
-python3 game-studio-agents/api/main.py          # 默认 0.0.0.0:8000
+python3 game-studio-agents/api/main.py          # 默认 127.0.0.1:8000（仅本机）
+# 跨机访问（务必配置鉴权令牌，避免信息泄露）:
+HOST=0.0.0.0 API_TOKEN=<your-token> python3 game-studio-agents/api/main.py
 # 交互式文档: http://localhost:8000/docs
 ```
+
+> **安全说明**：默认仅绑定本机 `127.0.0.1`。需跨机访问时设置 `HOST=0.0.0.0`，
+> 并务必设置 `API_TOKEN` 启用 Bearer 鉴权——`/ai/*` 与 `/dashboard/*` 均需携带
+> `Authorization: Bearer <API_TOKEN>` 头，`/health` 健康检查不鉴权。未设置 `API_TOKEN`
+> 时默认放行（仅适用于本机开发场景）。
 
 ### 4.2 附加到运行中的编排（AI / 系统接入）
 

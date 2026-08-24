@@ -110,13 +110,16 @@ class GameProducerAgent(BaseAgent):
         self.accepted: List[str] = []                    # 已验收的部门产出
         self.last_heartbeat = 0.0
         self.heartbeat_interval = 5.0   # 心跳间隔（秒）
+        # 部门能力表：实例级副本，避免 _load_departments 改写模块级全局
+        # DEPARTMENTS 造成多实例间全局状态污染。以模块级默认表为起点。
+        self.departments = {k: dict(v) for k, v in DEPARTMENTS.items()}
 
     # ---------- 覆写 BaseAgent 钩子 ----------
     def on_boot(self):
         """加载架构蓝图库与部门能力基线。"""
         self._load_departments()
         self.knowledge.add_doc("架构蓝图库", {"note": "待拆解的游戏架构蓝图"})
-        self.knowledge.add_doc("部门能力表", DEPARTMENTS)
+        self.knowledge.add_doc("部门能力表", self.departments)
         self.knowledge.add_doc("模块映射表", ARCHITECTURE_MODULES)
 
     def _load_departments(self):
@@ -143,16 +146,21 @@ class GameProducerAgent(BaseAgent):
                 # 经理是编排者，不作为工作包执行人，其多态变体同样不应被派单。
                 if role_id == self.role_id or role_id.startswith(self.role_id + "_"):
                     continue
+                # 排除 _alt 多态变体混入部门角色：_alt 角色是同一岗位的
+                # 人格化变体（同部门同职责），不应被当作独立协办角色派单，
+                # 避免 _alt 角色被当协办/主责造成重复派单。
+                if role_id.endswith("_alt"):
+                    continue
                 key = DEPT_KEY_BY_NAME.get(dept_name)
                 if key is None:
                     continue
                 built.setdefault(key, {"name": dept_name, "roles": []})
                 if role_id not in built[key]["roles"]:
                     built[key]["roles"].append(role_id)
-            # 仅当所有部门都有角色时才整体替换，避免部分覆盖导致不一致
-            if set(built) == set(DEPARTMENTS) and all(built[k]["roles"] for k in built):
-                DEPARTMENTS.clear()
-                DEPARTMENTS.update(built)
+            # 仅当所有部门都有角色时才整体替换实例级副本，避免部分覆盖
+            # 导致不一致；且不触碰模块级全局 DEPARTMENTS，杜绝跨实例污染。
+            if set(built) == set(self.departments) and all(built[k]["roles"] for k in built):
+                self.departments = {k: dict(v) for k, v in built.items()}
         except Exception as exc:  # pragma: no cover - 解析失败回退默认表
             self._log("roles_load_fallback", f"roles.yaml 解析失败，使用默认部门表: {exc}")
 
@@ -268,7 +276,7 @@ class GameProducerAgent(BaseAgent):
                 "module": mod["module"],
                 "label": mod["label"],
                 "department": dept,
-                "department_name": DEPARTMENTS[dept]["name"],
+                "department_name": self.departments[dept]["name"],
                 "deps": deps,
                 "status": "pending",
             })
@@ -276,22 +284,42 @@ class GameProducerAgent(BaseAgent):
 
     def _assign_resources(self, wp: Dict[str, Any]):
         """为工作包分配责任角色与资源（人力/优先级/DDL）。"""
-        dept_roles = DEPARTMENTS[wp["department"]]["roles"]
+        dept_roles = self.departments[wp["department"]]["roles"]
         wp["owner"] = dept_roles[0]               # 主责角色
         wp["support"] = dept_roles[1:]            # 协办角色
+        # 为工作包设定基线 DDL（部门工期），供 heartbeat 的"逾期督导"分支
+        # 真正触发（此前任务从不设 DDL，逾期扫描成为死代码）。
+        wp["ddl"] = time.time() + self._dept_duration_days(wp["department"]) * 86400
         wp["resources"] = {
             "cpus": 2, "priority": "NORMAL",
             "budget_share": round(100 / max(1, len(self.work_packages)), 1),
         }
 
+    def _dept_duration_days(self, dept: str) -> float:
+        """各部门基准确认工期（天）：策划/程序/美术/QA 较久，PM/运营较短。"""
+        base = {"design": 14.0, "program": 21.0, "art": 18.0,
+                "qa": 10.0, "pm": 5.0, "ops": 7.0}
+        return base.get(dept, 10.0)
+
     def _dispatch(self, wps: List[Dict[str, Any]]) -> List[Task]:
-        """事件驱动派发：把工作包入队，按依赖自动解锁，并广播派单消息。"""
+        """事件驱动派发：把工作包入队，按依赖自动解锁，并广播派单消息。
+
+        依赖解锁正确性（核心机制）：
+        TaskQueue/Scheduler 按 **任务 id** 解析依赖（depends_on 必须是
+        前置任务的 id）。因此必须让任务 id 与工作包 id 对齐：
+        Task(id=wp["id"])，这样 _split_work_packages 填写的 depends_on
+        （如 'wp_gameplay'）才能被调度器解析，上游验收后才能自动解锁下游。
+        此前默认 UUID id（task_xxxx）与 wp_xxx 依赖不匹配，导致有依赖的
+        下游任务永不就绪、永不派发——这是核心机制 Bug，本处已修复。
+        """
         tasks = []
         for wp in wps:
-            # 建调度任务（带依赖）
-            task = Task(name=f"{wp['label']}@{wp['department_name']}",
+            # 任务 id 与工作包 id 对齐（wp_xxx），使 depends_on 可被调度器解析
+            task = Task(id=wp["id"],
+                        name=f"{wp['label']}@{wp['department_name']}",
                         owner=wp["owner"], priority="NORMAL",
                         depends_on=wp["deps"],
+                        ddl=wp.get("ddl"),
                         payload={"work_package": wp})
             self.scheduler.enqueue(task)
             tasks.append(task)
@@ -313,21 +341,22 @@ class GameProducerAgent(BaseAgent):
         reason = content.get("reason") or "部门产出未达验收标准"
         if content.get("approved"):
             self.biz_state = "ACCEPT"
-            self.accepted.append(wp_id)
+            # 去重：同一产出重复验收不产生重复 id
+            if wp_id not in self.accepted:
+                self.accepted.append(wp_id)
             # 完成对应任务，调度器自动解锁依赖它的下游工作包
-            for task in self.scheduler.queue.tasks.values():
-                if task.payload.get("work_package", {}).get("id") == wp_id:
-                    self.scheduler.on_complete(task.id, self.role_id)
+            # 任务 id 已与工作包 id 对齐（wp_xxx），直接按 id 定位
+            if wp_id and wp_id in self.scheduler.queue.tasks:
+                self.scheduler.on_complete(wp_id, self.role_id)
             self._log("accept", f"部门产出 {wp_id} 验收通过，自动解锁下游")
         else:
             self.biz_state = "TRACK_DEPS"
             # 真正阻塞下游：仅 block（不先 on_fail，避免 FAILED 瞬时态 + task_failed
             # 通知语义误导），并另发返工通知给责任部门，引导其重新加工。
             blocked = False
-            for task in self.scheduler.queue.tasks.values():
-                if task.payload.get("work_package", {}).get("id") == wp_id:
-                    self.scheduler.queue.block(task.id, reason=reason)
-                    blocked = True
+            if wp_id and wp_id in self.scheduler.queue.tasks:
+                self.scheduler.queue.block(wp_id, reason=reason)
+                blocked = True
             if blocked:
                 # 返工通知：部门负责角色重新处理被打回的工作包
                 wp = self._find_work_package(wp_id)

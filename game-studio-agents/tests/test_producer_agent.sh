@@ -133,7 +133,47 @@ else
   report "验收后保留 ACCEPT 终态（可观测）" 1
 fi
 
-echo "== 6. 心跳督导落地（评审点4：阻塞扫描）=="
+echo "== 6. 依赖解锁核心机制（评审critical：上游完成→下游解锁重派发）=="
+out=$($PY - <<'PYEOF'
+from game_producer_agent import GameProducerAgent
+from message_bus import MessageBus, build_task_assign, build_message
+bus = MessageBus()
+m = GameProducerAgent(bus=bus)
+m.boot()
+arch = {'project': 't', 'modules': ['gameplay','numeric_model','client','server']}
+bus.publish(build_task_assign('architect', m.role_id, 'o1', {'architecture': arch}))
+bus.process_all()
+print('READY_BEFORE=' + ','.join(m.scheduler.queue.ready_order))
+# 验收上游两个策划任务
+for wid in ['wp_gameplay','wp_numeric_model']:
+    bus.publish(build_message('REVIEW_RESULT','qa', m.role_id,
+                              {'work_package_id': wid, 'approved': True}))
+    bus.process_all()
+print('READY_AFTER=' + ','.join(m.scheduler.queue.ready_order))
+print('CLIENT_STATE=' + m.scheduler.queue.tasks['wp_client'].state)
+# 下游被解锁且重新派发（ready_order 包含 wp_client）
+print('CLIENT_READY=' + str('wp_client' in m.scheduler.queue.ready_order))
+PYEOF
+)
+if echo "$out" | grep -q "READY_BEFORE=wp_gameplay,wp_numeric_model"; then
+  report "验收前仅无依赖上游就绪（wp_gameplay/wp_numeric_model）" 0
+else
+  report "验收前仅无依赖上游就绪（wp_gameplay/wp_numeric_model）" 1
+fi
+if echo "$out" | grep -q "READY_AFTER=.*wp_client.*wp_server"; then
+  report "验收上游后下游 wp_client/wp_server 被解锁入队" 0
+else
+  report "验收上游后下游 wp_client/wp_server 被解锁入队" 1
+fi
+if echo "$out" | grep -q "CLIENT_READY=True"; then
+  report "下游解锁后重新派发（可被取出执行）" 0
+else
+  report "下游解锁后重新派发（可被取出执行）" 1
+fi
+
+
+
+echo "== 7. 心跳督导落地（评审点4：阻塞扫描）=="
 out=$($PY - <<'PYEOF'
 from game_producer_agent import GameProducerAgent
 from message_bus import MessageBus, build_task_assign, build_message

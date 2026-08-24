@@ -22,7 +22,8 @@ from typing import Any, Dict, List, Optional
 # 让 api 包自身可被相对导入
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, HTTPException, Query                # noqa: E402
+from fastapi import (Depends, FastAPI, Header, HTTPException,   # noqa: E402
+                     Query)
 from pydantic import BaseModel                                   # noqa: E402
 
 from aggregator import Aggregator, assess_risk, build_judgment   # noqa: E402
@@ -78,6 +79,29 @@ app = FastAPI(
 )
 
 
+# ============================================================
+# 安全：可选 Bearer Token 鉴权 + 本地绑定
+# ============================================================
+# 通过环境变量 API_TOKEN 设置鉴权令牌。未设置时放行（默认仅绑定本机）。
+# 生产环境务必设置 API_TOKEN，且默认绑定 127.0.0.1，避免信息泄露。
+_API_TOKEN = (os.environ.get("API_TOKEN") or "").strip()
+
+
+async def require_token(authorization: Optional[str] = Header(None)):
+    """Bearer token 鉴权依赖（应用于 /ai/* 与 /dashboard/*）。
+
+    - 若 API_TOKEN 未配置，视为允许访问（本地开发/默认绑定本机场景）；
+    - 若配置了 API_TOKEN，请求必须携带匹配的 Bearer token，否则 401。
+    """
+    if not _API_TOKEN:
+        return
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
+    token = authorization[7:].strip()
+    if token != _API_TOKEN:
+        raise HTTPException(status_code=401, detail="令牌无效")
+
+
 # ---------- 根 / 健康检查 ----------
 @app.get("/", tags=["meta"])
 def root():
@@ -102,7 +126,8 @@ def health():
 # /ai/*   —— AI 专用机器接口（低冗余、结构化、聚合）
 # ============================================================
 
-@app.get("/ai/overview", response_model=ApiResponse, tags=["ai"])
+@app.get("/ai/overview", response_model=ApiResponse, tags=["ai"],
+         dependencies=[Depends(require_token)])
 def ai_overview():
     """L0 总览：AI 一眼拿到全局健康度 + 关键信号 + 判断。"""
     ov = _agg().overview()
@@ -113,7 +138,8 @@ def ai_overview():
     )
 
 
-@app.get("/ai/workpackages", response_model=ApiResponse, tags=["ai"])
+@app.get("/ai/workpackages", response_model=ApiResponse, tags=["ai"],
+         dependencies=[Depends(require_token)])
 def ai_workpackages(group_by: str = Query("department", pattern="^(department|status)$")):
     """L1 聚合：按部门/状态聚类的工作包 + 判断信息。"""
     agg = _agg().work_packages_aggregate(group_by=group_by)
@@ -126,7 +152,8 @@ def ai_workpackages(group_by: str = Query("department", pattern="^(department|st
     return ApiResponse(layer="L1", data=slim, meta=agg.meta, source=agg.source)
 
 
-@app.get("/ai/workpackages/{wp_id}", response_model=ApiResponse, tags=["ai"])
+@app.get("/ai/workpackages/{wp_id}", response_model=ApiResponse, tags=["ai"],
+         dependencies=[Depends(require_token)])
 def ai_workpackage(wp_id: str):
     """L2 明细：单个工作包完整结构化信息（含判断与溯源）。"""
     detail = _agg().work_package_detail(wp_id)
@@ -137,7 +164,8 @@ def ai_workpackage(wp_id: str):
                        source={"events": detail.source_events})
 
 
-@app.get("/ai/risks", response_model=ApiResponse, tags=["ai"])
+@app.get("/ai/risks", response_model=ApiResponse, tags=["ai"],
+         dependencies=[Depends(require_token)])
 def ai_risks():
     """L1 风险聚类：所有风险工作包 + 判断信息（决策支撑）。"""
     agg = _agg()
@@ -160,7 +188,8 @@ def ai_risks():
                        source={"events": len(agg.events)})
 
 
-@app.get("/ai/tasks", response_model=ApiResponse, tags=["ai"])
+@app.get("/ai/tasks", response_model=ApiResponse, tags=["ai"],
+         dependencies=[Depends(require_token)])
 def ai_tasks():
     """L2 任务清单：调度器任务状态概览（供 AI 判断推进进度）。"""
     agg = _agg()
@@ -178,7 +207,8 @@ def ai_tasks():
                        source={"ts": agg.snap.get("ts", 0.0)})
 
 
-@app.get("/ai/events", response_model=ApiResponse, tags=["ai"])
+@app.get("/ai/events", response_model=ApiResponse, tags=["ai"],
+         dependencies=[Depends(require_token)])
 def ai_events(limit: int = Query(20, ge=1, le=200),
               msg_type: Optional[str] = Query(None)):
     """L3 原始事件流：可溯源证据（AI 需要核实某判断时下钻到原始层）。"""
@@ -194,19 +224,22 @@ def ai_events(limit: int = Query(20, ge=1, le=200),
 # /dashboard/*  —— 人类可视化通用接口（支撑前端，渐进式展开）
 # ============================================================
 
-@app.get("/dashboard/overview", response_model=Overview, tags=["dashboard"])
+@app.get("/dashboard/overview", response_model=Overview, tags=["dashboard"],
+         dependencies=[Depends(require_token)])
 def dashboard_overview():
     """L0 总览（前端首屏）：健康度 + 关键指标 + 风险 + 判断。"""
     return _agg().overview()
 
 
-@app.get("/dashboard/workpackages", response_model=Aggregate, tags=["dashboard"])
+@app.get("/dashboard/workpackages", response_model=Aggregate, tags=["dashboard"],
+         dependencies=[Depends(require_token)])
 def dashboard_workpackages(group_by: str = Query("department", pattern="^(department|status)$")):
     """L1 聚合（前端分页默认）：聚类分组 + 判断，含 members 供下钻。"""
     return _agg().work_packages_aggregate(group_by=group_by)
 
 
-@app.get("/dashboard/dependencies", response_model=ApiResponse, tags=["dashboard"])
+@app.get("/dashboard/dependencies", response_model=ApiResponse, tags=["dashboard"],
+         dependencies=[Depends(require_token)])
 def dashboard_dependencies():
     """L1 部门依赖拓扑：部门间上下游解锁链路。"""
     agg = _agg()
@@ -239,13 +272,15 @@ def dashboard_dependencies():
                        source={"events": len(agg.events)})
 
 
-@app.get("/dashboard/risks", response_model=ApiResponse, tags=["dashboard"])
+@app.get("/dashboard/risks", response_model=ApiResponse, tags=["dashboard"],
+         dependencies=[Depends(require_token)])
 def dashboard_risks():
     """L1 风险聚类 + 判断（前端风险分页）。"""
     return ai_risks()
 
 
-@app.get("/dashboard/workpackages/{wp_id}", response_model=WorkPackageDetail, tags=["dashboard"])
+@app.get("/dashboard/workpackages/{wp_id}", response_model=WorkPackageDetail, tags=["dashboard"],
+         dependencies=[Depends(require_token)])
 def dashboard_workpackage(wp_id: str):
     """L2 单个工作包明细（前端点击展开）。"""
     detail = _agg().work_package_detail(wp_id)
@@ -254,7 +289,8 @@ def dashboard_workpackage(wp_id: str):
     return detail
 
 
-@app.get("/dashboard/events", response_model=ApiResponse, tags=["dashboard"])
+@app.get("/dashboard/events", response_model=ApiResponse, tags=["dashboard"],
+         dependencies=[Depends(require_token)])
 def dashboard_events(limit: int = Query(50, ge=1, le=500),
                      msg_type: Optional[str] = Query(None)):
     """L3 原始事件流（前端溯源下钻）。"""
@@ -267,5 +303,8 @@ def dashboard_events(limit: int = Query(50, ge=1, le=500),
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)),
+    # 默认仅绑定本机（避免工作包/风险/原始事件信息泄露）；
+    # 如需跨机访问显式设置 HOST=0.0.0.0 并务必配置 API_TOKEN 鉴权。
+    host = os.environ.get("HOST", "127.0.0.1")
+    uvicorn.run("app:app", host=host, port=int(os.environ.get("PORT", 8000)),
                 reload=False)

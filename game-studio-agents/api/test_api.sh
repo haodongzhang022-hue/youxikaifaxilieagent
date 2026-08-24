@@ -100,7 +100,32 @@ else
   report "阻塞工作包给出建议动作（$out）" 1
 fi
 
-echo "== 4. FastAPI 接口可响应 =="
+echo "== 4. 安全鉴权：配置 API_TOKEN 后 /ai/* 与 /dashboard/* 需 Bearer token =="
+out=$(API_TOKEN='test-secret' $PY - <<'PYEOF'
+from fastapi.testclient import TestClient
+import app
+from runtime import bootstrap
+rt = bootstrap(modules=['gameplay','client'])
+mgr = rt['manager']
+app.attach_runtime(manager=mgr, bus=rt['bus'])
+c = TestClient(app.app)
+# 无 token -> 401
+no = c.get('/ai/overview').status_code
+bad = c.get('/ai/overview', headers={'Authorization':'Bearer wrong'}).status_code
+ok = c.get('/ai/overview', headers={'Authorization':'Bearer test-secret'}).status_code
+dash = c.get('/dashboard/overview', headers={'Authorization':'Bearer test-secret'}).status_code
+health = c.get('/health').status_code
+print(f'NO_TOKEN={no} BAD_TOKEN={bad} OK_TOKEN={ok} DASH_OK={dash} HEALTH={health}')
+PYEOF
+)
+if echo "$out" | grep -q "NO_TOKEN=401 BAD_TOKEN=401 OK_TOKEN=200 DASH_OK=200 HEALTH=200"; then
+  report "鉴权生效：无/错 token 401，正确 token 200，健康检查放行" 0
+else
+  report "鉴权生效：无/错 token 401，正确 token 200，健康检查放行 ($out)" 1
+fi
+
+
+echo "== 5. FastAPI 接口可响应 =="
 out=$($PY - <<'PYEOF'
 from fastapi.testclient import TestClient
 import app
