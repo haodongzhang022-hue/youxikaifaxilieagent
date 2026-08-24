@@ -76,6 +76,57 @@ else
   report "部门 Agent 幂等（重复派单不重复执行）" 1
 fi
 
+echo "== 4. 返工闭环（v0.7 增强：被打回工作包可重新执行）=="
+out=$($PY - <<'PYEOF'
+from department_agents import DesignDeptAgent
+from message_bus import MessageBus, Message, build_message
+bus = MessageBus()
+a = DesignDeptAgent(bus)
+a.boot()
+def assign(wid):
+    return Message("TASK_ASSIGN", "scheduler", "lead_designer",
+                   {"task_id": wid, "payload": {"work_package": {
+                       "id": wid, "module": "gameplay", "label": "玩法",
+                       "department_name": "策划线"}}})
+bus.publish(assign("wp_gameplay")); bus.process_all()
+print("DONE_AFTER_FIRST=" + ','.join(a.done_packages))
+bus.publish(build_message("NOTIFICATION", "producer", "lead_designer",
+                          {"event": "rework", "work_package_id": "wp_gameplay",
+                           "reason": "设计不完整"}))
+bus.process_all()
+print("PENDING_REWORK=" + ','.join(a.pending_rework))
+print("DONE_AFTER_REWORK=" + ','.join(a.done_packages))
+bus.publish(assign("wp_gameplay")); bus.process_all()
+print("REWORK_COUNT=" + str(a.rework_count.get('wp_gameplay', 0)))
+print("DONE_AFTER_REEXEC=" + ','.join(a.done_packages))
+PYEOF
+)
+if echo "$out" | grep -q "DONE_AFTER_FIRST=wp_gameplay"; then
+  report "首次派发后工作包被执行" 0
+else
+  report "首次派发后工作包被执行" 1
+fi
+if echo "$out" | grep -q "PENDING_REWORK=wp_gameplay"; then
+  report "收到返工后进入待返工清单" 0
+else
+  report "收到返工后进入待返工清单" 1
+fi
+if echo "$out" | grep -q "DONE_AFTER_REWORK=" && ! echo "$out" | grep -q "DONE_AFTER_REWORK=wp_gameplay"; then
+  report "返工解除幂等拦截（可从已完工程移除）" 0
+else
+  report "返工解除幂等拦截（可从已完工程移除）" 1
+fi
+if echo "$out" | grep -q "REWORK_COUNT=1"; then
+  report "重新派发后工作包被重新执行（返工闭环）" 0
+else
+  report "重新派发后工作包被重新执行（返工闭环）" 1
+fi
+if echo "$out" | grep -q "DONE_AFTER_REEXEC=wp_gameplay"; then
+  report "返工后工作包再次完成" 0
+else
+  report "返工后工作包再次完成" 1
+fi
+
 echo ""
 echo "端到端联动测试结果: $pass 通过 / $fail 失败"
 if [ "$fail" -gt 0 ]; then

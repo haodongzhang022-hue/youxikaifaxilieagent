@@ -37,6 +37,9 @@ class DepartmentAgent(BaseAgent):
         self.department = department          # 部门名（策划线/程序线/...）
         self.done_packages: list = []         # 已执行完成的工作包 id
         self.accepted_by: Dict[str, str] = {}  # 工作包 id -> 验收人 role_id
+        self.pending_rework: list = []         # 收到返工通知、待重新加工的工作包 id
+        self.rework_count: Dict[str, int] = {}  # 工作包 id -> 返工次数
+        self.biz_state = "IDLE"                 # 部门业务状态（IDLE/EXECUTING/REWORK/DELIVERING）
 
     def on_boot(self):
         """加载部门领域知识基线。"""
@@ -72,9 +75,19 @@ class DepartmentAgent(BaseAgent):
         dept_name = work_package.get("department_name") or self.department
 
         # 幂等：已执行过的工作包不再重复执行（避免依赖解锁引起的重复派单）
-        if wp_id in self.done_packages:
+        # 例外：处于待返工（pending_rework）的工作包允许重新执行，形成返工闭环。
+        if wp_id in self.done_packages and wp_id not in self.pending_rework:
             self._log("idempotent", f"工作包 {wp_id} 已执行过，跳过重复派单")
             return
+
+        # 若这是返工后的重新派发，清除待返工标记并记录返工次数
+        if wp_id in self.pending_rework:
+            self.pending_rework.remove(wp_id)
+            self.rework_count[wp_id] = self.rework_count.get(wp_id, 0) + 1
+            self._log("rework_exec", f"工作包 {wp_id} 返工后重新执行（第{self.rework_count[wp_id]}次）")
+            self.biz_state = "REWORK"
+        else:
+            self.biz_state = "EXECUTING"
 
         self._transition("ANALYZING")
         self._log("analyze", f"解析工作包 {wp_id}（{wp_label} @ {dept_name}）")
@@ -101,8 +114,23 @@ class DepartmentAgent(BaseAgent):
                 "reason": note,
             })
         self.done_packages.append(wp_id)
+        self.biz_state = "DELIVERING"
         self._log("deliver", f"工作包 {wp_id} 执行完成，已上报 REVIEW_RESULT（{note}）")
         self._transition("IDLE")
+
+    # ---------- 状态汇报 ----------
+    def report(self) -> Dict[str, Any]:
+        """生成部门 Agent 状态汇报（含返工统计）。"""
+        return {
+            "agent_id": self.role_id,
+            "department": self.department,
+            "biz_state": self.biz_state,
+            "state": self.state,
+            "done_packages": list(self.done_packages),
+            "pending_rework": list(self.pending_rework),
+            "rework_count": dict(self.rework_count),
+            "log_len": len(self.log),
+        }
 
     def _on_notification(self, msg: Message):
         """处理督导通知（阻塞/逾期/返工）。"""
@@ -111,7 +139,13 @@ class DepartmentAgent(BaseAgent):
         wp_id = content.get("work_package_id", "")
         reason = content.get("reason", "")
         if event == "rework":
-            self._log("rework", f"返工通知：{wp_id}（{reason}）")
+            # 返工闭环：把工作包记入待返工清单，并从已完工程解除幂等拦截，
+            # 使其被经理/调度器重新派发时能再次执行（重新加工 → 重新验收）。
+            if wp_id and wp_id not in self.pending_rework:
+                self.pending_rework.append(wp_id)
+            if wp_id in self.done_packages:
+                self.done_packages.remove(wp_id)
+            self._log("rework", f"返工通知：{wp_id}（{reason}），已进入待返工清单")
         elif event == "supervise":
             self._log("supervise", f"督导通知：{wp_id}（{reason}）")
         else:
