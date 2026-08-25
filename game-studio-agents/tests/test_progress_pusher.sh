@@ -224,6 +224,58 @@ else
   report "协作支持封装共享总线：消息真正送达（delivered>0）" 1
 fi
 
+# ============================================================
+# 8. 评审-修复闭环护栏修复点（默认改 + 防回退断言）
+# ============================================================
+echo "== 8. 最新 OCI 评审修复点（评审-修复闭环护栏）=="
+out8=$($PY - <<'PYEOF'
+import time
+from message_bus import MessageBus, Message
+from task_scheduler import Task, TaskQueue
+from progress_pusher import ProgressPusherAgent
+
+bus = MessageBus()
+queue = TaskQueue()
+pusher = ProgressPusherAgent(bus=bus, queue=queue)
+pusher.boot()
+now = time.time()
+
+# 8.1 soft WARN 不抢占 firm PUSH 冷却（评审点 #2）
+# 场景：任务先临近 DDL 触发 WARN(soft)，随后严重逾期应能 firm PUSH，
+#       不被 soft 冷却占用 pushed_at 挡住。
+t = Task(id="t_warnpush", name="先预警后催办", owner="dev", ddl=now + 3600, progress=0.5)
+t.updated_at = now
+queue.add(t)
+pusher.supervise(t, now=now)          # 临近DDL → WARN(soft)，写 warned_at
+soft_did_not_occupy_push = "t_warnpush" in pusher.warned_at and "t_warnpush" not in pusher.pushed_at
+t.ddl = now - 86400*3                 # 改成严重逾期
+pusher.supervise(t, now=now + 7200)   # 2小时后（越过 warn 冷却，仍未达 firm 冷却）
+final_action = [d["action"] for d in pusher.decisions if d["task_id"] == "t_warnpush"][-1]
+warn_no_push_steal = soft_did_not_occupy_push and final_action == "PUSH" and "t_warnpush" in pusher.pushed_at
+print("SOFT_NO_PUSH_STEAL=" + ("OK" if warn_no_push_steal else "BAD"))
+
+# 8.2 DIRECT 消息路径 RECEIVING/ANALYZING 合法（评审点 #3）
+p2 = ProgressPusherAgent(bus=bus, queue=queue)
+p2.boot()
+m = Message(type="NOTIFICATION", from_role="pm", to_role=p2.role_id,
+            content={"event": "task_blocked", "task_id": "t_x"})
+p2._receive(m)
+fails = [e for e in p2.log if e["event"] == "state_fail"]
+receive_fsm_ok = len(fails) == 0
+print("DIRECT_RECEIVE_FSM=" + ("OK" if receive_fsm_ok else "BAD"))
+PYEOF
+)
+if echo "$out8" | grep -q "SOFT_NO_PUSH_STEAL=OK"; then
+  report "soft 预警不抢占 firm 催办冷却（严重逾期仍能 PUSH）" 0
+else
+  report "soft 预警不抢占 firm 催办冷却（严重逾期仍能 PUSH）" 1
+fi
+if echo "$out8" | grep -q "DIRECT_RECEIVE_FSM=OK"; then
+  report "DIRECT 消息路径 RECEIVING/ANALYZING 合法，无 state_fail" 0
+else
+  report "DIRECT 消息路径 RECEIVING/ANALYZING 合法，无 state_fail" 1
+fi
+
 echo ""
 echo "进度督导测试结果: $pass 通过 / $fail 失败"
 if [ "$fail" -gt 0 ]; then

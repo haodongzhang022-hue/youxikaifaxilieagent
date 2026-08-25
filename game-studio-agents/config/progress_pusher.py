@@ -42,6 +42,9 @@ DEFAULT_POLICY = {
     "block_timeout_hours": 24.0,
     "escalate_to": "project_manager",
     "push_cooldown_hours": 6.0,
+    # soft(友好预警) 独立冷却：同一任务两次友好预警的最小间隔(小时)。
+    # 与正式催办冷却分离——soft 不占用 pushed_at，避免抢占 firm 催办时机。
+    "warn_cooldown_hours": 1.0,
     "max_pushes_per_task": 3,
     # ESCALATE 打扰成本控制：同一任务两次升级的最小间隔(小时)，
     # 防止持续 BLOCKED / 已催满的任务每次扫描都向 PM 轰炸升级通知。
@@ -99,16 +102,22 @@ class ProgressPusherAgent(BaseAgent):
         # （IDLE/TRACKING/PUSHING/ESCALATING/WARNING）。覆写基类通用生命周期，
         # 使 _do_push/_do_escalate 中的 PUSHING/ESCALATING 等生态状态合法，
         # 避免触发 state_fail（评审点 #1）。不污染 agent_core 全局状态表。
+        # 注意：必须同时保留基类 DIRECT 消息路径用到的 RECEIVING/ANALYZING
+        # 状态（BaseAgent._receive/_handle_by_type 会 transition 到它们），
+        # 否则收到总线 DIRECT 消息时仍会触发 state_fail（评审点 #3）。
         self.transitions = {
-            "BOOT": ["IDLE", "TRACKING", "PUSHING", "ESCALATING", "WARNING"],
-            "IDLE": ["TRACKING", "PUSHING", "ESCALATING", "WARNING", "STOPPED"],
-            "TRACKING": ["IDLE", "PUSHING", "ESCALATING", "WARNING"],
-            "PUSHING": ["IDLE", "TRACKING", "ESCALATING", "WARNING"],
-            "WARNING": ["IDLE", "TRACKING", "PUSHING", "ESCALATING"],
-            "ESCALATING": ["IDLE", "TRACKING", "WARNING"],
+            "BOOT": ["IDLE", "TRACKING", "PUSHING", "ESCALATING", "WARNING", "RECEIVING", "ANALYZING"],
+            "IDLE": ["TRACKING", "PUSHING", "ESCALATING", "WARNING", "RECEIVING", "ANALYZING", "STOPPED"],
+            "TRACKING": ["IDLE", "PUSHING", "ESCALATING", "WARNING", "RECEIVING", "ANALYZING"],
+            "PUSHING": ["IDLE", "TRACKING", "ESCALATING", "WARNING", "RECEIVING", "ANALYZING"],
+            "WARNING": ["IDLE", "TRACKING", "PUSHING", "ESCALATING", "RECEIVING", "ANALYZING"],
+            "ESCALATING": ["IDLE", "TRACKING", "WARNING", "RECEIVING", "ANALYZING"],
+            "RECEIVING": ["ANALYZING", "IDLE", "TRACKING"],
+            "ANALYZING": ["IDLE", "TRACKING", "RECEIVING"],
         }
         self._last_scan = 0.0
-        self.pushed_at: Dict[str, float] = {}       # task_id -> 上次催办时间
+        self.pushed_at: Dict[str, float] = {}       # task_id -> 上次正式催办时间(firm)
+        self.warned_at: Dict[str, float] = {}       # task_id -> 上次友好预警时间(soft)
         self.push_count: Dict[str, int] = {}        # task_id -> 累计正式催办次数(firm)
         self.warn_count: Dict[str, int] = {}        # task_id -> 累计友好预警次数(soft)
         self.escalated_at: Dict[str, float] = {}    # task_id -> 上次升级时间
@@ -180,7 +189,7 @@ class ProgressPusherAgent(BaseAgent):
             conditions=[
                 {"key": "near_ddl", "op": "==", "value": True},
                 {"key": "state", "op": "!=", "value": "DONE"},
-                {"key": "cooling", "op": "==", "value": False},
+                {"key": "warn_cooling", "op": "==", "value": False},
             ],
             action="WARN",
             fallback=None,
@@ -244,6 +253,9 @@ class ProgressPusherAgent(BaseAgent):
         # 是否处于冷却期（避免过度打扰）
         last_push = self.pushed_at.get(task.id, 0.0)
         cooling = (now - last_push) < (p["push_cooldown_hours"] * 3600.0)
+        # soft(友好预警) 独立冷却：避免预警频率过高造成骚扰，但绝不占用正式催办冷却
+        last_warn = self.warned_at.get(task.id, 0.0)
+        warn_cooling = (now - last_warn) < (p["warn_cooldown_hours"] * 3600.0)
         # 正式催办次数（仅 firm PUSH 计入升级额度；WARN soft 预警不消耗）
         pushes = self.push_count.get(task.id, 0)
         # 是否处于升级冷却期（避免重复向 PM 轰炸升级通知）
@@ -260,6 +272,7 @@ class ProgressPusherAgent(BaseAgent):
             "overdue_days": overdue_days,
             "blocked_hours": blocked_hours,
             "cooling": cooling,
+            "warn_cooling": warn_cooling,
             "pushes": pushes,
             "near_ddl": near_ddl,
             "escalate_cooling": escalate_cooling,
@@ -291,7 +304,13 @@ class ProgressPusherAgent(BaseAgent):
         """
         p = self.policy
         now = time.time()
-        self.pushed_at[task.id] = now
+        # 打扰成本：firm(正式催办) 单独记录 pushed_at 用于正式催办冷却；
+        # soft(友好预警) 单独记录 warned_at，绝不抢占 pushed_at，否则 soft 后
+        # 任务会被误判为冷却中（WATCH）而漏掉真正需要的 firm PUSH（评审点 #2）。
+        if intensity == "firm":
+            self.pushed_at[task.id] = now
+        else:
+            self.warned_at[task.id] = now
         self._transition("PUSHING")
 
         if intensity == "firm":

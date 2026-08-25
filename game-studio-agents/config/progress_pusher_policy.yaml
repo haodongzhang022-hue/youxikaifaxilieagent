@@ -23,7 +23,9 @@ progress_pusher_policy:
   escalate_to: "project_manager" # 升级上报对象
 
   # ── 催促节奏（打扰成本控制，避免过度打扰）──
-  push_cooldown_hours: 6.0      # 同一任务两次催办的最小间隔，低于则进入冷却(不重复催)
+  push_cooldown_hours: 6.0      # 同一任务两次正式催办(firm)的最小间隔，低于则进入冷却(不重复催)
+  warn_cooldown_hours: 1.0      # 同一任务两次友好预警(soft/WARN)的最小间隔，与正式催办冷却分离
+                                # 注: soft 不占用 push_cooldown 冷却，避免抢占 firm 正式催办时机
   max_pushes_per_task: 3        # 单任务最多正式催办次数，超出后必须升级(不再无效催办)
                                 # 注: 正式催办(firm)才计入；友好预警(soft/WARN)不消耗此额度
   escalate_cooldown_hours: 24.0 # 同一任务两次升级的最小间隔(小时)，防重复轰炸 PM

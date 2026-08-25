@@ -39,7 +39,7 @@ DEPT_KEY_BY_NAME = {
     "策划线": "design", "程序线": "program", "美术线": "art",
     "测试线": "qa", "项目管理": "pm", "运营线": "ops",
     # 生态角色（非六大执行部门）：进度督导等协作支持角色登记于此，
-    # 供 _load_roles 识别，不静默跳过；组装时归入 pm 兜底（跨部门服务岗）。
+    # 供 _load_departments 识别，不静默跳过；组装时归入 pm 兜底（跨部门服务岗）。
     "协作支持圈": "support",
 }
 
@@ -156,6 +156,15 @@ class GameProducerAgent(BaseAgent):
                     continue
                 key = DEPT_KEY_BY_NAME.get(dept_name)
                 if key is None:
+                    continue
+                # 跳过生态/协作支持角色（如 progress_pusher 所属的"协作支持圈"）:
+                # 它们是跨部门服务岗，不属于六大执行部门，self.departments 只含
+                # 六大部门键；若不跳过，built 会多出 support 键，导致下方
+                # `set(built) == set(self.departments)` 守卫恒为 False，
+                # 整段 roles.yaml 动态解析被整体跳过（评审点 #1 架构回归）。
+                # 登记支持圈到 DEPT_KEY_BY_NAME 仅用于 preset_instantiator
+                # 识别生态角色部门，不参与六大部门派单。
+                if key == "support":
                     continue
                 built.setdefault(key, {"name": dept_name, "roles": []})
                 if role_id not in built[key]["roles"]:
