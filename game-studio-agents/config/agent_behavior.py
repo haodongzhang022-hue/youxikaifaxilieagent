@@ -732,7 +732,7 @@ class ReasoningModeRouter:
                 for f in names:
                     val = getattr(session, f, None)
                     if val is not None and isinstance(val, (str, int)):
-                        return cls._compose(prefix, val, fields)
+                        return cls._compose(prefix, val, session)
         return None
 
     @classmethod
