@@ -680,16 +680,67 @@ class ReasoningModeRouter:
             return ["read", "edit", "write", "glob", "grep"]
         return ["read", "write", "edit"]          # 写优先
 
+    # 统一会话键规范：key = "<类型前缀>:<唯一ID>[:v<版本>]"
+    # - 类型前缀保留类/分类信息（session/task/chat/entity），避免跨类型 ID 碰撞
+    # - 版本后缀保留同一事物的演变关系（不同版本可溯源到同一实体）
+    # - route 与 set_mode 共用同一归一化，保证任意输入形态得到一致 key
+    _SESSION_ID_FIELDS = (   # (类型前缀, 可接受的 id 字段名)
+        ("session", ("session_id",)),
+        ("task", ("task_id",)),
+        ("chat", ("chat_id",)),
+        ("entity", ("id", "uid", "mod_id")),
+    )
+    _VERSION_FIELDS = ("version", "revision", "v", "_v")
+
     @staticmethod
-    def _session_key(session):
-        """将 session 规范化为可 hash 的 key，支持 dict（提取 id 字段）或任意可 hash 对象。"""
+    def _version_of(session):
+        """从 session（dict 或对象）提取版本号，用于保留同一事物的演变关系。"""
+        for f in ReasoningModeRouter._VERSION_FIELDS:
+            if isinstance(session, dict):
+                val = session.get(f)
+            else:
+                val = getattr(session, f, None)
+            if val is not None and isinstance(val, (str, int)):
+                return val
+        return None
+
+    @classmethod
+    def _session_key(cls, session):
+        """将任意 session 形态规范化为全局唯一的统一键。
+
+        统一标准：`key = "<类型前缀>:<唯一ID>[:v<版本>]"`，
+        - 优先按类型前缀提取 id（session_id > task_id > chat_id > id），保留"类"信息；
+        - 附带版本字段以保留同一实体不同版本的演变关系；
+        - dict 与字符串/带 id 属性的对象都归一化为同一规范，
+          使 route 与 set_mode 对同一会话必然得到相同 key。
+        - 无法提取到任何 id 时返回 None（调用方据此走任务分类或报告失败）。
+        """
+        fields = getattr(session, "__dict__", None)
         if isinstance(session, dict):
-            for field in ("session_id", "task_id", "id", "chat_id"):
-                val = session.get(field)
-                if val is not None and isinstance(val, (str, int)):
-                    return f"{field}:{val}"
-            return None   # 无 id 字段则不用 override，走任务分类
-        return session
+            for prefix, names in cls._SESSION_ID_FIELDS:
+                for f in names:
+                    val = session.get(f)
+                    if val is not None and isinstance(val, (str, int)):
+                        return cls._compose(prefix, val, session)
+            return None
+        if isinstance(session, (str, int)):
+            # 纯字符串/数字无类型信息：统一归入默认 session 类，保持可回溯
+            return cls._compose("session", session, None)
+        if fields is not None:
+            # 带属性的对象：优先取 id 属性，保留类型信息
+            for prefix, names in cls._SESSION_ID_FIELDS:
+                for f in names:
+                    val = getattr(session, f, None)
+                    if val is not None and isinstance(val, (str, int)):
+                        return cls._compose(prefix, val, fields)
+        return None
+
+    @classmethod
+    def _compose(cls, cls_name, val, session):
+        """组装统一键：类型前缀:唯一ID，可选附加版本后缀。"""
+        base = f"{cls_name}:{val}"
+        version = cls._version_of(session)
+        return f"{base}:v{version}" if version is not None else base
 
     def route(self, session, first_user_message):
         """
@@ -697,10 +748,8 @@ class ReasoningModeRouter:
         返回 (mode, persona, core_tools)。
         """
         key = self._session_key(session)
-        if key is not None:
-            mode = self.overrides.get(key, self.classify_task(first_user_message))
-        else:
-            mode = self.classify_task(first_user_message)
+        mode = (self.overrides.get(key, self.classify_task(first_user_message))
+                if key is not None else self.classify_task(first_user_message))
         return {
             "mode": mode,
             "band": self.band_of(mode),
@@ -710,10 +759,16 @@ class ReasoningModeRouter:
         }
 
     def set_mode(self, session, mode):
-        """显式覆盖模式（下一请求生效）。"""
+        """显式覆盖模式（下一请求生效）。返回是否已写入 override。
+
+        当会话无法提取到任何 id（key 为 None）时返回 False，
+        不再静默丢弃，调用方可感知覆盖未生效。
+        """
         key = self._session_key(session)
-        if key is not None:
-            self.overrides[key] = mode
+        if key is None:
+            return False
+        self.overrides[key] = mode
+        return True
 
     def is_complex_task(self, text):
         """深度自适应：复杂任务判定。"""
