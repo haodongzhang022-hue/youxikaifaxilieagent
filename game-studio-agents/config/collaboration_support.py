@@ -120,7 +120,9 @@ class ProgressPusher:
             updated_at=task.last_update or now))
 
     def overdue_days(self, task: TaskStatus, now: float) -> float:
-        return max(0.0, now - task.ddl)
+        # 单位必须与 lag_threshold（天）一致：now 与 ddl 均为时间戳（秒），
+        # 除以 86400 转成天，避免“返回秒却按天比较”导致逾期 1 天即被误判为超阈值。
+        return max(0.0, (now - task.ddl) / 86400.0)
 
     def decide_action(self, task: TaskStatus, now: float) -> str:
         """决定：正常 / 催办 / 升级（走规则引擎）"""

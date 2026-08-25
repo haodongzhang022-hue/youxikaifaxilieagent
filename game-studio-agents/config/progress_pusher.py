@@ -114,6 +114,18 @@ class ProgressPusherAgent(BaseAgent):
             action="ESCALATE",
             fallback=None,
         ))
+        # 声明与实现一致：YAML 声明"催办次数达 max_pushes_per_task 后必须升级"。
+        # 当单任务累计催办已达上限且仍未完成 → 升级项目经理（不再无效催办）。
+        # 该规则必须放在"落后→催办"之前，否则催满后 PUSH 不匹配会落入 WARN，永不升级。
+        self.decision.add_rule(DecisionRule(
+            name="催办达上限仍未完成→升级",
+            conditions=[
+                {"key": "pushes", "op": ">=", "value": p["max_pushes_per_task"]},
+                {"key": "state", "op": "!=", "value": "DONE"},
+            ],
+            action="ESCALATE",
+            fallback=None,
+        ))
         self.decision.add_rule(DecisionRule(
             name="落后超阈值→催办",
             conditions=[
@@ -145,11 +157,20 @@ class ProgressPusherAgent(BaseAgent):
 
     # ---------- 事件驱动：感知任务状态变化 ----------
     def _on_task_event(self, msg: Message):
-        """收到任务事件（task_done / task_failed / task_blocked）时刷新关注。"""
+        """收到任务事件（task_done / task_failed / task_blocked）时即时重新监督该任务。
+
+        事件驱动真正"感知状态变化"：状态变化往往意味着决策条件改变
+        （如阻塞→解除、逾期加剧），这里对该任务立即触发一次 supervise，
+        而非仅打日志、静等下一次心跳扫描，避免督导响应滞后。
+        """
         evt = msg.content.get("event", "")
         task_id = msg.content.get("task_id")
         if task_id and evt:
             self._log("event", f"收到 {evt} 事件: {task_id}")
+            task = self.queue.tasks.get(task_id)
+            if task is not None:
+                # 状态变化后立即重新决策（心跳扫描之外的即时督导路径）
+                self.supervise(task, now=time.time())
 
     # ---------- 心跳：定时扫描任务队列（核心督导循环） ----------
     def heartbeat(self):
@@ -345,6 +366,14 @@ def demo():
     t_near.updated_at = now
     queue.add(t_near)
 
+    # 5) 催办已达上限仍未完成（应 ESCALATE 升级，不再无效催办）
+    t_exhaust = Task(id="t_exhaust", name="催满未完成任务", owner="server_dev",
+                     priority="HIGH", ddl=now - 86400 * 10, progress=0.4)
+    t_exhaust.updated_at = now
+    queue.add(t_exhaust)
+    pusher.push_count["t_exhaust"] = pusher.policy["max_pushes_per_task"]  # 已催满 3 次
+    pusher.pushed_at["t_exhaust"] = now  # 不在冷却期
+
     # 督导扫描
     pusher.scan(now=now)
     bus.process_all()   # 把督导发出的催办/升级消息真正经总线派发并留痕
@@ -362,15 +391,17 @@ def demo():
     # 结论断言（供测试信号灯）
     actions = {d["task_id"]: d["action"] for d in pusher.decisions}
     print("\n[断言]")
-    print(f"  - 正常任务 t_ok   应 WATCH  -> {actions.get('t_ok')}")
-    print(f"  - 逾期任务 t_late  应 PUSH   -> {actions.get('t_late')}")
-    print(f"  - 阻塞任务 t_block 应 ESCALATE -> {actions.get('t_block')}")
-    print(f"  - 临近任务 t_near  应 WARN   -> {actions.get('t_near')}")
+    print(f"  - 正常任务 t_ok      应 WATCH  -> {actions.get('t_ok')}")
+    print(f"  - 逾期任务 t_late     应 PUSH   -> {actions.get('t_late')}")
+    print(f"  - 阻塞任务 t_block    应 ESCALATE -> {actions.get('t_block')}")
+    print(f"  - 临近任务 t_near     应 WARN   -> {actions.get('t_near')}")
+    print(f"  - 催满任务 t_exhaust  应 ESCALATE -> {actions.get('t_exhaust')}")
 
     ok = (actions.get("t_ok") in ("WATCH", "WARN")
           and actions.get("t_late") == "PUSH"
           and actions.get("t_block") == "ESCALATE"
-          and actions.get("t_near") == "WARN")
+          and actions.get("t_near") == "WARN"
+          and actions.get("t_exhaust") == "ESCALATE")
     print(f"\n结果: {'🟢 通过' if ok else '🔴 未通过'}")
     return 0 if ok else 1
 

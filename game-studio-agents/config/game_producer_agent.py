@@ -170,6 +170,15 @@ class GameProducerAgent(BaseAgent):
         取代空实现：对调度队列中处于 BLOCKED（依赖/缺资源）或
         超过 DDL 的任务做督导，广播督导通知给责任部门，保证
         "阻塞/逾期扫描" 真正落地，而非仅打印状态。
+
+        职责分工（避免与 progress_pusher 双督导重复催办）：
+          - 本方法的督导定位是**阻塞/依赖级联提示**（打回后解锁下游、
+            缺资源/依赖的即时报信），属于 producer 的本职；
+          - **逾期/催办/升级**的持续盯守由专门角色 progress_pusher
+            （config/progress_pusher.py + progress_pusher_policy.yaml）
+            负责，具备冷却期与最大催办次数等打扰成本控制；
+          - 二者职责互补，不重复发同类催办：producer 侧重结构级联，
+            progress_pusher 侧重时间进度。
         """
         now = time.time()
         if now - self.last_heartbeat < self.heartbeat_interval:

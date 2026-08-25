@@ -48,6 +48,11 @@ if echo "$out" | grep -q "t_near.*WARN"; then
 else
   report "临近DDL → WARN（预警）" 1
 fi
+if echo "$out" | grep -q "t_exhaust.*ESCALATE"; then
+  report "催满次数未完成 → ESCALATE（不再无效催办）" 0
+else
+  report "催满次数未完成 → ESCALATE（不再无效催办）" 1
+fi
 
 echo "== 2. 督导消息真正经总线发出（程序规则化生效）=="
 if echo "$out" | grep -q "PUSH:t_late"; then
