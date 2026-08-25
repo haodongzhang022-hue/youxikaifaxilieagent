@@ -34,7 +34,7 @@ class EndToEndOrchestrator:
       - 输出工作包完成情况与依赖解锁记录。
     """
 
-    def __init__(self):
+    def __init__(self, with_progress_pusher: bool = True):
         self.bus = MessageBus()
         self.manager = GameProducerAgent(bus=self.bus)
         self.manager.boot()
@@ -42,6 +42,24 @@ class EndToEndOrchestrator:
         # 用经理的 scheduler（其 bus 与本次一致）
         self.scheduler = self.manager.scheduler
         self.unlock_log: List[Dict[str, Any]] = []   # 依赖解锁记录
+        self.progress_pusher = None
+        # 评审点 #4：producer 已不再盯逾期，逾期/催办/升级须由 progress_pusher
+        # 显式挂载接管；这里默认一键挂载，避免“逾期无人盯守”的责任真空。
+        if with_progress_pusher:
+            self.attach_progress_pusher()
+
+    def attach_progress_pusher(self) -> "ProgressPusherAgent":
+        """把进度督导挂到本链路：共享总线 + 复用经理 TaskQueue。
+
+        挂载后 progress_pusher 会订阅 task_events 事件驱动即时督导，
+        并在事件循环中随心跳扫描逾期/催办/升级，与 producer 的
+        阻塞/依赖级联督导职责互补，不重复发同类催办。
+        """
+        from progress_pusher import ProgressPusherAgent, attach_to_scheduler
+        self.progress_pusher = ProgressPusherAgent(bus=self.bus, queue=self.scheduler.queue)
+        attach_to_scheduler(self.scheduler, self.progress_pusher)
+        self.progress_pusher.boot()
+        return self.progress_pusher
 
     # ---------- 装配 ----------
     def assemble(self, architecture: Dict[str, Any]):
@@ -62,6 +80,11 @@ class EndToEndOrchestrator:
             # 处理总线上积压消息
             processed = self.bus.process_all()
             # 调度器取出就绪任务派发给部门 Agent（已由 enqueue/dispatch 处理）
+
+            # 进度督导随事件循环运行：事件驱动即时督导（订阅 task_events）
+            # + 心跳定时扫描逾期/催办/升级，真正接管“时间进度”盯守。
+            if self.progress_pusher is not None:
+                self.progress_pusher.heartbeat()
 
             # 检查是否全部完成（所有工作包 DONE）
             all_done = self._all_done()
@@ -98,6 +121,7 @@ class EndToEndOrchestrator:
             })
         return {
             "manager": self.manager.report(),
+            "progress_pusher": self.progress_pusher.report() if self.progress_pusher else None,
             "work_packages": wp_states,
             "departments": {k: {"role": a.role_id, "done": a.done_packages}
                             for k, a in self.departments.items()},
@@ -136,6 +160,13 @@ def demo():
     print("\n== 各部门 Agent 执行情况 ==")
     for k, v in report["departments"].items():
         print(f"  - {k}: {v['role']} 已完成 {v['done']}")
+
+    # 评审点 #4：进度督导已一键挂载，接管逾期/催办/升级盯守
+    if report.get("progress_pusher"):
+        pp = report["progress_pusher"]
+        print("\n== 进度督导已挂载（接管逾期/催办/升级盯守）==")
+        print(f"  - 追踪任务数: {pp.get('watched_tasks')}")
+        print(f"  - 催办次数: {pp.get('pushes')} / 预警: {pp.get('warns')} / 升级: {pp.get('escalates')}")
 
     return orch
 

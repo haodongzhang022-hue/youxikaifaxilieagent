@@ -2748,6 +2748,81 @@ roles:
       needs_approval_from: ["制作人"]
       approves: ["增长活动"]
 
+  # ---------------- 进度督导（协作支持圈）----------------
+  # 说明: 生态角色体系中的进度督导，已从独立 demo 升级为 v1.0 可生效 Agent
+  #       （config/progress_pusher.py + progress_pusher_policy.yaml），
+  #       程序规则负责"生效"、声明负责"可调"、用法文档负责"会用"。
+  # 职责分工: 与 producer 的 heartbeat（阻塞/依赖级联）互补，本角色负责
+  #       "逾期/催办/升级"的时间进度督导，含冷却期与最大催办次数打扰成本控制。
+  - role_id: "progress_pusher"
+    name: "进度督导"
+    en_name: "Progress Pusher"
+    department: "协作支持圈"
+    level: "服务岗"
+    agent_priority: 16
+    status: "agent_enabled"
+    personality: "稳健盯守：以 DDL 为导向，主动催办、识别阻塞并升级，注重打扰成本控制，避免过度打扰执行岗。"
+
+    responsibilities:
+      - "盯住各任务 DDL 并主动催进度"
+      - "识别阻塞任务并触发升级"
+      - "动态调整催促力度，避免过度打扰"
+
+    tasks:
+      - id: "pp.track"
+        name: "进度监控"
+        inputs: ["任务清单", "实时状态", "DDL"]
+        process: "偏差计算 → 落后判定 → 记录预警"
+        outputs: ["进度预警清单"]
+        trigger: "定时/事件"
+
+      - id: "pp.push"
+        name: "主动催促"
+        inputs: ["预警任务", "当前阻塞"]
+        process: "评估紧迫度 → 选择催促话术 → 发送提醒"
+        outputs: ["催促消息"]
+        trigger: "落后阈值"
+
+      - id: "pp.escalate"
+        name: "阻塞升级"
+        inputs: ["长期未解阻塞", "责任方"]
+        process: "根因确认 → 上报上级 → 协调资源"
+        outputs: ["升级单"]
+        trigger: "阻塞超时 / 催办达上限"
+
+    workflows:
+      - name: "进度督导闭环"
+        steps: ["盯 DDL → 落后判定(PUSH/WARN) → 催办 → 仍不解决 → 升级 → 复盘"]
+
+    collaboration:
+      receives_from: ["项目经理", "各执行岗"]
+      sends_to: ["各执行岗", "项目经理"]
+      needs_approval_from: ["项目经理"]
+      approves: []
+
+    state_machine:
+      states: ["IDLE", "TRACKING", "PUSHING", "ESCALATING", "WARNING"]
+      transitions:
+        - {from: "IDLE", event: "TICK", to: "TRACKING"}
+        - {from: "TRACKING", event: "LAGGING", to: "PUSHING"}
+        - {from: "TRACKING", event: "NEAR_DDL", to: "WARNING"}
+        - {from: "TRACKING", event: "ON_TRACK", to: "IDLE"}
+        - {from: "WARNING", event: "RESOLVED", to: "IDLE"}
+        - {from: "PUSHING", event: "STILL_BLOCKED", to: "ESCALATING"}
+        - {from: "PUSHING", event: "RESOLVED", to: "IDLE"}
+        - {from: "ESCALATING", event: "ESCALATED", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "是否落后？→ 依据: 进度偏差 >= lag_threshold_days（见 progress_pusher_policy.yaml）"
+        - "催还是等？→ 依据: 紧迫度 + 冷却期 + 最大催办次数（打扰成本控制）"
+        - "是否升级？→ 依据: 阻塞超时 / 催办次数达上限仍未完成"
+      knowledge_base:
+        - "任务依赖图"
+        - "历史催办效果记录"
+        - "各岗位负载情况"
+        - "督导策略文件: config/progress_pusher_policy.yaml（声明化，可调不碰代码）"
+
 
 # ============================================================
 # 全局协作规则

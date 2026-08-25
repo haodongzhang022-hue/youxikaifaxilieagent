@@ -1,0 +1,738 @@
+# ============================================================
+# 游戏生态角色定义文件 (扩展版)
+# 版本: v0.2
+# 说明: 在 v0.1 研发岗位体系基础上，新增"生态角色"建模。
+#       生态角色 = 研发核心圈之外的协作支持 / 玩家 / 外部市场角色，
+#       用于在"发布前"对整体市场效果进行预演与博弈。
+# 格式: YAML
+# ============================================================
+
+project:
+  name: "Game Studio Agents"
+  version: "0.2.0"
+  description: "从研发岗位体系扩展为全游戏生态角色体系，支持发布前市场预演与纳什均衡博弈"
+
+# ============================================================
+# 生态圈层定义
+# ============================================================
+circles:
+  - id: "dev_core"
+    name: "研发核心圈"
+    desc: "已有的策划/程序/美术/测试/项目/运营岗位（见 roles.yaml v0.1）"
+
+  - id: "collab_support"
+    name: "协作支持圈"
+    desc: "让生产跑得顺的服务者：沟通传递、催进度、资产整理、调解求助、零工外包、质量门卫"
+
+  - id: "players"
+    name: "玩家圈"
+    desc: "生态的需求端：泛玩家/核心玩家/付费玩家/测试玩家/主播/云玩家"
+
+  - id: "market"
+    name: "外部市场圈"
+    desc: "变现与分发端：宣发平台/小游戏平台/广告方/渠道/竞品/监管"
+
+# ============================================================
+# 二、协作支持圈 (Collaboration Support Roles)
+# ============================================================
+collab_support_roles:
+
+  # ---------------- 通讯官 ----------------
+  - role_id: "communicator"
+    name: "通讯官"
+    en_name: "Communicator"
+    circle: "collab_support"
+    level: "服务岗"
+    agent_priority: 15
+
+    responsibilities:
+      - "在各岗位 Agent 间结构化传递与路由消息"
+      - "翻译跨领域语言（策划话术 ↔ 技术话术）"
+      - "维护沟通日志与上下文，防止信息丢失"
+
+    tasks:
+      - id: "com.route"
+        name: "消息路由"
+        inputs: ["源消息", "消息语义", "收件人候选"]
+        process: "解析意图 → 语义转译 → 路由分发 → 落日志"
+        outputs: ["送达消息", "路由日志"]
+        trigger: "任意岗位发消息"
+
+      - id: "com.translate"
+        name: "跨域转译"
+        inputs: ["原始需求", "目标岗位领域"]
+        process: "去歧义 → 术语映射 → 生成对方能执行的话术"
+        outputs: ["转译后的需求描述"]
+        trigger: "存在跨领域沟通"
+
+      - id: "com.context"
+        name: "上下文沉淀"
+        inputs: ["会话片段", "历史决策"]
+        process: "摘要 → 归档 → 关联任务 → 可检索"
+        outputs: ["会话摘要", "决策记录"]
+        trigger: "重要沟通结束"
+
+    collaboration:
+      sends_to: ["全岗位"]
+      receives_from: ["全岗位"]
+      needs_approval_from: []   # 服务岗，无审批权
+      approves: []
+
+    state_machine:
+      states: ["IDLE", "ROUTING", "TRANSLATING", "ARCHIVING"]
+      transitions:
+        - {from: "IDLE", event: "MSG_IN", to: "ROUTING"}
+        - {from: "ROUTING", event: "NEED_TRANSLATE", to: "TRANSLATING"}
+        - {from: "ROUTING", event: "ROUTED", to: "IDLE"}
+        - {from: "TRANSLATING", event: "TRANSLATED", to: "ROUTING"}
+        - {from: "ROUTING", event: "CONTEXT_REQUIRED", to: "ARCHIVING"}
+
+    agent_logic:
+      decision_points:
+        - "这条消息该给谁？→ 依据: 语义意图 + 目标领域匹配度"
+        - "是否需要转译？→ 依据: 发送方/接收方领域是否不同"
+        - "是否需要沉淀上下文？→ 依据: 是否涉及关键决策"
+      knowledge_base:
+        - "领域术语词典(策划↔技术↔美术)"
+        - "岗位路由表"
+        - "历史沟通/决策记录库"
+
+  # ---------------- 进度督导 ----------------
+  - role_id: "progress_pusher"
+    name: "进度督导"
+    en_name: "Progress Pusher"
+    circle: "collab_support"
+    level: "服务岗"
+    agent_priority: 16
+
+    responsibilities:
+      - "盯住各任务 DDL 并主动催进度"
+      - "识别阻塞任务并触发升级"
+      - "动态调整催促力度，避免过度打扰"
+
+    tasks:
+      - id: "pp.track"
+        name: "进度监控"
+        inputs: ["任务清单", "实时状态", "DDL"]
+        process: "偏差计算 → 落后判定 → 记录预警"
+        outputs: ["进度预警清单"]
+        trigger: "定时/事件"
+
+      - id: "pp.push"
+        name: "主动催促"
+        inputs: ["预警任务", "当前阻塞"]
+        process: "评估紧迫度 → 选择催促话术 → 发送提醒"
+        outputs: ["催促消息"]
+        trigger: "落后阈值"
+
+      - id: "pp.escalate"
+        name: "阻塞升级"
+        inputs: ["长期未解阻塞", "责任方"]
+        process: "根因确认 → 上报上级 → 协调资源"
+        outputs: ["升级单"]
+        trigger: "阻塞超时"
+
+    collaboration:
+      sends_to: ["各执行岗", "项目经理"]
+      receives_from: ["项目经理", "各执行岗"]
+      needs_approval_from: ["项目经理"]
+      approves: []
+
+    state_machine:
+      states: ["IDLE", "TRACKING", "PUSHING", "ESCALATING", "WARNING"]
+      transitions:
+        - {from: "IDLE", event: "TICK", to: "TRACKING"}
+        - {from: "TRACKING", event: "LAGGING", to: "PUSHING"}
+        - {from: "TRACKING", event: "NEAR_DDL", to: "WARNING"}
+        - {from: "TRACKING", event: "ON_TRACK", to: "IDLE"}
+        - {from: "WARNING", event: "RESOLVED", to: "IDLE"}
+        - {from: "PUSHING", event: "STILL_BLOCKED", to: "ESCALATING"}
+        - {from: "PUSHING", event: "RESOLVED", to: "IDLE"}
+        - {from: "ESCALATING", event: "ESCALATED", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "是否落后？→ 依据: 进度偏差 >= 阈值(如 2 天，见 progress_pusher_policy.yaml)"
+        - "催还是等？→ 依据: 紧迫度 + 是否已在处理 + 打扰成本(冷却期/最大催办次数)"
+        - "是否升级？→ 依据: 阻塞时长 + 影响范围(阻塞超时升级项目经理)"
+      knowledge_base:
+        - "任务依赖图"
+        - "历史催办效果记录"
+        - "各岗位负载情况"
+        - "督导策略文件: config/progress_pusher_policy.yaml（声明化，可调不碰代码）"
+
+  # ---------------- 资产管理 / 清道夫 ----------------
+  - role_id: "asset_manager"
+    name: "资产管理/清道夫"
+    en_name: "Asset Manager / Cleaner"
+    circle: "collab_support"
+    level: "服务岗"
+    agent_priority: 17
+
+    responsibilities:
+      - "整理、打标、去重、归档研发资产"
+      - "清理垃圾（废弃资源/冗余文件/过期分支/无用引用）"
+      - "维护资产索引与引用关系"
+
+    tasks:
+      - id: "am.index"
+        name: "资产编目"
+        inputs: ["新增/变更资产", "现有索引"]
+        process: "打标 → 归类 → 引用登记 → 索引更新"
+        outputs: ["资产索引"]
+        trigger: "资产变更"
+
+      - id: "am.dedup"
+        name: "去重与合并"
+        inputs: ["疑似重复资产"]
+        process: "相似度比对 → 确认 → 合并 → 更新引用"
+        outputs: ["去重结果"]
+        trigger: "定期扫描"
+
+      - id: "am.clean"
+        name: "垃圾清理"
+        inputs: ["废弃清单", "引用关系"]
+        process: "引用确认 → 风险评估 → 清理 → 留痕"
+        outputs: ["清理报告"]
+        trigger: "定期/触发"
+
+    collaboration:
+      sends_to: ["全岗位"]
+      receives_from: ["全岗位"]
+      needs_approval_from: []
+      approves: []
+
+    state_machine:
+      states: ["IDLE", "INDEXING", "DEDUPING", "CLEANING"]
+      transitions:
+        - {from: "IDLE", event: "ASSET_CHANGE", to: "INDEXING"}
+        - {from: "IDLE", event: "SCAN", to: "DEDUPING"}
+        - {from: "DEDUPING", event: "DONE", to: "CLEANING"}
+        - {from: "CLEANING", event: "DONE", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "是否被引用？→ 依据: 引用图遍历结果"
+        - "归档还是删除？→ 依据: 引用数 + 历史价值 + 风险"
+        - "是否合并？→ 依据: 相似度 >= 阈值"
+      knowledge_base:
+        - "资产引用图"
+        - "资产类型规范"
+        - "历史清理/风险记录"
+
+  # ---------------- 调解员 ----------------
+  - role_id: "mediator"
+    name: "调解员"
+    en_name: "Mediator"
+    circle: "collab_support"
+    level: "服务岗"
+    agent_priority: 18
+
+    responsibilities:
+      - "处理岗位间冲突、扯皮与疑问"
+      - "主动问、去查、找根因，提出折中方案"
+      - "调解不了时升级给上级仲裁"
+
+    tasks:
+      - id: "me.probe"
+        name: "诉求调查"
+        inputs: ["冲突事件", "多方诉求"]
+        process: "收集各观点 → 找根因 → 识别可兼容点"
+        outputs: ["冲突分析报告"]
+        trigger: "冲突上报"
+
+      - id: "me.mediate"
+        name: "调解方案"
+        inputs: ["冲突分析", "目标约束"]
+        process: "生成折中选项 → 各方评估 → 达成共识"
+        outputs: ["调解结论", "折中方案"]
+        trigger: "分析完成"
+
+      - id: "me.arbitrate"
+        name: "升级仲裁"
+        inputs: ["未达成共识的冲突"]
+        process: "整理材料 → 上报上级 → 执行裁定"
+        outputs: ["仲裁请求", "裁定执行"]
+        trigger: "调解失败"
+
+    collaboration:
+      sends_to: ["冲突相关方", "制作人", "主策划"]
+      receives_from: ["冲突相关方", "通讯官"]
+      needs_approval_from: ["制作人"]
+      approves: []
+
+    state_machine:
+      states: ["IDLE", "PROBING", "MEDIATING", "ARBITRATING"]
+      transitions:
+        - {from: "IDLE", event: "CONFLICT", to: "PROBING"}
+        - {from: "PROBING", event: "ROOT_KNOWN", to: "MEDIATING"}
+        - {from: "MEDIATING", event: "CONSENSUS", to: "IDLE"}
+        - {from: "MEDIATING", event: "DEADLOCK", to: "ARBITRATING"}
+        - {from: "ARBITRATING", event: "RULE_ISSUED", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "冲突根因？→ 依据: 多方诉求归因"
+        - "能否折中？→ 依据: 可兼容性 + 全局目标约束"
+        - "是否升级？→ 依据: 调解轮数 + 分歧烈度"
+      knowledge_base:
+        - "冲突案例库"
+        - "各方诉求与利益点"
+        - "升级仲裁路径"
+
+  # ---------------- 零工 / 外包池 ----------------
+  - role_id: "gig_pool"
+    name: "零工/外包池"
+    en_name: "Gig Worker Pool"
+    circle: "collab_support"
+    level: "服务岗"
+    agent_priority: 19
+
+    responsibilities:
+      - "维护可调度的通用劳动力池"
+      - "按负载把闲余/通用能力分配给吃紧岗位"
+      - "承担标准化可外包的活，帮忙提速"
+
+    tasks:
+      - id: "gp.load"
+        name: "负载监测"
+        inputs: ["各岗位负载", "进度压力"]
+        process: "负载评估 → 吃紧识别 → 缺口计算"
+        outputs: ["负载热力图"]
+        trigger: "定时"
+
+      - id: "gp.dispatch"
+        name: "按需调度"
+        inputs: ["负载热力图", "可外包任务池"]
+        process: "拆解任务 → 能力匹配 → 分派零工 → 回收"
+        outputs: ["调度结果"]
+        trigger: "存在负载失衡"
+
+      - id: "gp.task_pool"
+        name: "任务池管理"
+        inputs: ["可外包需求", "零工能力"]
+        process: "标准化 → 登记 → 匹配 → 结算"
+        outputs: ["任务池清单"]
+        trigger: "持续"
+
+    collaboration:
+      sends_to: ["各执行岗", "项目经理"]
+      receives_from: ["各执行岗", "项目经理"]
+      needs_approval_from: ["项目经理"]
+      approves: []
+
+    state_machine:
+      states: ["IDLE", "MONITORING", "DISPATCHING", "RECLAIMING"]
+      transitions:
+        - {from: "IDLE", event: "TICK", to: "MONITORING"}
+        - {from: "MONITORING", event: "IMBALANCE", to: "DISPATCHING"}
+        - {from: "DISPATCHING", event: "DISPATCHED", to: "RECLAIMING"}
+        - {from: "RECLAIMING", event: "DONE", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "谁最吃紧？→ 依据: 负载 + 进度压力加权评分"
+        - "这块活能不能外包？→ 依据: 标准化程度 + 对核心质量影响"
+        - "派给哪个零工？→ 依据: 能力匹配 + 空闲度"
+      knowledge_base:
+        - "零工能力画像库"
+        - "可外包任务模板库"
+        - "历史调度/提效记录"
+
+  # ---------------- 门卫 / 守门人 ----------------
+  - role_id: "gatekeeper"
+    name: "门卫/守门人"
+    en_name: "Gatekeeper"
+    circle: "collab_support"
+    level: "服务岗"
+    agent_priority: 20
+
+    responsibilities:
+      - "守住发版/入库/合规等各类闸口"
+      - "检查是否满足放行标准，不满足则打回并给原因"
+      - "维护放行标准与门禁清单"
+
+    tasks:
+      - id: "gk.gate"
+        name: "门禁检查"
+        inputs: ["待放行产出", "门禁标准"]
+        process: "逐项核验 → 达标判定 → 放行/打回"
+        outputs: ["门禁结论"]
+        trigger: "申请放行"
+
+      - id: "gk.criteria"
+        name: "标准维护"
+        inputs: ["新规范", "历史事故"]
+        process: "标准增删 → 版本化 → 下发"
+        outputs: ["门禁标准集"]
+        trigger: "规范变更"
+
+    collaboration:
+      sends_to: ["版本管理", "资产库", "运营"]
+      receives_from: ["各岗位"]
+      needs_approval_from: ["项目经理"]
+      approves: []
+
+    state_machine:
+      states: ["IDLE", "CHECKING", "BLOCKING", "PASSING"]
+      transitions:
+        - {from: "IDLE", event: "GATE_REQ", to: "CHECKING"}
+        - {from: "CHECKING", event: "PASS", to: "PASSING"}
+        - {from: "CHECKING", event: "FAIL", to: "BLOCKING"}
+        - {from: "PASSING", event: "DONE", to: "IDLE"}
+        - {from: "BLOCKING", event: "REASON_GIVEN", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "是否达标？→ 依据: 门禁标准逐项匹配"
+        - "打回理由？→ 依据: 未通过项 + 修复指引"
+      knowledge_base:
+        - "门禁标准集"
+        - "历史放行/打回记录"
+
+# ============================================================
+# 三、玩家圈 (Player Roles)
+# ============================================================
+player_roles:
+
+  # ---------------- 泛玩家 ----------------
+  - role_id: "mass_player"
+    name: "泛玩家"
+    en_name: "Mass Player"
+    circle: "players"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["追求轻松上手", "碎片化", "社交分享", "低付费门槛"]
+      key_metrics: ["上手时间", "前10分钟留存", "分享意愿", "上手难度"]
+      preference_vector: {complexity: 0.3, monetization_tolerance: 0.4, social_need: 0.8, content_taste: "casual"}
+
+    role_in_simulation:
+      - "评估游戏的潜在用户规模(大盘)"
+      - "给出上手与传播的反馈评分"
+
+    agent_logic:
+      decision_points:
+        - "会不会留下来？→ 依据: 上手时间 + 首局爽感"
+        - "会不会分享？→ 依据: 传播触发点数量"
+      knowledge_base:
+        - "休闲/大众品类基准数据"
+        - "历史同类产品大盘表现"
+
+  # ---------------- 核心玩家 ----------------
+  - role_id: "core_player"
+    name: "核心玩家"
+    en_name: "Core Player"
+    circle: "players"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["深度钻研", "追求成就感", "长线投入"]
+      key_metrics: ["系统深度", "数值平衡", "挑战性", "30日留存"]
+      preference_vector: {complexity: 0.9, monetization_tolerance: 0.6, social_need: 0.5, content_taste: "systemic"}
+
+    role_in_simulation:
+      - "评估长线留存与口碑"
+      - "反馈数值平衡与深度"
+
+    agent_logic:
+      decision_points:
+        - "值不值得钻研？→ 依据: 系统深度 + 数值平衡度"
+        - "会不会弃坑？→ 依据: 付费墙 + 成长断层"
+      knowledge_base:
+        - "深度玩法基准"
+        - "长线留存模型"
+
+  # ---------------- 付费玩家 ----------------
+  - role_id: "payer"
+    name: "付费玩家"
+    en_name: "Payer"
+    circle: "players"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["愿为体验/进度/外观付费", "关注性价比", "炫耀价值"]
+      key_metrics: ["LTV", "付费转化率", "付费性价比", "ARPPU"]
+      preference_vector: {complexity: 0.5, monetization_tolerance: 0.9, social_need: 0.7, content_taste: "progression"}
+
+    role_in_simulation:
+      - "评估商业化与营收能力"
+      - "与广告方形成 IAP vs IAA 的取舍反馈"
+
+    agent_logic:
+      decision_points:
+        - "会不会付费？→ 依据: 付费点与成长爽感匹配"
+        - "付费值不值？→ 依据: 性价比 + 炫耀价值"
+      knowledge_base:
+        - "商业化模型库"
+        - "付费点设计基准"
+
+  # ---------------- 测试玩家 / 试玩员 ----------------
+  - role_id: "playtester"
+    name: "测试玩家/试玩员"
+    en_name: "Playtester"
+    circle: "players"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["参与内测", "反馈手感与bug", "连接玩家与QA"]
+      key_metrics: ["bug密度", "手感评分", "卡点数量", "体验反馈量"]
+
+    role_in_simulation:
+      - "把玩家喜好转化为对研发的可执行反馈"
+      - "与 QA 协作补充「体验质量」维度"
+
+    collaboration:
+      sends_to: ["qa_engineer", "主策划"]
+      receives_from: ["版本管理"]
+
+    agent_logic:
+      decision_points:
+        - "这个功能手感如何？→ 依据: 操作反馈 + 流畅度"
+        - "这个卡点是否需要优化？→ 依据: 卡点时长 + 挫败感"
+      knowledge_base:
+        - "手感基准库"
+        - "体验反馈模板"
+
+  # ---------------- 主播 / KOL ----------------
+  - role_id: "streamer"
+    name: "主播/KOL"
+    en_name: "Streamer / Influencer"
+    circle: "players"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["面向大众直播", "追求节目效果", "放大传播"]
+      key_metrics: ["节目效果", "话题性", "展示性", "传播势能"]
+
+    role_in_simulation:
+      - "评估冷启动的传播势能"
+      - "反馈'是否有梗/好展示'"
+
+    agent_logic:
+      decision_points:
+        - "值不值得播？→ 依据: 节目效果 + 话题性"
+        - "会不会带火？→ 依据: 传播触发点 + 观赏性"
+      knowledge_base:
+        - "直播/短视频传播规律"
+        - "爆款内容特征库"
+
+  # ---------------- 云玩家 / 观望者 ----------------
+  - role_id: "lurker"
+    name: "云玩家/观望者"
+    en_name: "Lurker"
+    circle: "players"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["看别人玩", "关注热度与口碑", "潜在转化"]
+      key_metrics: ["热度感知", "口碑偏好", "转化意愿"]
+
+    role_in_simulation:
+      - "代表潜在转化池"
+      - "是宣发触达的受众"
+
+    agent_logic:
+      decision_points:
+        - "会不会被吸引入坑？→ 依据: 热度 + 口碑 + 门槛"
+      knowledge_base:
+        - "用户转化漏斗基准"
+
+# ============================================================
+# 四、外部市场圈 (Market Roles)
+# ============================================================
+market_roles:
+
+  # ---------------- 宣发平台 ----------------
+  - role_id: "publisher"
+    name: "宣发平台"
+    en_name: "Publisher / Marketing Platform"
+    circle: "market"
+    type: "simulation_agent"
+
+    responsibilities:
+      - "决定曝光量、买量策略、获客成本(CPI)"
+      - "提出宣发适配要求(素材/软文/预热节奏)"
+
+    role_in_simulation:
+      - "输出预期 ROI、获客成本、曝光-转化关系"
+      - "与玩家圈共同决定 DAU 曲线"
+
+    agent_logic:
+      decision_points:
+        - "愿给多少曝光？→ 依据: 预算 + 产品卖点 + 市场匹配"
+        - "买量 ROI 如何？→ 依据: 获客成本 vs 玩家LTV"
+      knowledge_base:
+        - "渠道定价与买量基准"
+        - "历史发行/投放效果库"
+
+    collaboration:
+      sends_to: ["运营", "制作人"]
+      receives_from: ["版本管理", "运营"]
+
+  # ---------------- 第三方小游戏平台 ----------------
+  - role_id: "mini_game_platform"
+    name: "第三方小游戏平台"
+    en_name: "Mini-game Platform"
+    circle: "market"
+    type: "simulation_agent"
+
+    responsibilities:
+      - "决定是否收录、流量扶持、推荐位、分成规则"
+      - "提供社交裂变机制与轻量化生态位"
+
+    role_in_simulation:
+      - "输出'能否上这个平台、流量多少、分成多少'"
+      - "决定轻量、社交、裂变的变现通道"
+
+    agent_logic:
+      decision_points:
+        - "是否收录？→ 依据: 合规 + 品质 + 生态契合"
+        - "给多少流量扶持？→ 依据: 数据潜力 + 平台调性"
+        - "分成多少？→ 依据: 品类 + 竞价 + 规模"
+      knowledge_base:
+        - "平台审核/分成/扶持规则库"
+        - "平台流量分配基准"
+
+    collaboration:
+      sends_to: ["宣发平台", "运营"]
+      receives_from: ["运营", "版本管理"]
+
+  # ---------------- 广告方 / 广告主 ----------------
+  - role_id: "advertiser"
+    name: "广告方/广告主"
+    en_name: "Advertiser"
+    circle: "market"
+    type: "simulation_agent"
+
+    responsibilities:
+      - "在游戏内投放广告赚收益，或采购游戏内广告位"
+      - "根据用户画像决定是否购买及出价(CPM/CPI)"
+
+    role_in_simulation:
+      - "输出 IAA 广告变现收益"
+      - "与内购 IAP 形成商业取舍的平衡反馈"
+
+    agent_logic:
+      decision_points:
+        - "买不买这个游戏的广告位？→ 依据: 用户画像匹配度"
+        - "出价多少？→ 依据: eCPM + 转化价值"
+      knowledge_base:
+        - "广告竞价与定价基准"
+        - "用户画像-广告匹配库"
+
+    collaboration:
+      sends_to: ["运营", "数据分析师"]
+      receives_from: ["运营"]
+
+  # ---------------- 渠道/支付商 ----------------
+  - role_id: "channel"
+    name: "渠道/支付商"
+    en_name: "Channel & Payment"
+    circle: "market"
+    type: "simulation_agent"
+
+    responsibilities:
+      - "负责下载分发、支付、实名、合规、退款"
+      - "决定转化漏斗与分账结构"
+
+    role_in_simulation:
+      - "输出渠道分账与转化损耗"
+      - "设定支付与合规硬约束"
+
+    agent_logic:
+      decision_points:
+        - "转化损耗多少？→ 依据: 下载/支付链路"
+        - "分账比例？→ 依据: 渠道协议"
+      knowledge_base:
+        - "渠道分账基准"
+        - "支付转化漏斗数据"
+
+  # ---------------- 竞品 ----------------
+  - role_id: "competitor"
+    name: "竞品"
+    en_name: "Competitor"
+    circle: "market"
+    type: "simulation_agent"
+
+    responsibilities:
+      - "占据同一生态位的其他产品"
+      - "施加竞争与替代压力"
+
+    role_in_simulation:
+      - "让'生态位'有竞争与替代，构成纳什均衡约束"
+
+    agent_logic:
+      decision_points:
+        - "这个生态位挤不挤？→ 依据: 竞品数量/强度/差异化"
+      knowledge_base:
+        - "竞品数据库"
+        - "生态位竞争基准"
+
+  # ---------------- 监管 / 合规 ----------------
+  - role_id: "regulator"
+    name: "监管/合规"
+    en_name: "Regulator"
+    circle: "market"
+    type: "simulation_agent"
+
+    responsibilities:
+      - "版号、内容审核、未成年人保护、数据合规"
+      - "设定硬约束边界"
+
+    role_in_simulation:
+      - "决定哪些方案'做不了'（硬约束）"
+
+    agent_logic:
+      decision_points:
+        - "是否合规？→ 依据: 法规条款逐项核验"
+      knowledge_base:
+        - "合规法规库"
+        - "历史审核红线"
+
+# ============================================================
+# 五、生态模拟与纳什均衡全局配置
+# ============================================================
+ecosystem_simulation:
+  engine: "market_simulator"   # 对应 config/market_simulator.py
+
+  # 模拟输入：研发产物 + 各圈层策略参数
+  inputs:
+    - "研发核心圈产出的玩法/数值/美术/文案/商业化设计"
+    - "玩家圈各角色的偏好档案(preference_vector)"
+    - "外部市场圈的渠道/平台/广告/竞品/合规参数"
+
+  # 模拟输出
+  outputs:
+    - "预计 DAU / 留存 / 付费率 / LTV / 口碑"
+    - "各渠道获客成本与 ROI"
+    - "IAP 与 IAA 的商业结构"
+    - "生态位健康度与竞争压力"
+    - "纳什均衡推荐方案"
+
+  # 博弈机制
+  game_mechanics:
+    equilibrium: "Nash"            # 纳什均衡
+    pareto_improvement: true       # 标注帕累托改进空间
+    sensitivity_analysis: true     # 敏感性分析
+    max_iterations: 100            # 博弈收敛上限
+    convergence_tolerance: 0.01    # 收敛容差
+
+  # 全局协作规则
+  global_rules:
+    - "所有角色通过结构化消息通信，格式统一为 JSON"
+    - "每个角色有明确状态机，状态转换由事件驱动"
+    - "玩家圈反馈必须回灌给研发与市场圈"
+    - "市场圈决策（平台/广告/渠道）影响玩家圈的流量与付费"
+    - "模拟收敛到纳什均衡后才给出发布建议"
+
+# ============================================================
+# 迭代路线 (扩展)
+# ============================================================
+iteration_strategy:
+  - "v0.1: 研发岗位定义 + 行为逻辑框架"
+  - "v0.2: 生态角色定义（协作支持/玩家/外部市场）+ 市场预演与纳什均衡（本文件）"
+  - "v0.3: Agent 消息通信协议实现"
+  - "v0.4: 协作支持 Agent 实际调度（催进度/零工负载均衡/资产清理）"
+  - "v0.5: 玩家圈模拟 Agent 与研发反馈闭环"
+  - "v0.6: 市场模拟沙盒跑通，发布前给出生态预演与纳什均衡建议"

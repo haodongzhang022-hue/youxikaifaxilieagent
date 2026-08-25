@@ -38,6 +38,9 @@ except Exception:  # pragma: no cover
 DEPT_KEY_BY_NAME = {
     "策划线": "design", "程序线": "program", "美术线": "art",
     "测试线": "qa", "项目管理": "pm", "运营线": "ops",
+    # 生态角色（非六大执行部门）：进度督导等协作支持角色登记于此，
+    # 供 _load_departments 识别，不静默跳过；组装时归入 pm 兜底（跨部门服务岗）。
+    "协作支持圈": "support",
 }
 
 # 游戏开发六大板块及其可承接的工作类型（供经理拆分派单）
@@ -154,6 +157,15 @@ class GameProducerAgent(BaseAgent):
                 key = DEPT_KEY_BY_NAME.get(dept_name)
                 if key is None:
                     continue
+                # 跳过生态/协作支持角色（如 progress_pusher 所属的"协作支持圈"）:
+                # 它们是跨部门服务岗，不属于六大执行部门，self.departments 只含
+                # 六大部门键；若不跳过，built 会多出 support 键，导致下方
+                # `set(built) == set(self.departments)` 守卫恒为 False，
+                # 整段 roles.yaml 动态解析被整体跳过（评审点 #1 架构回归）。
+                # 登记支持圈到 DEPT_KEY_BY_NAME 仅用于 preset_instantiator
+                # 识别生态角色部门，不参与六大部门派单。
+                if key == "support":
+                    continue
                 built.setdefault(key, {"name": dept_name, "roles": []})
                 if role_id not in built[key]["roles"]:
                     built[key]["roles"].append(role_id)
@@ -170,6 +182,15 @@ class GameProducerAgent(BaseAgent):
         取代空实现：对调度队列中处于 BLOCKED（依赖/缺资源）或
         超过 DDL 的任务做督导，广播督导通知给责任部门，保证
         "阻塞/逾期扫描" 真正落地，而非仅打印状态。
+
+        职责分工（避免与 progress_pusher 双督导重复催办）：
+          - 本方法的督导定位是**阻塞/依赖级联提示**（打回后解锁下游、
+            缺资源/依赖的即时报信），属于 producer 的本职；
+          - **逾期/催办/升级**的持续盯守由专门角色 progress_pusher
+            （config/progress_pusher.py + progress_pusher_policy.yaml）
+            负责，具备冷却期与最大催办次数等打扰成本控制；
+          - 二者职责互补，不重复发同类催办：producer 侧重结构级联，
+            progress_pusher 侧重时间进度。
         """
         now = time.time()
         if now - self.last_heartbeat < self.heartbeat_interval:
@@ -183,9 +204,8 @@ class GameProducerAgent(BaseAgent):
             reasons = []
             if task.state == TaskState.BLOCKED.value:
                 reasons.append(f"阻塞({task.history[-1].get('note', '缺资源/依赖') if task.history else '缺资源/依赖'})")
-            overdue = task.overdue(now)
-            if overdue > 0:
-                reasons.append(f"逾期{overdue:.1f}天")
+            # 逾期/催办/升级由 progress_pusher 独占（含冷却期与催办上限控制），
+            # 此处不再对逾期任务发督导通知，避免双督导重复催办。
             if not reasons:
                 continue
             self.bus.publish(build_message(
