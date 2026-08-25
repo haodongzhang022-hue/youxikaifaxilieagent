@@ -50,6 +50,7 @@ $:
             bash game-studio-agents/tests/test_producer_agent.sh
             bash game-studio-agents/tests/test_instantiator.sh
             bash game-studio-agents/tests/test_end_to_end.sh
+            bash game-studio-agents/tests/test_progress_pusher.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
         - name: 自动分配评审人

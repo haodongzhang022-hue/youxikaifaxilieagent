@@ -83,6 +83,26 @@ python3 config/run_end_to_end.py   # 多部门 Agent 端到端联动（全链路
 python3 config/game_producer_agent.py
 ```
 
+## 📌 进度督导（Progress Pusher · 程序规则化 + 声明化策略）
+
+> 协作支持圈角色：**盯 DDL、主动催、识别阻塞并升级**。v1.0 把 v0.2 的独立演示
+> 升级为**可生效**的督导 Agent（三层设计，见 [docs/进度督导使用指南.md](./docs/进度督导使用指南.md)）：
+> - **程序规则化**（`config/progress_pusher.py`）：继承 `BaseAgent`，复用 `TaskQueue/MessageBus`，
+>   用 `DecisionEngine` 规则引擎做确定性决策（WATCH / PUSH / WARN / ESCALATE），接入总线真正生效；
+> - **声明化策略**（`config/progress_pusher_policy.yaml`）：阈值/节奏/打扰成本可调，**不碰代码**；
+> - **skill/用法**（`docs/进度督导使用指南.md`）：稳定可用的部署与使用说明。
+
+```bash
+# 运行进度督导演示（4 类场景：WATCH/PUSH/ESCALATE/WARN）
+python3 config/progress_pusher.py
+
+# 进度督导测试信号灯（已接入 .cnb.yml CI 护栏）
+bash tests/test_progress_pusher.sh
+```
+
+> **生效链路**：`TaskQueue`（任务状态）→ 督导扫描 → `DecisionEngine` 规则决策 → `MessageBus`
+> 发出催办/升级通知给 owner / 项目经理。打扰成本由冷却期 + 最大催办次数控制，避免过度打扰。
+
 ## 🌐 信息接口层（接口层与人工可视层分离）
 
 > 新增 `api/`：以 FastAPI 提供**信息接口层**。核心设计是**接口层与人工看的层分离**——
