@@ -19,6 +19,14 @@ from typing import Any, Dict
 
 from agent_core import BaseAgent
 from message_bus import Message, MessageBus
+from game_producer_agent import DEPARTMENTS
+
+
+# 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
+_DEPT_KEY_BY_NAME = {
+    "策划线": "design", "程序线": "program", "美术线": "art",
+    "测试线": "qa", "项目管理": "pm", "运营线": "ops",
+}
 
 
 # ============================================================
@@ -40,6 +48,14 @@ class DepartmentAgent(BaseAgent):
         self.pending_rework: list = []         # 收到返工通知、待重新加工的工作包 id
         self.rework_count: Dict[str, int] = {}  # 工作包 id -> 返工次数
         self.biz_state = "IDLE"                 # 部门业务状态（IDLE/EXECUTING/REWORK/DELIVERING）
+        # 部门 Agent 需接收本部门所有角色的派单（balance_designer / ai_programmer 等），
+        # 统一由部门 Agent 按 module 执行；为此注册部门内全部 role_id 到总线。
+        dept_key = _DEPT_KEY_BY_NAME.get(department)
+        if dept_key and dept_key in DEPARTMENTS:
+            for dept_role in DEPARTMENTS[dept_key]["roles"]:
+                if dept_role != role_id:
+                    self.bus.register(dept_role)
+                    self.bus.on(dept_role, self._receive)
 
     def on_boot(self):
         """加载部门领域知识基线。"""

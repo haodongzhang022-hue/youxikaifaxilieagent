@@ -59,19 +59,21 @@ DEPARTMENTS = {
 MANAGER_ROLE_ID = "producer"
 
 # 架构模块 → 主要承接部门（供经理把架构拆成部门工作包）
+# role 为可选的模块级主责角色覆盖；缺省时取部门 roles[0]
+# （按 roles.yaml 部门首角色兜底，避免硬编码偏离架构约束）
 ARCHITECTURE_MODULES = {
     "gameplay":        {"department": "design",  "label": "玩法/系统架构"},
-    "numeric_model":   {"department": "design",  "label": "数值模型/经济系统"},
+    "numeric_model":   {"department": "design",  "label": "数值模型/经济系统", "role": "balance_designer"},
     "client":          {"department": "program", "label": "客户端渲染与交互"},
-    "server":          {"department": "program", "label": "服务端逻辑与数据"},
+    "server":          {"department": "program", "label": "服务端逻辑与数据", "role": "cto"},
     "engine":          {"department": "program", "label": "引擎底层与性能"},
-    "ai_logic":        {"department": "program", "label": "游戏AI/NPC行为"},
+    "ai_logic":        {"department": "program", "label": "游戏AI/NPC行为", "role": "ai_programmer"},
     "art_direction":   {"department": "art",     "label": "美术风格与资源"},
     "ui_ux":           {"department": "art",     "label": "UI/UX与交互设计"},
     "audio":           {"department": "art",     "label": "音频与配音"},
-    "testing":         {"department": "qa",      "label": "功能/性能/自动化测试"},
-    "release":         {"department": "pm",      "label": "版本/发版与里程碑"},
-    "data_ops":        {"department": "ops",     "label": "数据分析与运营"},
+    "testing":         {"department": "qa",      "label": "功能/性能/自动化测试", "role": "qa_engineer"},
+    "release":         {"department": "pm",      "label": "版本/发版与里程碑", "role": "project_manager"},
+    "data_ops":        {"department": "ops",     "label": "数据分析与运营", "role": "data_analyst"},
 }
 
 
@@ -309,8 +311,14 @@ class GameProducerAgent(BaseAgent):
     def _assign_resources(self, wp: Dict[str, Any]):
         """为工作包分配责任角色与资源（人力/优先级/DDL）。"""
         dept_roles = self.departments[wp["department"]]["roles"]
-        wp["owner"] = dept_roles[0]               # 主责角色
-        wp["support"] = dept_roles[1:]            # 协办角色
+        # 模块级 role 覆盖优先（对齐 ARCHITECTURE_MODULES 显式主责），
+        # 缺省回退到部门 roles[0] 兜底。
+        module_role = wp.get("module_role") or self._module_role(wp.get("module"))
+        if module_role and module_role in dept_roles:
+            wp["owner"] = module_role
+        else:
+            wp["owner"] = dept_roles[0]               # 主责角色
+        wp["support"] = [r for r in dept_roles if r != wp["owner"]]  # 协办角色（排除主责）
         # 为工作包设定基线 DDL（部门工期），供 heartbeat 的"逾期督导"分支
         # 真正触发（此前任务从不设 DDL，逾期扫描成为死代码）。
         wp["ddl"] = time.time() + self._dept_duration_days(wp["department"]) * 86400
@@ -318,6 +326,12 @@ class GameProducerAgent(BaseAgent):
             "cpus": 2, "priority": "NORMAL",
             "budget_share": round(100 / max(1, len(self.work_packages)), 1),
         }
+
+    def _module_role(self, module: Optional[str]) -> Optional[str]:
+        """从 ARCHITECTURE_MODULES 取模块级主责角色覆盖（若定义）。"""
+        if module:
+            return ARCHITECTURE_MODULES.get(module, {}).get("role")
+        return None
 
     def _dept_duration_days(self, dept: str) -> float:
         """各部门基准确认工期（天）：策划/程序/美术/QA 较久，PM/运营较短。"""
