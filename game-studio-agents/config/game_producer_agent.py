@@ -59,19 +59,21 @@ DEPARTMENTS = {
 MANAGER_ROLE_ID = "producer"
 
 # 架构模块 → 主要承接部门（供经理把架构拆成部门工作包）
+# role 为可选的模块级主责角色覆盖；缺省时取部门 roles[0]
+# （按 roles.yaml 部门首角色兜底，避免硬编码偏离架构约束）
 ARCHITECTURE_MODULES = {
     "gameplay":        {"department": "design",  "label": "玩法/系统架构"},
-    "numeric_model":   {"department": "design",  "label": "数值模型/经济系统"},
+    "numeric_model":   {"department": "design",  "label": "数值模型/经济系统", "role": "balance_designer"},
     "client":          {"department": "program", "label": "客户端渲染与交互"},
-    "server":          {"department": "program", "label": "服务端逻辑与数据"},
+    "server":          {"department": "program", "label": "服务端逻辑与数据", "role": "cto"},
     "engine":          {"department": "program", "label": "引擎底层与性能"},
-    "ai_logic":        {"department": "program", "label": "游戏AI/NPC行为"},
+    "ai_logic":        {"department": "program", "label": "游戏AI/NPC行为", "role": "ai_programmer"},
     "art_direction":   {"department": "art",     "label": "美术风格与资源"},
     "ui_ux":           {"department": "art",     "label": "UI/UX与交互设计"},
     "audio":           {"department": "art",     "label": "音频与配音"},
-    "testing":         {"department": "qa",      "label": "功能/性能/自动化测试"},
-    "release":         {"department": "pm",      "label": "版本/发版与里程碑"},
-    "data_ops":        {"department": "ops",     "label": "数据分析与运营"},
+    "testing":         {"department": "qa",      "label": "功能/性能/自动化测试", "role": "qa_engineer"},
+    "release":         {"department": "pm",      "label": "版本/发版与里程碑", "role": "project_manager"},
+    "data_ops":        {"department": "ops",     "label": "数据分析与运营", "role": "data_analyst"},
 }
 
 
@@ -387,8 +389,13 @@ class GameProducerAgent(BaseAgent):
             因为实例化装配场景下仅实例化角色装配了总线 Agent、能承接派单。
         """
         dept_roles = self.departments[wp["department"]]["roles"]
-        # v0.9: 优先使用实例化团队成员（role_id 记录在 instantiated_role_ids）
-        # 作为主责角色；否则回退到 roles.yaml 的 base_role。
+        # 主责指派融合策略（main 的模块级覆盖 + v0.9 实例化负载均衡）：
+        #   - 模块级 role 覆盖（module_role / _module_role，对齐 ARCHITECTURE_MODULES
+        #     显式主责）优先，但仅在"可承接"时生效；
+        #   - 未命中或不可承接时，走实例化团队负载均衡指派（取负载最小实例化成员），
+        #     保证并行 WP 不串行占用同一成员；
+        #   - 兜底不回退到无总线 Agent 的 base_role（实例化装配场景下仅实例化角色
+        #     装配了总线 Agent），否则派单将 unmatched 石沉大海 → 显式告警。
         instantiated = [r for r in dept_roles if r in self.instantiated_role_ids]
         base_roles = [r for r in dept_roles if r not in instantiated]
 
@@ -403,25 +410,36 @@ class GameProducerAgent(BaseAgent):
                 return None
             return min(candidates, key=lambda c: self._owner_load.get(c, 0))
 
+        module_role = wp.get("module_role") or self._module_role(wp.get("module"))
         owner = None
-        expect_base = self.MODULE_BASE_ROLE.get(wp.get("module"))
-        if expect_base and self.instantiated_by_base.get(expect_base):
-            # 该 base_role 派生的实例化成员（仅保留已注册实例化角色）
-            candidates = [c for c in self.instantiated_by_base[expect_base]
-                          if c in self.instantiated_role_ids]
-            owner = _pick(candidates)
+        # 1) 模块级 role 覆盖：命中且可承接时直接作为主责。
+        #    实例化装配场景仅实例化角色有总线 Agent；纯 roles.yaml 场景 base_role 可直接承接。
+        if module_role:
+            if module_role in self.instantiated_role_ids:
+                owner = module_role
+            elif module_role in dept_roles and not self.instantiated_role_ids:
+                owner = module_role
+        # 2) 实例化负载均衡指派：未命中模块级覆盖，或该覆盖不可承接时。
+        if owner is None:
+            expect_base = self.MODULE_BASE_ROLE.get(wp.get("module"))
+            if expect_base and self.instantiated_by_base.get(expect_base):
+                # 该 base_role 派生的实例化成员（仅保留已注册实例化角色）
+                candidates = [c for c in self.instantiated_by_base[expect_base]
+                              if c in self.instantiated_role_ids]
+                owner = _pick(candidates)
         if owner is None and instantiated:
             # 回退：从部门实例化成员中选负载最小者
             owner = _pick(instantiated)
+        # 3) 兜底
         if owner is None:
             if instantiated:
                 # 实例化装配场景：部门有实例化成员，但兜底候选为空（理论不应发生）。
                 # 为安全起见取部门首个实例化成员，确保派单可被总线 Agent 承接。
                 owner = instantiated[0]
             else:
-                # 非实例化场景（纯 roles.yaml 装配，向后兼容）：base_role 有总线 Agent。
-                # 但若恰好有已注册实例化角色却被漏装（装配口径不一致），
-                # 此时 base_role 无总线 Agent，派单将 unmatched → 显式告警而非静默回退。
+                # 纯 roles.yaml 场景：base_role 已装配总线 Agent，可直接承接。
+                # 但若存在已注册实例化角色却被漏装（装配口径不一致），base_role 无总线
+                # Agent，派单将 unmatched → 显式告警而非静默回退。
                 if self.instantiated_role_ids:
                     self._log("assign_unmatched",
                               f"工作包 {wp.get('module')} 部门无实例化成员可承接，"
@@ -429,8 +447,7 @@ class GameProducerAgent(BaseAgent):
                               f"主责置空告警，避免派单到无总线 Agent 的 base_role")
                     owner = None
                 else:
-                    # 纯 roles.yaml 场景：base_role 本身装配了总线 Agent，可直接承接。
-                    owner = dept_roles[0]
+                    owner = module_role if module_role and module_role in dept_roles else dept_roles[0]
         if owner is not None:
             # 记录主责负载，供后续并行 WP 的负载均衡决策
             self._owner_load[owner] = self._owner_load.get(owner, 0) + 1
@@ -446,6 +463,12 @@ class GameProducerAgent(BaseAgent):
             "cpus": 2, "priority": "NORMAL",
             "budget_share": round(100 / max(1, len(self.work_packages)), 1),
         }
+
+    def _module_role(self, module: Optional[str]) -> Optional[str]:
+        """从 ARCHITECTURE_MODULES 取模块级主责角色覆盖（若定义）。"""
+        if module:
+            return ARCHITECTURE_MODULES.get(module, {}).get("role")
+        return None
 
     def _dept_duration_days(self, dept: str) -> float:
         """各部门基准确认工期（天）：策划/程序/美术/QA 较久，PM/运营较短。"""
