@@ -14,6 +14,7 @@
 # ============================================================
 from __future__ import annotations
 
+import hmac
 import os
 import sys
 import time
@@ -84,6 +85,7 @@ app = FastAPI(
 # ============================================================
 # 通过环境变量 API_TOKEN 设置鉴权令牌。未设置时放行（默认仅绑定本机）。
 # 生产环境务必设置 API_TOKEN，且默认绑定 127.0.0.1，避免信息泄露。
+# 令牌比对使用 hmac.compare_digest 常量时间比较，避免计时侧信道泄露。
 _API_TOKEN = (os.environ.get("API_TOKEN") or "").strip()
 
 
@@ -98,7 +100,7 @@ async def require_token(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
     token = authorization[7:].strip()
-    if token != _API_TOKEN:
+    if not hmac.compare_digest(token, _API_TOKEN):
         raise HTTPException(status_code=401, detail="令牌无效")
 
 
