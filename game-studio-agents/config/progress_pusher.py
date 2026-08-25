@@ -18,7 +18,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from collections import deque
+from typing import Any, Dict, Optional
 
 from agent_core import BaseAgent, DecisionRule
 from message_bus import Message
@@ -42,6 +43,11 @@ DEFAULT_POLICY = {
     "escalate_to": "project_manager",
     "push_cooldown_hours": 6.0,
     "max_pushes_per_task": 3,
+    # ESCALATE 打扰成本控制：同一任务两次升级的最小间隔(小时)，
+    # 防止持续 BLOCKED / 已催满的任务每次扫描都向 PM 轰炸升级通知。
+    "escalate_cooldown_hours": 24.0,
+    # 决策留痕上限：超过则滚动丢弃最旧记录，防长驻 Agent 内存泄漏。
+    "max_decisions_keep": 1000,
     "scan_interval_sec": 30.0,
     "watch_topic": "task_events",
     "notify_owner_on_push": True,
@@ -90,8 +96,12 @@ class ProgressPusherAgent(BaseAgent):
         self.queue = queue or TaskQueue()          # 复用主任务队列
         self._last_scan = 0.0
         self.pushed_at: Dict[str, float] = {}       # task_id -> 上次催办时间
-        self.push_count: Dict[str, int] = {}        # task_id -> 累计催办次数
-        self.decisions: List[Dict[str, Any]] = []   # 决策留痕（审计/复盘）
+        self.push_count: Dict[str, int] = {}        # task_id -> 累计正式催办次数(firm)
+        self.warn_count: Dict[str, int] = {}        # task_id -> 累计友好预警次数(soft)
+        self.escalated_at: Dict[str, float] = {}    # task_id -> 上次升级时间
+        self.escalate_count: Dict[str, int] = {}    # task_id -> 累计升级次数
+        # 决策留痕（审计/复盘）：deque 定长滚动，防止无界增长导致内存泄漏
+        self.decisions: deque = deque(maxlen=int(self.policy.get("max_decisions_keep", 1000)))
 
     # ---------- 启动：加载策略 + 注册规则 + 订阅事件 ----------
     def on_boot(self):
@@ -105,25 +115,40 @@ class ProgressPusherAgent(BaseAgent):
             )
 
         # 注册决策规则（顺序即优先级：先升级，再催办，再预警）
+        # ESCALATE 规则带 escalate_cooling 守卫：处于升级冷却期内不重复升级，
+        # 防止持续 BLOCKED / 已催满的任务每次扫描都向 PM 轰炸升级通知。
         self.decision.add_rule(DecisionRule(
             name="阻塞超时→升级",
             conditions=[
                 {"key": "state", "op": "==", "value": "BLOCKED"},
                 {"key": "blocked_hours", "op": ">=", "value": p["block_timeout_hours"]},
+                {"key": "escalate_cooling", "op": "==", "value": False},
             ],
             action="ESCALATE",
             fallback=None,
         ))
         # 声明与实现一致：YAML 声明"催办次数达 max_pushes_per_task 后必须升级"。
-        # 当单任务累计催办已达上限且仍未完成 → 升级项目经理（不再无效催办）。
+        # 当单任务累计**正式催办**已达上限且仍未完成 → 升级项目经理（不再无效催办）。
         # 该规则必须放在"落后→催办"之前，否则催满后 PUSH 不匹配会落入 WARN，永不升级。
+        # 注意：WARN(soft 预警) 不消耗正式催办额度，故此处用正式催办次数 pushes。
         self.decision.add_rule(DecisionRule(
             name="催办达上限仍未完成→升级",
             conditions=[
                 {"key": "pushes", "op": ">=", "value": p["max_pushes_per_task"]},
                 {"key": "state", "op": "!=", "value": "DONE"},
+                {"key": "escalate_cooling", "op": "==", "value": False},
             ],
             action="ESCALATE",
+            fallback=None,
+        ))
+        # 升级冷却期内：不轰炸 PM，降级为低频 WARN 预警（只提示不重复升级）
+        self.decision.add_rule(DecisionRule(
+            name="升级冷却期→降级预警",
+            conditions=[
+                {"key": "escalate_cooling", "op": "==", "value": True},
+                {"key": "state", "op": "!=", "value": "DONE"},
+            ],
+            action="WARN",
             fallback=None,
         ))
         self.decision.add_rule(DecisionRule(
@@ -206,7 +231,11 @@ class ProgressPusherAgent(BaseAgent):
         # 是否处于冷却期（避免过度打扰）
         last_push = self.pushed_at.get(task.id, 0.0)
         cooling = (now - last_push) < (p["push_cooldown_hours"] * 3600.0)
+        # 正式催办次数（仅 firm PUSH 计入升级额度；WARN soft 预警不消耗）
         pushes = self.push_count.get(task.id, 0)
+        # 是否处于升级冷却期（避免重复向 PM 轰炸升级通知）
+        last_escalate = self.escalated_at.get(task.id, 0.0)
+        escalate_cooling = (now - last_escalate) < (p["escalate_cooldown_hours"] * 3600.0)
         # 是否临近 DDL
         near_ddl = False
         if task.ddl and state != "DONE":
@@ -220,6 +249,7 @@ class ProgressPusherAgent(BaseAgent):
             "cooling": cooling,
             "pushes": pushes,
             "near_ddl": near_ddl,
+            "escalate_cooling": escalate_cooling,
         }
         decision = self.decision.decide(ctx)
         decision["task_id"] = task.id
@@ -239,11 +269,16 @@ class ProgressPusherAgent(BaseAgent):
 
     # ---------- 动作执行 ----------
     def _do_push(self, task: Task, intensity: str, reason: str):
-        """发出催办/预警通知（走总线，真正生效）。"""
+        """发出催办/预警通知（走总线，真正生效）。
+
+        打扰成本控制（与策略语义一致）：
+          - firm(正式催办) 才计入 push_count，消耗 max_pushes_per_task 升级额度；
+          - soft(WARN 友好预警) 单独计入 warn_count，不消耗正式催办额度；
+          - 仅在真正发送通知（notify_owner_on_push 且任务有 owner）时才累加计数。
+        """
         p = self.policy
         now = time.time()
         self.pushed_at[task.id] = now
-        self.push_count[task.id] = self.push_count.get(task.id, 0) + 1
         self._transition("PUSHING")
 
         if intensity == "firm":
@@ -253,7 +288,7 @@ class ProgressPusherAgent(BaseAgent):
                 "overdue_days": task.overdue(now),
                 "intensity": p.get("reminder_intensity", {}).get("push", "firm"),
                 "reason": reason,
-                "push_no": self.push_count[task.id],
+                "push_no": self.push_count.get(task.id, 0) + 1,
             }
             priority = "URGENT" if task.overdue(now) > p["lag_threshold_days"] else "HIGH"
         else:  # soft / warn
@@ -263,17 +298,30 @@ class ProgressPusherAgent(BaseAgent):
                 "hours_to_ddl": round((task.ddl - now) / 3600.0, 1) if task.ddl else None,
                 "intensity": p.get("reminder_intensity", {}).get("warn", "soft"),
                 "reason": reason,
+                "warn_no": self.warn_count.get(task.id, 0) + 1,
             }
             priority = "NORMAL"
 
+        # 仅在真正发送通知时累加对应计数（soft 预警不消耗正式催办额度）
         if p.get("notify_owner_on_push") and task.owner:
             self.send(msg_type, task.owner, content, priority=priority)
+            if intensity == "firm":
+                self.push_count[task.id] = self.push_count.get(task.id, 0) + 1
+            else:
+                self.warn_count[task.id] = self.warn_count.get(task.id, 0) + 1
         # 记录（供测试/审计断言）
-        self._log("push", f"{task.id} 强度={intensity} 次数={self.push_count[task.id]}")
+        self._log("push", f"{task.id} 强度={intensity} 次数={self.push_count.get(task.id, 0)}")
 
     def _do_escalate(self, task: Task, reason: str):
-        """阻塞超时/催办无效 → 升级项目经理。"""
+        """阻塞超时/催办无效 → 升级项目经理（带冷却/上限保护）。
+
+        每次升级记录时间与次数；若已处于升级冷却期内（supervise 已降级为 WARN），
+        此处不会重复发送升级通知，避免长期 BLOCKED / 已催满的任务高频轰炸 PM。
+        """
         p = self.policy
+        now = time.time()
+        self.escalated_at[task.id] = now
+        self.escalate_count[task.id] = self.escalate_count.get(task.id, 0) + 1
         self._transition("ESCALATING")
         content = {
             "action": "ESCALATE", "task_id": task.id,
@@ -281,11 +329,12 @@ class ProgressPusherAgent(BaseAgent):
             "intensity": p.get("reminder_intensity", {}).get("escalate", "urgent"),
             "reason": reason,
             "push_count": self.push_count.get(task.id, 0),
+            "escalate_no": self.escalate_count[task.id],
         }
         target = p.get("escalate_to", "project_manager")
         if p.get("notify_pm_on_escalate"):
             self.send("NOTIFICATION", target, content, priority="URGENT")
-        self._log("escalate", f"{task.id} -> {target}")
+        self._log("escalate", f"{task.id} -> {target} (第{self.escalate_count[task.id]}次)")
 
     # ---------- 消息处理（BaseAgent 抽象方法） ----------
     def handle_task(self, msg: Message):
@@ -301,6 +350,8 @@ class ProgressPusherAgent(BaseAgent):
         base.update({
             "watched_tasks": len(self.queue.tasks),
             "pushes": sum(self.push_count.values()),
+            "warns": sum(self.warn_count.values()),
+            "escalates": sum(self.escalate_count.values()),
             "decisions": len(self.decisions),
         })
         return base

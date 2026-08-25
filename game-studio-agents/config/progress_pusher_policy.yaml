@@ -24,7 +24,11 @@ progress_pusher_policy:
 
   # ── 催促节奏（打扰成本控制，避免过度打扰）──
   push_cooldown_hours: 6.0      # 同一任务两次催办的最小间隔，低于则进入冷却(不重复催)
-  max_pushes_per_task: 3        # 单任务最多催办次数，超出后必须升级(不再无效催办)
+  max_pushes_per_task: 3        # 单任务最多正式催办次数，超出后必须升级(不再无效催办)
+                                # 注: 正式催办(firm)才计入；友好预警(soft/WARN)不消耗此额度
+  escalate_cooldown_hours: 24.0 # 同一任务两次升级的最小间隔(小时)，防重复轰炸 PM
+                                # 冷却期内对同任务降级为低频 WARN 预警，不重复升级
+  max_decisions_keep: 1000      # 决策留痕上限(条)，超过滚动丢弃最旧，防内存泄漏
   reminder_intensity:           # 催办力度分级：越临近/越落后 → 措辞越强
     watch:    "normal"          # 仅跟踪，不打扰
     warn:     "soft"            # 友好提醒（接近 DDL）

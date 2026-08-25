@@ -192,9 +192,8 @@ class GameProducerAgent(BaseAgent):
             reasons = []
             if task.state == TaskState.BLOCKED.value:
                 reasons.append(f"阻塞({task.history[-1].get('note', '缺资源/依赖') if task.history else '缺资源/依赖'})")
-            overdue = task.overdue(now)
-            if overdue > 0:
-                reasons.append(f"逾期{overdue:.1f}天")
+            # 逾期/催办/升级由 progress_pusher 独占（含冷却期与催办上限控制），
+            # 此处不再对逾期任务发督导通知，避免双督导重复催办。
             if not reasons:
                 continue
             self.bus.publish(build_message(
