@@ -132,6 +132,11 @@ class GameProducerAgent(BaseAgent):
         }
         # 实例化角色 base_role → 实例化 role_id 列表（供精确指派主责）
         self.instantiated_by_base: Dict[str, List[str]] = {}
+        # v0.9 负载均衡：role_id → 当前作为主责的未完成工作包计数。
+        # 用于避免 MODULE_BASE_ROLE 一对多（如 gameplay/numeric_model 同命中
+        # balance_designer）时，同一实例化成员被并行 WP 反复指派为唯一主责
+        # 而成为产能瓶颈。
+        self._owner_load: Dict[str, int] = {}
 
     # ---------- 覆写 BaseAgent 钩子 ----------
     def on_boot(self):
@@ -347,21 +352,49 @@ class GameProducerAgent(BaseAgent):
         return self
 
     def _assign_resources(self, wp: Dict[str, Any]):
-        """为工作包分配责任角色与资源（人力/优先级/DDL）。"""
+        """为工作包分配责任角色与资源（人力/优先级/DDL）。
+
+        v0.9 主责指派策略（负载均衡）：
+          - 优先使用实例化团队成员（role_id 记录在 instantiated_role_ids）作为主责；
+          - 按工作包模块精确指派：取该模块对应 base_role 派生的实例化成员；
+          - 同一 base_role 映射多个并行 WP（如 gameplay/numeric_model 同命中
+            balance_designer）时，对实例化成员做**负载均衡**（选当前负载最小者），
+            避免同一成员被串行指派为多个并行 WP 的唯一主责而成为产能瓶颈；
+          - 指派结果始终落在已注册的实例化角色上（而非 roles.yaml 的 base_role），
+            因为实例化装配场景下仅实例化角色装配了总线 Agent、能承接派单。
+        """
         dept_roles = self.departments[wp["department"]]["roles"]
         # v0.9: 优先使用实例化团队成员（role_id 记录在 instantiated_role_ids）
         # 作为主责角色；否则回退到 roles.yaml 的 base_role。
         instantiated = [r for r in dept_roles if r in self.instantiated_role_ids]
         base_roles = [r for r in dept_roles if r not in instantiated]
-        # 按工作包模块精确指派主责：取该模块对应 base_role 派生的实例化成员
+
+        def _pick(candidates):
+            """从候选实例化成员中选负载最小者（负载均衡）。
+
+            优先返回空闲（负载 0）成员；即使全忙也返回负载最小的成员，
+            保证该模块必有一个可执行的实例化 Agent 承接（不回退到 roles.yaml
+            的 base_role——它在实例化装配场景下并无总线 Agent，无法承接派单）。
+            """
+            if not candidates:
+                return None
+            return min(candidates, key=lambda c: self._owner_load.get(c, 0))
+
         owner = None
         expect_base = self.MODULE_BASE_ROLE.get(wp.get("module"))
         if expect_base and self.instantiated_by_base.get(expect_base):
-            owner = self.instantiated_by_base[expect_base][0]
+            # 该 base_role 派生的实例化成员（仅保留已注册实例化角色）
+            candidates = [c for c in self.instantiated_by_base[expect_base]
+                          if c in self.instantiated_role_ids]
+            owner = _pick(candidates)
         if owner is None and instantiated:
-            owner = instantiated[0]               # 回退：部门首个实例化成员
+            # 回退：从部门实例化成员中选负载最小者
+            owner = _pick(instantiated)
         if owner is None:
-            owner = dept_roles[0]                 # 回退：roles.yaml base_role
+            # 回退：部门首个角色（实例化成员优先；极端情况下才是 roles.yaml）
+            owner = dept_roles[0]
+        # 记录主责负载，供后续并行 WP 的负载均衡决策
+        self._owner_load[owner] = self._owner_load.get(owner, 0) + 1
         wp["owner"] = owner
         # 协办：该部门其余实例化成员（主责除外）+ base_role 兜底
         support = [r for r in instantiated if r != owner]

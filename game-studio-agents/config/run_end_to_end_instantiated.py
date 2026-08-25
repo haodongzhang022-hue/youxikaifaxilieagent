@@ -22,8 +22,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from agent_core import BaseAgent
-from department_agents import (ArtDeptAgent, DesignDeptAgent, OpsDeptAgent,
-                               PmDeptAgent, ProgramDeptAgent, QaDeptAgent)
+from department_agents import (ArtDeptAgent, DepartmentAgent, DesignDeptAgent,
+                               OpsDeptAgent, PmDeptAgent, ProgramDeptAgent, QaDeptAgent)
 from game_producer_agent import GameProducerAgent
 from message_bus import MessageBus, build_task_assign
 from preset_instantiator import PresetInstantiator
@@ -50,8 +50,8 @@ def _spawn_dept_agent(dept_agent_cls, role_id: str, dept_name: str,
     使调度器派发的 TASK_ASSIGN（owner=实例化 role_id）能命中该 Agent。
     """
     agent = dept_agent_cls.__new__(dept_agent_cls)
-    # 直接调用基类 DepartmentAgent.__init__，设置 role_id + department
-    DepartmentAgent = dept_agent_cls.__mro__[1]
+    # 直接显式调用基类 DepartmentAgent.__init__，设置 role_id + department。
+    # 不再用 __mro__[1] 硬编码（MRO 变动会静默出错），显式引用更健壮。
     DepartmentAgent.__init__(agent, role_id, dept_name, bus)
     return agent
 
@@ -75,7 +75,6 @@ class InstantiatedTeamOrchestrator:
         self.instantiator = None
         self.report: Dict[str, Any] = {}
         self.team_agents: Dict[str, BaseAgent] = {}   # 实例化 role_id -> Agent
-        self.department_agents: Dict[str, BaseAgent] = {}  # 部门键 -> 主责实例化 Agent
 
     # ---------- 1. 实例化 + 2. 注册 + 3. 装配 ----------
     def assemble_team(self,
@@ -95,22 +94,29 @@ class InstantiatedTeamOrchestrator:
         # (a) 注册实例化角色到经理部门能力表（装配来源）
         self.manager.register_instantiated_team(inst.instantiated_roles)
 
-        # (b) 为每个实例化角色创建对应部门 Agent 并注册到总线
-        assembled = report["assembled_team"]
-        dept_role = {
-            "design": "策划线", "program": "程序线", "art": "美术线",
-            "qa": "测试线", "pm": "项目管理", "ops": "运营线",
-        }
-        for dept_key, dept_name in dept_role.items():
-            for role_summary in assembled.get(dept_key, []):
-                rid = role_summary["role_id"]
-                agent = _spawn_dept_agent(DEPT_AGENT_CLASS[dept_name], rid,
-                                          dept_name, self.bus)
-                agent.boot()
-                self.team_agents[rid] = agent
-                # 记录该部门主责实例化角色（部门第一个角色，同 instantiated 顺序）
-                if dept_key not in self.department_agents:
-                    self.department_agents[dept_key] = agent
+        # (b) 为每个实例化角色创建对应部门 Agent 并注册到总线。
+        # 以 inst.instantiated_roles（单一事实来源）驱动 Agent 生成，与
+        # register_instantiated_team 同源，消除「主责未注册 Agent」的隐性耦合。
+        for r in inst.instantiated_roles:
+            rid = r.get("role_id")
+            dept_name = (r.get("department") or "").strip()
+            agent_cls = DEPT_AGENT_CLASS.get(dept_name)
+            if not rid or agent_cls is None:
+                # 部门无法映射时不静默丢弃：明确告警，便于发现装配遗漏
+                self.manager._log("assemble_skip",
+                                  f"实例化角色 {rid or '(空)'} 部门 '{dept_name}' 无对应 Agent 类，已跳过")
+                continue
+            agent = _spawn_dept_agent(agent_cls, rid, dept_name, self.bus)
+            agent.boot()
+            self.team_agents[rid] = agent
+        # 指派前校验：每个已注册实例化角色都应有对应总线 Agent，避免出现
+        # 「主责被指派但总线上无承接 Agent」导致派单无法被接收的隐性故障。
+        missing = sorted(
+            rid for rid in self.manager.instantiated_role_ids
+            if rid not in self.team_agents)
+        if missing:
+            self.manager._log("assemble_missing",
+                              f"以下实例化角色未装配到总线: {missing}")
 
         return report
 
@@ -133,9 +139,28 @@ class InstantiatedTeamOrchestrator:
             if all_done:
                 break
             if processed == 0 and not self.scheduler.queue.ready_order:
+                # 无可推进任务且仍有未完成工作包：输出非 DONE 任务诊断，
+                # 避免 BLOCKED/FAILED 静默返回 all_done=False。
+                self._log_blocked_tasks()
                 self.manager.heartbeat()
                 break
         return {"rounds": rounds, "all_done": all_done}
+
+    def _log_blocked_tasks(self):
+        """输出所有非 DONE 工作包的状态诊断，定位阻塞/失败原因。"""
+        pending = [
+            (t.name or t.id, t.state, t.owner)
+            for t in self.scheduler.queue.tasks.values()
+            if t.state != TaskState.DONE.value
+        ]
+        if not pending:
+            return
+        self.manager._log("blocked_diagnose",
+                          f"全链路未完成（rounds 耗尽/无可推进），"
+                          f"非 DONE 任务 {len(pending)} 个：")
+        for name, state, owner in pending:
+            self.manager._log("blocked_task",
+                              f"  {name} → {state}（owner={owner}）")
 
     def _all_done(self) -> bool:
         states = [t.state for t in self.scheduler.queue.tasks.values()]
