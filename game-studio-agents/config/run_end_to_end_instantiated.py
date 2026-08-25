@@ -24,10 +24,11 @@ from typing import Any, Dict, List, Optional
 from agent_core import BaseAgent
 from department_agents import (ArtDeptAgent, DepartmentAgent, DesignDeptAgent,
                                OpsDeptAgent, PmDeptAgent, ProgramDeptAgent, QaDeptAgent)
-from game_producer_agent import GameProducerAgent
+from ecosystem_role_registry import (CIRCLE_NAME, EcosystemRoleRegistry)
+from game_producer_agent import DEPT_KEY_BY_NAME, GameProducerAgent
 from message_bus import MessageBus, build_task_assign
 from preset_instantiator import PresetInstantiator
-from task_scheduler import Scheduler, TaskState
+from task_scheduler import Scheduler, Task, TaskState
 
 # 部门中文名 → 对应部门 Agent 类（与 department_agents.py 的六部门一致）
 DEPT_AGENT_CLASS = {
@@ -75,6 +76,8 @@ class InstantiatedTeamOrchestrator:
         self.instantiator = None
         self.report: Dict[str, Any] = {}
         self.team_agents: Dict[str, BaseAgent] = {}   # 实例化 role_id -> Agent
+        self.ecosystem: Optional[EcosystemRoleRegistry] = None  # wp_server/wp_ai_logic
+        self.eco_tasks: List[str] = []                # 已派发的生态角色任务 id
 
     # ---------- 1. 实例化 + 2. 注册 + 3. 装配 ----------
     def assemble_team(self,
@@ -123,6 +126,7 @@ class InstantiatedTeamOrchestrator:
             agent = _spawn_dept_agent(agent_cls, rid, dept_name, self.bus)
             agent.boot()
             self.team_agents[rid] = agent
+
         # 指派前校验：每个已注册实例化角色都应有对应总线 Agent，避免出现
         # 「主责被指派但总线上无承接 Agent」导致派单无法被接收的隐性故障。
         missing = sorted(
@@ -131,6 +135,14 @@ class InstantiatedTeamOrchestrator:
         if missing:
             self.manager._log("assemble_missing",
                               f"以下实例化角色未装配到总线: {missing}")
+
+        # ---- wp_server / wp_ai_logic：生态角色注册为可派发 Agent ----
+        # 把生态角色（玩家圈 / 外部市场圈 / 协作支持圈）注册进 message_bus +
+        # task_scheduler，使其作为可派发 owner 真正进入部门流水线派发。
+        self.ecosystem = EcosystemRoleRegistry(bus=self.bus).load()
+        eco_ids = self.ecosystem.register()
+        self.manager._log("ecosystem_register",
+                          f"已注册 {len(eco_ids)} 个生态角色到 message_bus（可派发 Agent）")
 
         return report
 
@@ -161,11 +173,15 @@ class InstantiatedTeamOrchestrator:
         return {"rounds": rounds, "all_done": all_done}
 
     def _log_blocked_tasks(self):
-        """输出所有非 DONE 工作包的状态诊断，定位阻塞/失败原因。"""
+        """输出所有非 DONE 工作包的状态诊断，定位阻塞/失败原因。
+
+        仅诊断部门工作包流水线任务（带 work_package payload），
+        不含生态角色演示派发任务（eco_*，非部门产出）。
+        """
         pending = [
             (t.name or t.id, t.state, t.owner)
             for t in self.scheduler.queue.tasks.values()
-            if t.state != TaskState.DONE.value
+            if t.state != TaskState.DONE.value and t.payload.get("work_package")
         ]
         if not pending:
             return
@@ -177,8 +193,47 @@ class InstantiatedTeamOrchestrator:
                               f"  {name} → {state}（owner={owner}）")
 
     def _all_done(self) -> bool:
-        states = [t.state for t in self.scheduler.queue.tasks.values()]
-        return states and all(s == TaskState.DONE.value for s in states)
+        # 仅评估「部门工作包流水线」任务（带 work_package payload），
+        # 不含生态角色演示派发任务（eco_*，它们代表可派发 Agent，非部门产出），
+        # 避免生态角色派发任务停留在 TODO 影响部门全链路 DONE 判定。
+        wp_tasks = [t for t in self.scheduler.queue.tasks.values()
+                    if t.payload.get("work_package")]
+        return bool(wp_tasks) and all(t.state == TaskState.DONE.value for t in wp_tasks)
+
+    # ---------- 生态角色派发（wp_server / wp_ai_logic）----------
+    def dispatch_ecosystem(self) -> Dict[str, Any]:
+        """把生态角色作为可派发 Agent 接入 task_scheduler + message_bus。
+
+        选取代表性的生态角色（协作支持圈 / 玩家圈 / 外部市场圈）派发任务，
+        证明生态角色已注册为可派发 Agent 并真正进入部门流水线派发。
+        """
+        if self.ecosystem is None:
+            return {"dispatched": 0, "error": "ecosystem 未初始化，先调用 assemble_team"}
+        registry = self.ecosystem
+        registry.register_scheduler(self.scheduler)
+
+        # 派发三圈代表性生态角色任务
+        eco_jobs = [
+            # (任务名, owner 生态角色, 优先级)
+            ("市场预演派发", "publisher", "HIGH"),
+            ("广告变现调优", "advertiser", "NORMAL"),
+            ("玩家反馈回收", "core_player", "NORMAL"),
+            ("零工负载调度", "gig_pool", "NORMAL"),
+            ("进度督导盯守", "progress_pusher", "HIGH"),
+        ]
+        self.eco_tasks = []
+        for name, owner, prio in eco_jobs:
+            tid = f"eco_{name}"
+            task = Task(id=tid, name=name, owner=owner, priority=prio)
+            registry.dispatch(task)
+            self.eco_tasks.append(tid)
+        # 派发消息经总线 publish
+        dispatched = registry.bus.process_all()
+        return {
+            "dispatched": len(eco_jobs),
+            "publish_messages": dispatched,
+            "tasks": self.eco_tasks,
+        }
 
     # ---------- 汇总 ----------
     def summary(self) -> Dict[str, Any]:
@@ -205,6 +260,9 @@ class InstantiatedTeamOrchestrator:
             "department_count": self.report.get("department_count", {}),
             "work_packages": wp_states,
             "team_agents": sorted(self.team_agents.keys()),
+            # wp_server / wp_ai_logic：生态角色注册为可派发 Agent
+            "ecosystem": (self.ecosystem.summary() if self.ecosystem else None),
+            "eco_tasks": self.eco_tasks,
             "all_done": self._all_done(),
         }
 
@@ -247,7 +305,14 @@ def demo() -> InstantiatedTeamOrchestrator:
     print("\n[3] 实例化团队装配到总线（可执行部门 Agent）")
     print("    ", ", ".join(orch.summary()["team_agents"]))
 
-    print(f"\n[4] 端到端联动结果: all_done = {orch.summary()['all_done']}")
+    # wp_server / wp_ai_logic：生态角色注册为可派发 Agent
+    eco = orch.dispatch_ecosystem()
+    print("\n[4] 生态角色注册为可派发 Agent（wp_server / wp_ai_logic）")
+    print(f"    已注册生态角色: {len(orch.ecosystem.roles)} 个（协作支持/玩家/外部市场）")
+    print(f"    已派发生态角色任务: {eco['dispatched']} 个 -> {', '.join(orch.eco_tasks)}")
+    print(f"    派发消息已 publish 到 message_bus: {eco['publish_messages']} 条")
+
+    print(f"\n[5] 端到端联动结果: all_done = {orch.summary()['all_done']}")
     return orch
 
 

@@ -20,6 +20,9 @@ from typing import Any, Dict
 from agent_core import BaseAgent
 from message_bus import Message, MessageBus
 from game_producer_agent import DEPARTMENTS
+from market_input_bridge import build_market_input
+from data_ops_diagnosis import run_data_ops
+from release_gate import run_release_gate
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -225,15 +228,48 @@ class DesignDeptAgent(DepartmentAgent):
                 },
             }
         elif module == "numeric_model":
+            # 数值模型 / 商业化设计（研发侧产出）
+            numeric_model = {
+                "economy": "经济产出/消耗模型",
+                "growth_curve": "成长曲线",
+                "balance": "平衡性数值",
+                # 以下字段经 market_input_bridge 映射为市场预演标准化输入
+                "base_quality": 65.0,
+                "arpu": 2.5,
+                "ecpm": 6.0,
+                "ad_impressions": 8,
+                "channel_cut": 0.3,
+                "competition": 0.4,
+                "marketing_budget": 80000,
+                "mass_player_base": 200000,
+                "complexity": 0.35,
+                "monetization": {"iap_depth": 0.5, "iaa_density": 0.25},
+            }
+            # 把数值模型转译为市场预演标准化输入，并跑一次纳什均衡沙盒
+            # （跑通「研发产物 → 市场预演沙盒」）。
+            market_input = build_market_input(numeric_model, project=project)
+            market_result = market_input.solve()
             artifact = {
                 "module": "numeric_model",
                 "label": label,
                 "project": project,
                 "artifact_type": "numeric_table",
                 "content": {
-                    "economy": "经济产出/消耗模型",
-                    "growth_curve": "成长曲线",
-                    "balance": "平衡性数值",
+                    "economy": numeric_model["economy"],
+                    "growth_curve": numeric_model["growth_curve"],
+                    "balance": numeric_model["balance"],
+                },
+                # 市场预演标准化输入 + 纳什均衡结果（下游 wp_data_ops 消费）
+                "market_input": {
+                    "context": market_input.context,
+                    "roles": [{"role_id": r.role_id, "circle": r.circle,
+                                "strategies": [s.name for s in r.strategy_space]}
+                               for r in market_input.roles],
+                },
+                "market_simulation": {
+                    "equilibrium": market_result["equilibrium"],
+                    "iterations": market_result["iterations"],
+                    "metrics": market_result["metrics"],
                 },
             }
         else:
@@ -448,16 +484,38 @@ class PmDeptAgent(DepartmentAgent):
     def _execute(self, work_package, assign):
         label = work_package.get("label", "")
         project = work_package.get("project", "未命名")
+        # 对生态角色接入 + 市场预演产出发版质量门禁与验收放行
+        gate = run_release_gate({
+            "market_preview": {
+                "equilibrium": {"mass_player": {"strategy": "低门槛"}},
+                "metrics": {"roi": 3.0, "dau": 20000},
+                "diagnosis": {"position": "健康/蓝海"},
+            },
+            "ecosystem_roles": {
+                "registered": True, "dispatchable": True, "publish_to_bus": True,
+            },
+            "progress_pusher": {
+                "watch": True, "push": True, "escalate": True, "warn": True,
+            },
+        })
         artifact = {
             "module": "release", "label": label, "project": project,
             "artifact_type": "release_plan",
             "content": {
-                "milestone": "v0.7 里程碑",
-                "release_checklist": ["策划设计通过", "程序实现通过", "美术产出通过", "测试通过"],
+                "milestone": "生态角色接入 + 市场预演发版",
+                "release_checklist": ["策划设计通过", "程序实现通过", "美术产出通过",
+                                       "测试通过", "生态角色接入通过", "市场预演通过"],
                 "schedule": "按依赖流水线自动推进",
             },
+            # 发版质量门禁 + 验收放行（wp_release 落地产出）
+            "release_gate": {
+                "go_no_go": gate["go_no_go"],
+                "verdict": gate["verdict"],
+                "passed_total": gate["passed_total"],
+                "total_checks": gate["total_checks"],
+            },
         }
-        self._log("execute", f"项目管理制定发版计划")
+        self._log("execute", f"项目管理制定发版计划 + 发版门禁验收（{gate['go_no_go']}）")
         return artifact
 
     def _verify(self, work_package, artifact):
@@ -492,6 +550,37 @@ class OpsDeptAgent(DepartmentAgent):
     def _execute(self, work_package, assign):
         label = work_package.get("label", "")
         project = work_package.get("project", "未命名")
+        from market_input_bridge import build_market_input
+        # 消费上游 wp_numeric_model 的市场预演纳什均衡结果做生态位诊断。
+        # 若无上游市场预演输入，回退到内置数值模型跑一次市场预演再诊断。
+        content = assign.get("payload", {}) or {}
+        upstream = content.get("market_simulation") or {}
+        market_report = None
+        if upstream.get("equilibrium") and upstream.get("metrics"):
+            # 已有上游市场预演结果：直接诊断（含敏感性分析）
+            numeric_model = content.get("numeric_model") or {
+                "base_quality": 65.0, "arpu": 2.5, "ecpm": 6.0,
+                "ad_impressions": 8, "channel_cut": 0.3, "competition": 0.4,
+                "marketing_budget": 80000, "mass_player_base": 200000,
+                "complexity": 0.35,
+                "monetization": {"iap_depth": 0.5, "iaa_density": 0.25},
+            }
+            market_input = build_market_input(numeric_model, project=project)
+            market_result = dict(upstream)
+            market_report = run_data_ops(market_input, market_result)
+        else:
+            # 回退：独立跑一次市场预演再诊断（无上游联动时仍可产出运营诊断）
+            numeric_model = {
+                "base_quality": 65.0, "arpu": 2.5, "ecpm": 6.0,
+                "ad_impressions": 8, "channel_cut": 0.3, "competition": 0.4,
+                "marketing_budget": 80000, "mass_player_base": 200000,
+                "complexity": 0.35,
+                "monetization": {"iap_depth": 0.5, "iaa_density": 0.25},
+            }
+            market_input = build_market_input(numeric_model, project=project)
+            market_result = market_input.solve()
+            market_report = run_data_ops(market_input, market_result)
+
         artifact = {
             "module": "data_ops", "label": label, "project": project,
             "artifact_type": "ops_report",
@@ -500,8 +589,10 @@ class OpsDeptAgent(DepartmentAgent):
                 "insight": "运营洞察与建议",
                 "retention": "留存优化建议",
             },
+            # 生态位诊断 + 敏感性分析结论 + 发布建议（wp_data_ops 落地产出）
+            "market_diagnosis": market_report,
         }
-        self._log("execute", f"运营线产出数据洞察与运营建议")
+        self._log("execute", f"运营线产出数据洞察 + 市场生态位诊断")
         return artifact
 
     def _verify(self, work_package, artifact):

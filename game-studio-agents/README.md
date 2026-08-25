@@ -110,6 +110,33 @@ python3 config/run_end_to_end.py
 > （`EndToEndOrchestrator(..., with_progress_pusher=True)`），避免 producer 不再盯逾期后出现
 > “逾期无人盯守”责任真空；`attach_progress_pusher()` 提供手动挂载入口。
 
+## 🌐 生态角色接入部门流水线 + 市场预演联动（Issue #27 下游工作包）
+
+> 承接 PR #4 生态角色产出（`market_simulator` / `ecosystem_roles` / `progress_pusher`），
+> 把「独立原型/引擎」真正接入六大部门执行流水线。按依赖顺序落地五个下游工作包：
+
+| 工作包 | 部门 | 主责角色 | 落地模块 | 验收能力 |
+|--------|------|---------|---------|---------|
+| `wp_numeric_model` | 策划线 | balance_designer | `config/market_input_bridge.py` | 数值模型→市场预演标准化输入，跑通研发产物→市场预演沙盒 |
+| `wp_server`/`wp_ai_logic` | 程序线 | cto / ai_programmer | `config/ecosystem_role_registry.py` | 生态角色注册进 task_scheduler+message_bus 成为可派发 Agent |
+| `wp_data_ops` | 运营线 | data_analyst | `config/data_ops_diagnosis.py` | 对纳什均衡结果做生态位诊断+敏感性分析+发布建议 |
+| `wp_testing` | 测试线 | qa_engineer | `config/progress_pusher_fullchain.py` | 进度督导四类决策在真实部门工作包上全链路生效 |
+| `wp_release` | 项目管理 | project_manager | `config/release_gate.py` | 生态角色接入+市场预演产出发版质量门禁与验收放行 |
+
+```bash
+# 各工作包测试信号灯（已接入 .cnb.yml CI 护栏）
+bash tests/test_market_input_bridge.sh
+bash tests/test_ecosystem_roles.sh
+bash tests/test_data_ops_diagnosis.sh
+bash tests/test_progress_pusher_fullchain.sh
+bash tests/test_release_gate.sh
+```
+
+> **联动链路**：`balance_designer` 产出数值模型 → `market_input_bridge` 转译为标准化输入 →
+> `market_simulator` 收敛到纳什均衡 → `data_ops_diagnosis` 做生态位诊断 → `release_gate` 发版门禁。
+> 生态角色（玩家圈/外部市场圈/协作支持圈）经 `ecosystem_role_registry` 注册进总线与调度器，
+> 成为可派发 Agent 真正进入部门流水线。
+
 ## 🛡️ 评审-修复闭环护栏（多源触发 + 默认直接改 + 最大 10 轮防循环）
 
 > 评审返回问题后 **CodeBuddy 默认直接修复**，并设 **最大 10 轮上限**防无限循环，
