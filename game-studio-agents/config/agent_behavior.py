@@ -680,12 +680,27 @@ class ReasoningModeRouter:
             return ["read", "edit", "write", "glob", "grep"]
         return ["read", "write", "edit"]          # 写优先
 
+    @staticmethod
+    def _session_key(session):
+        """将 session 规范化为可 hash 的 key，支持 dict（提取 id 字段）或任意可 hash 对象。"""
+        if isinstance(session, dict):
+            for field in ("session_id", "task_id", "id", "chat_id"):
+                val = session.get(field)
+                if val is not None and isinstance(val, (str, int)):
+                    return f"{field}:{val}"
+            return None   # 无 id 字段则不用 override，走任务分类
+        return session
+
     def route(self, session, first_user_message):
         """
         首请求路由：锁定本会话模式（路径承诺，中途不切换）。
         返回 (mode, persona, core_tools)。
         """
-        mode = self.overrides.get(session, self.classify_task(first_user_message))
+        key = self._session_key(session)
+        if key is not None:
+            mode = self.overrides.get(key, self.classify_task(first_user_message))
+        else:
+            mode = self.classify_task(first_user_message)
         return {
             "mode": mode,
             "band": self.band_of(mode),
@@ -696,7 +711,9 @@ class ReasoningModeRouter:
 
     def set_mode(self, session, mode):
         """显式覆盖模式（下一请求生效）。"""
-        self.overrides[session] = mode
+        key = self._session_key(session)
+        if key is not None:
+            self.overrides[key] = mode
 
     def is_complex_task(self, text):
         """深度自适应：复杂任务判定。"""
