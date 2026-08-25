@@ -118,6 +118,30 @@ class GameProducerAgent(BaseAgent):
         # 部门能力表：实例级副本，避免 _load_departments 改写模块级全局
         # DEPARTMENTS 造成多实例间全局状态污染。以模块级默认表为起点。
         self.departments = {k: dict(v) for k, v in DEPARTMENTS.items()}
+        # v0.9: 实例化团队成员 role_id 集合（装配来源）。_assign_resources
+        # 用该集合精确区分实例化角色与 roles.yaml 的 base_role（二者均含
+        # 下划线，不能以 '_' in role_id 判定）。仅由 register_instantiated_team
+        # 填充，保证装配来源显式且可追溯。
+        self.instantiated_role_ids: set = set()
+        # v0.9: 模块 → 期望的 base_role，用于把工作包精确指派给对应的
+        # 实例化成员（如 wp_server → server_dev 派生角色 server_dev_unity_1），
+        # 对齐 Issue 派发清单（wp_client→client_dev、wp_server→server_dev、
+        # wp_engine→engine_dev、wp_ai_logic→ai_programmer）。
+        self.MODULE_BASE_ROLE = {
+            "client": "client_dev", "server": "server_dev",
+            "engine": "engine_dev", "ai_logic": "ai_programmer",
+            "art_direction": "tech_artist", "audio": "audio_designer",
+            "gameplay": "balance_designer", "numeric_model": "balance_designer",
+            "ui_ux": "tech_artist", "testing": "qa_engineer",
+            "release": "project_manager", "data_ops": "game_operator",
+        }
+        # 实例化角色 base_role → 实例化 role_id 列表（供精确指派主责）
+        self.instantiated_by_base: Dict[str, List[str]] = {}
+        # v0.9 负载均衡：role_id → 当前作为主责的未完成工作包计数。
+        # 用于避免 MODULE_BASE_ROLE 一对多（如 gameplay/numeric_model 同命中
+        # balance_designer）时，同一实例化成员被并行 WP 反复指派为唯一主责
+        # 而成为产能瓶颈。
+        self._owner_load: Dict[str, int] = {}
 
     # ---------- 覆写 BaseAgent 钩子 ----------
     def on_boot(self):
@@ -249,6 +273,9 @@ class GameProducerAgent(BaseAgent):
         modules = architecture.get("modules", list(ARCHITECTURE_MODULES.keys()))
         self.biz_state = "INPUT_PENDING"
         self._log("orchestrate", f"收到架构蓝图: {project}")
+        # v0.9 修复：_owner_load 只增不减会跨编排累积，污染后续负载均衡决策。
+        # 每次编排入口清零，保证主责计数只在单次编排内生效。
+        self._owner_load = {}
 
         # 1) 架构拆解：把蓝图落到部门模块
         self.biz_state = "ARCH_DECOMPOSE"
@@ -308,17 +335,127 @@ class GameProducerAgent(BaseAgent):
             })
         return wps
 
+    # ---------- v0.9: 实例化团队注册与装配 ----------
+    def register_instantiated_team(self, instantiated_roles: List[Dict[str, Any]]):
+        """把预设实例化器产出的真实团队注册进部门能力表，作为装配来源。
+
+        v0.8 的 PresetInstantiator 产出为纯内存结构，带后缀的实例化 role_id
+        （如 client_dev_unity_1）无法被 _load_departments()（仅读 roles.yaml）
+        识别。本方法把实例化角色并入对应部门 roles，使经理在 _assign_resources
+        时能优先以实例化团队成员作为工作包主责/协办，从而把「预设装配出的
+        真实团队」真正接入部门执行流水线（机制驱动，无需改 roles.yaml）。
+
+        幂等：重复注册同一 role_id 会被去重，避免实例化团队反复装配。
+        """
+        # 部门中文名 → 内部键
+        dept_key = DEPT_KEY_BY_NAME
+        for r in instantiated_roles:
+            dept_name = (r.get("department") or "").strip()
+            role_id = (r.get("role_id") or "").strip()
+            if not dept_name or not role_id:
+                continue
+            # 排除经理融合岗位自身（producer 及变体），经理是编排者不派单
+            if role_id == self.role_id or role_id.startswith(self.role_id + "_"):
+                continue
+            key = dept_key.get(dept_name)
+            if key is None:
+                continue
+            if key not in self.departments:
+                self.departments[key] = {"name": dept_name, "roles": []}
+            if role_id not in self.departments[key]["roles"]:
+                self.departments[key]["roles"].append(role_id)
+            # 记录实例化 role_id，供 _assign_resources 精确区分装配来源
+            self.instantiated_role_ids.add(role_id)
+            # 记录 base_role → 实例化 role_id，便于按模块精确指派主责
+            base_role = r.get("_base_role") or r.get("base_role")
+            if base_role:
+                self.instantiated_by_base.setdefault(base_role, [])
+                if role_id not in self.instantiated_by_base[base_role]:
+                    self.instantiated_by_base[base_role].append(role_id)
+        self._log("register_team",
+                  f"已注册实例化团队 {len(instantiated_roles)} 个正式角色到部门能力表")
+        return self
+
     def _assign_resources(self, wp: Dict[str, Any]):
-        """为工作包分配责任角色与资源（人力/优先级/DDL）。"""
+        """为工作包分配责任角色与资源（人力/优先级/DDL）。
+
+        v0.9 主责指派策略（负载均衡）：
+          - 优先使用实例化团队成员（role_id 记录在 instantiated_role_ids）作为主责；
+          - 按工作包模块精确指派：取该模块对应 base_role 派生的实例化成员；
+          - 同一 base_role 映射多个并行 WP（如 gameplay/numeric_model 同命中
+            balance_designer）时，对实例化成员做**负载均衡**（选当前负载最小者），
+            避免同一成员被串行指派为多个并行 WP 的唯一主责而成为产能瓶颈；
+          - 指派结果始终落在已注册的实例化角色上（而非 roles.yaml 的 base_role），
+            因为实例化装配场景下仅实例化角色装配了总线 Agent、能承接派单。
+        """
         dept_roles = self.departments[wp["department"]]["roles"]
-        # 模块级 role 覆盖优先（对齐 ARCHITECTURE_MODULES 显式主责），
-        # 缺省回退到部门 roles[0] 兜底。
+        # 主责指派融合策略（main 的模块级覆盖 + v0.9 实例化负载均衡）：
+        #   - 模块级 role 覆盖（module_role / _module_role，对齐 ARCHITECTURE_MODULES
+        #     显式主责）优先，但仅在"可承接"时生效；
+        #   - 未命中或不可承接时，走实例化团队负载均衡指派（取负载最小实例化成员），
+        #     保证并行 WP 不串行占用同一成员；
+        #   - 兜底不回退到无总线 Agent 的 base_role（实例化装配场景下仅实例化角色
+        #     装配了总线 Agent），否则派单将 unmatched 石沉大海 → 显式告警。
+        instantiated = [r for r in dept_roles if r in self.instantiated_role_ids]
+        base_roles = [r for r in dept_roles if r not in instantiated]
+
+        def _pick(candidates):
+            """从候选实例化成员中选负载最小者（负载均衡）。
+
+            优先返回空闲（负载 0）成员；即使全忙也返回负载最小的成员，
+            保证该模块必有一个可执行的实例化 Agent 承接（不回退到 roles.yaml
+            的 base_role——它在实例化装配场景下并无总线 Agent，无法承接派单）。
+            """
+            if not candidates:
+                return None
+            return min(candidates, key=lambda c: self._owner_load.get(c, 0))
+
         module_role = wp.get("module_role") or self._module_role(wp.get("module"))
-        if module_role and module_role in dept_roles:
-            wp["owner"] = module_role
-        else:
-            wp["owner"] = dept_roles[0]               # 主责角色
-        wp["support"] = [r for r in dept_roles if r != wp["owner"]]  # 协办角色（排除主责）
+        owner = None
+        # 1) 模块级 role 覆盖：命中且可承接时直接作为主责。
+        #    实例化装配场景仅实例化角色有总线 Agent；纯 roles.yaml 场景 base_role 可直接承接。
+        if module_role:
+            if module_role in self.instantiated_role_ids:
+                owner = module_role
+            elif module_role in dept_roles and not self.instantiated_role_ids:
+                owner = module_role
+        # 2) 实例化负载均衡指派：未命中模块级覆盖，或该覆盖不可承接时。
+        if owner is None:
+            expect_base = self.MODULE_BASE_ROLE.get(wp.get("module"))
+            if expect_base and self.instantiated_by_base.get(expect_base):
+                # 该 base_role 派生的实例化成员（仅保留已注册实例化角色）
+                candidates = [c for c in self.instantiated_by_base[expect_base]
+                              if c in self.instantiated_role_ids]
+                owner = _pick(candidates)
+        if owner is None and instantiated:
+            # 回退：从部门实例化成员中选负载最小者
+            owner = _pick(instantiated)
+        # 3) 兜底
+        if owner is None:
+            if instantiated:
+                # 实例化装配场景：部门有实例化成员，但兜底候选为空（理论不应发生）。
+                # 为安全起见取部门首个实例化成员，确保派单可被总线 Agent 承接。
+                owner = instantiated[0]
+            else:
+                # 纯 roles.yaml 场景：base_role 已装配总线 Agent，可直接承接。
+                # 但若存在已注册实例化角色却被漏装（装配口径不一致），base_role 无总线
+                # Agent，派单将 unmatched → 显式告警而非静默回退。
+                if self.instantiated_role_ids:
+                    self._log("assign_unmatched",
+                              f"工作包 {wp.get('module')} 部门无实例化成员可承接，"
+                              f"且存在已注册实例化角色但未装配 Agent（装配口径不一致），"
+                              f"主责置空告警，避免派单到无总线 Agent 的 base_role")
+                    owner = None
+                else:
+                    owner = module_role if module_role and module_role in dept_roles else dept_roles[0]
+        if owner is not None:
+            # 记录主责负载，供后续并行 WP 的负载均衡决策
+            self._owner_load[owner] = self._owner_load.get(owner, 0) + 1
+        wp["owner"] = owner
+        # 协办：该部门其余实例化成员（主责除外）+ base_role 兜底
+        support = [r for r in instantiated if r != owner]
+        support += [r for r in base_roles if r not in support][:2]
+        wp["support"] = support
         # 为工作包设定基线 DDL（部门工期），供 heartbeat 的"逾期督导"分支
         # 真正触发（此前任务从不设 DDL，逾期扫描成为死代码）。
         wp["ddl"] = time.time() + self._dept_duration_days(wp["department"]) * 86400
