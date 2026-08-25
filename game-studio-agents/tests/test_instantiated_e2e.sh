@@ -82,6 +82,14 @@ else
   report "全部工作包 DONE（>=12 个）" 1
 fi
 
+# 7. 注册/装配口径一致（评审点：DEPT_KEY_BY_NAME 含 support、DEPT_AGENT_CLASS 仅六部门
+#    的漂移修复）——所有已注册实例化角色都装配了总线 Agent，无「已注册却未装配」缺失。
+if ! echo "$out" | grep -q "未装配到总线"; then
+  report "注册/装配口径一致（无已注册但未装配 Agent 的角色）" 0
+else
+  report "注册/装配口径一致（无已注册但未装配 Agent 的角色）" 1
+fi
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"

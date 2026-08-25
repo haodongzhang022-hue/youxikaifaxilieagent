@@ -271,6 +271,9 @@ class GameProducerAgent(BaseAgent):
         modules = architecture.get("modules", list(ARCHITECTURE_MODULES.keys()))
         self.biz_state = "INPUT_PENDING"
         self._log("orchestrate", f"收到架构蓝图: {project}")
+        # v0.9 修复：_owner_load 只增不减会跨编排累积，污染后续负载均衡决策。
+        # 每次编排入口清零，保证主责计数只在单次编排内生效。
+        self._owner_load = {}
 
         # 1) 架构拆解：把蓝图落到部门模块
         self.biz_state = "ARCH_DECOMPOSE"
@@ -411,10 +414,26 @@ class GameProducerAgent(BaseAgent):
             # 回退：从部门实例化成员中选负载最小者
             owner = _pick(instantiated)
         if owner is None:
-            # 回退：部门首个角色（实例化成员优先；极端情况下才是 roles.yaml）
-            owner = dept_roles[0]
-        # 记录主责负载，供后续并行 WP 的负载均衡决策
-        self._owner_load[owner] = self._owner_load.get(owner, 0) + 1
+            if instantiated:
+                # 实例化装配场景：部门有实例化成员，但兜底候选为空（理论不应发生）。
+                # 为安全起见取部门首个实例化成员，确保派单可被总线 Agent 承接。
+                owner = instantiated[0]
+            else:
+                # 非实例化场景（纯 roles.yaml 装配，向后兼容）：base_role 有总线 Agent。
+                # 但若恰好有已注册实例化角色却被漏装（装配口径不一致），
+                # 此时 base_role 无总线 Agent，派单将 unmatched → 显式告警而非静默回退。
+                if self.instantiated_role_ids:
+                    self._log("assign_unmatched",
+                              f"工作包 {wp.get('module')} 部门无实例化成员可承接，"
+                              f"且存在已注册实例化角色但未装配 Agent（装配口径不一致），"
+                              f"主责置空告警，避免派单到无总线 Agent 的 base_role")
+                    owner = None
+                else:
+                    # 纯 roles.yaml 场景：base_role 本身装配了总线 Agent，可直接承接。
+                    owner = dept_roles[0]
+        if owner is not None:
+            # 记录主责负载，供后续并行 WP 的负载均衡决策
+            self._owner_load[owner] = self._owner_load.get(owner, 0) + 1
         wp["owner"] = owner
         # 协办：该部门其余实例化成员（主责除外）+ base_role 兜底
         support = [r for r in instantiated if r != owner]

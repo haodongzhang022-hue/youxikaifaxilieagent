@@ -276,6 +276,59 @@ else
 fi
 
 
+echo "== 8. 实例化装配修复（评审点：_owner_load 跨编排清零 + 装配口径不一致主责置空告警）=="
+out=$($PY - <<'PYEOF'
+from game_producer_agent import GameProducerAgent
+from message_bus import MessageBus
+
+# 问题1：_owner_load 在编排入口清零，避免跨编排累积污染负载均衡决策
+m = GameProducerAgent(bus=MessageBus())
+m.boot()
+m._owner_load = {'old_role': 5}  # 模拟上一次编排遗留的累积负载
+m._start_orchestration({'project': '测试', 'modules': ['gameplay', 'client']})
+if 'old_role' not in m._owner_load:
+    print('OWNER_LOAD_RESET=ok')
+
+# 问题2：装配口径不一致时（已注册实例化角色但未装配 Agent），
+# 主责置空告警而非回退到无总线 Agent 的 base_role
+m2 = GameProducerAgent(bus=MessageBus())
+m2.boot()
+m2.departments['design']['roles'] = ['balance_designer']
+m2.instantiated_role_ids = {'balance_designer_ptype_mobile_game'}  # 已注册但未装配
+m2.instantiated_by_base = {}
+wp = {'id': 'wp_gameplay', 'module': 'gameplay', 'department': 'design', 'deps': []}
+m2.work_packages = [wp]
+m2._assign_resources(wp)
+if wp['owner'] is None:
+    print('ASSIGN_UNMATCHED_OWNER_NONE=ok')
+# 纯 roles.yaml 场景（无实例化角色）保持向后兼容：回退部门首个 base_role
+m3 = GameProducerAgent(bus=MessageBus())
+m3.boot()
+m3.instantiated_role_ids = set()
+wp3 = {'id': 'wp_old', 'module': 'gameplay', 'department': 'design', 'deps': []}
+m3.work_packages = [wp3]
+m3._assign_resources(wp3)
+if wp3['owner'] == m3.departments['design']['roles'][0]:
+    print('PURE_YAML_FALLBACK=ok')
+PYEOF
+)
+if echo "$out" | grep -q "OWNER_LOAD_RESET=ok"; then
+  report "_owner_load 编排入口清零（不跨编排累积）" 0
+else
+  report "_owner_load 编排入口清零（不跨编排累积）" 1
+fi
+if echo "$out" | grep -q "ASSIGN_UNMATCHED_OWNER_NONE=ok"; then
+  report "装配口径不一致时主责置空告警（不回退无 Agent 的 base_role）" 0
+else
+  report "装配口径不一致时主责置空告警（不回退无 Agent 的 base_role）" 1
+fi
+if echo "$out" | grep -q "PURE_YAML_FALLBACK=ok"; then
+  report "纯 roles.yaml 场景仍回退部门 base_role（向后兼容）" 0
+else
+  report "纯 roles.yaml 场景仍回退部门 base_role（向后兼容）" 1
+fi
+
+
 echo ""
 echo "测试信号灯结果: $pass 通过 / $fail 失败"
 if [ "$fail" -gt 0 ]; then

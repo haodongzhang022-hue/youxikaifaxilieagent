@@ -91,13 +91,27 @@ class InstantiatedTeamOrchestrator:
         self.instantiator = inst
         self.report = report
 
-        # (a) 注册实例化角色到经理部门能力表（装配来源）
-        self.manager.register_instantiated_team(inst.instantiated_roles)
+        # (a) 注册实例化角色到经理部门能力表（装配来源）。
+        # 口径统一：只注册能被 DEPT_AGENT_CLASS 装配出部门 Agent 的角色（六大执行部门），
+        # 与下方 Agent 生成完全同源，消除「非六部门角色（如协作支持圈）被注册却无
+        # Agent」导致的注册/装配口径漂移（DEPT_KEY_BY_NAME 含 support，而
+        # DEPT_AGENT_CLASS 仅六部门）。
+        assemblable = [
+            r for r in inst.instantiated_roles
+            if DEPT_AGENT_CLASS.get((r.get("department") or "").strip())
+        ]
+        skipped_dept = sorted({
+            (r.get("department") or "").strip()
+            for r in inst.instantiated_roles if r not in assemblable})
+        if skipped_dept:
+            self.manager._log("assemble_filter",
+                              f"非六部门（无部门 Agent 类）角色不注册不装配: {skipped_dept}")
+        self.manager.register_instantiated_team(assemblable)
 
         # (b) 为每个实例化角色创建对应部门 Agent 并注册到总线。
         # 以 inst.instantiated_roles（单一事实来源）驱动 Agent 生成，与
         # register_instantiated_team 同源，消除「主责未注册 Agent」的隐性耦合。
-        for r in inst.instantiated_roles:
+        for r in assemblable:
             rid = r.get("role_id")
             dept_name = (r.get("department") or "").strip()
             agent_cls = DEPT_AGENT_CLASS.get(dept_name)
