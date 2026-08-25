@@ -180,6 +180,50 @@ else
   report "producer 心跳不再督导逾期（仅阻塞/依赖级联）" 1
 fi
 
+echo "== 7. 生态状态机 + 共享总线送达（最新评审点修复）=="
+out7=$($PY - <<'PYEOF'
+import time
+from message_bus import MessageBus
+from task_scheduler import Task, TaskQueue
+from progress_pusher import ProgressPusherAgent
+
+# 7.1 状态机：PUSHING/ESCALATING 合法，不触发 state_fail（评审点 #1）
+bus = MessageBus()
+queue = TaskQueue()
+pusher = ProgressPusherAgent(bus=bus, queue=queue)
+pusher.boot()
+now = time.time()
+t = Task(id="t_fsm", name="逾期", owner="dev", ddl=now - 86400*5, progress=0.3)
+t.updated_at = now
+queue.add(t)
+pusher.scan(now=now)
+fails = [e for e in pusher.log if e["event"] == "state_fail"]
+fsm_ok = len(fails) == 0 and pusher.push_count.get("t_fsm", 0) >= 1
+print("FSM_STATE_OK=" + ("OK" if fsm_ok else "BAD"))
+
+# 7.2 共享总线：collaboration_support 包装层消息真正送达（评审点 #2）
+import collaboration_support as cs
+from collaboration_support import TaskStatus, ProgressPusher
+wrap = ProgressPusher(lag_threshold=2.0)
+t2 = TaskStatus("t2", "client_dev", ddl=10.0, progress=0.5, last_update=5.0)
+wrap.track(t2, now=13.0)
+wrap.decide_action(t2, now=13.0)
+drained = wrap.drain()
+bus_ok = drained >= 1 and len(wrap.bus.delivered) >= 1
+print("SHARED_BUS_DELIVER=" + ("OK" if bus_ok else "BAD"))
+PYEOF
+)
+if echo "$out7" | grep -q "FSM_STATE_OK=OK"; then
+  report "生态状态机生效：PUSHING/ESCALATING 合法，无 state_fail" 0
+else
+  report "生态状态机生效：PUSHING/ESCALATING 合法，无 state_fail" 1
+fi
+if echo "$out7" | grep -q "SHARED_BUS_DELIVER=OK"; then
+  report "协作支持封装共享总线：消息真正送达（delivered>0）" 0
+else
+  report "协作支持封装共享总线：消息真正送达（delivered>0）" 1
+fi
+
 echo ""
 echo "进度督导测试结果: $pass 通过 / $fail 失败"
 if [ "$fail" -gt 0 ]; then

@@ -41,10 +41,13 @@ DEFAULT_ROLES = os.path.join(_HERE, "roles.yaml")
 DEFAULT_ROLE_PRESETS = os.path.join(_HERE, "role_presets.yaml")
 DEFAULT_PROJECT_PRESETS = os.path.join(_HERE, "project_type_presets.yaml")
 
-# 六大部门内部键 → 中文名（与 game_producer_agent.DEPARTMENTS 对齐）
+# 部门内部键 → 中文名（与 game_producer_agent.DEPARTMENTS 对齐）
 DEPT_KEY_BY_NAME = {
     "策划线": "design", "程序线": "program", "美术线": "art",
     "测试线": "qa", "项目管理": "pm", "运营线": "ops",
+    # 生态角色（非六大执行部门）：进度督导等协作支持角色登记于此，
+    # 使 validate() 可识别，不再报“无法识别的部门”；组装时归入 pm 兜底。
+    "协作支持圈": "support",
 }
 
 
@@ -319,6 +322,9 @@ class PresetInstantiator:
             key = DEPT_KEY_BY_NAME.get(dept_name)
             if key is None:
                 # 未知部门归入 pm 兜底并告警
+                key = "pm"
+            if key not in team:
+                # 生态角色（如协作支持圈 support）非六大执行部门，归入 pm 兜底
                 key = "pm"
             team[key].append(r)
         # 各部门内按 agent_priority 排序（低优先先执行）

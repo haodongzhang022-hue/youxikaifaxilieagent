@@ -98,10 +98,24 @@ python3 config/progress_pusher.py
 
 # 进度督导测试信号灯（已接入 .cnb.yml CI 护栏）
 bash tests/test_progress_pusher.sh
+
+# 端到端链路一键挂载：producer 管阻塞/依赖级联，progress_pusher 管逾期/催办/升级
+python3 config/run_end_to_end.py
 ```
 
 > **生效链路**：`TaskQueue`（任务状态）→ 督导扫描 → `DecisionEngine` 规则决策 → `MessageBus`
 > 发出催办/升级通知给 owner / 项目经理。打扰成本由冷却期 + 最大催办次数控制，避免过度打扰。
+>
+> **一键挂载**：`run_end_to_end.py` 默认把进度督导挂到共享总线 + 复用经理 TaskQueue
+> （`EndToEndOrchestrator(..., with_progress_pusher=True)`），避免 producer 不再盯逾期后出现
+> “逾期无人盯守”责任真空；`attach_progress_pusher()` 提供手动挂载入口。
+
+## 🛡️ 评审-修复闭环护栏（默认直接改 + 最大 10 轮防循环）
+
+> 评审返回问题后 **CodeBuddy 默认直接修复**，并设 **最大 10 轮上限**防无限循环，
+> 超限反馈人类改需求/框架。完整运行规范见
+> [docs/评审修复闭环护栏.md](./docs/评审修复闭环护栏.md)。
+> 已在 `.cnb.yml` 的 `pull_request.changes_requested` 落地为「CodeBuddy 自动修复」流水线。
 
 ## 🌐 信息接口层（接口层与人工可视层分离）
 

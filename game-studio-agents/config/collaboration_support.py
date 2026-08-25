@@ -99,17 +99,27 @@ class ProgressPusher:
     此处保留薄封装，便于在「协作支持编排演示」中统一调用。
     """
 
-    def __init__(self, lag_threshold: float = 2.0, block_timeout: float = 24.0):
-        # 兼容 v0.2 的旧签名：把构造参数并入策略后，交给真正的 Agent
+    def __init__(self, lag_threshold: float = 2.0, block_timeout: float = 24.0,
+                 bus: Optional[object] = None):
+        # 兼容 v0.2 的旧签名：把构造参数并入策略后，交给真正的 Agent。
+        # 传入共享 MessageBus（评审点 #2）：否则 ProgressPusherAgent 会自建
+        # 一个从不 process() 的内部总线，导致 _do_push/_do_escalate 发出的
+        # PUSH/ESCALATE 消息只入队不投递（delivered=0），“真正生效”落空。
+        from message_bus import MessageBus
         from progress_pusher import ProgressPusherAgent, load_policy, DEFAULT_POLICY
         policy = load_policy()
         policy.setdefault("lag_threshold_days", lag_threshold)
         policy.setdefault("block_timeout_hours", block_timeout)
-        self._agent = ProgressPusherAgent(policy=policy)
+        self.bus = bus or MessageBus()
+        self._agent = ProgressPusherAgent(policy=policy, bus=self.bus)
         self._agent.boot()   # 加载策略 + 注册规则，确保决策引擎就绪
         self.tasks = self._agent.queue.tasks
         self.lag_threshold = lag_threshold
         self.block_timeout = block_timeout
+
+    def drain(self) -> int:
+        """处理消息总线中待投递的消息，让督导发出的催办/升级真正送达。"""
+        return self.bus.process_all()
 
     def track(self, task: TaskStatus, now: float):
         # 复用 TaskQueue，把 v0.2 的 TaskStatus 转为 Task 结构

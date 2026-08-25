@@ -94,6 +94,19 @@ class ProgressPusherAgent(BaseAgent):
         super().__init__(role_id, bus)
         self.policy = policy or load_policy(policy_path)
         self.queue = queue or TaskQueue()          # 复用主任务队列
+
+        # 状态机：与 ecosystem_roles.yaml / roles.yaml 声明的进度督导状态一致
+        # （IDLE/TRACKING/PUSHING/ESCALATING/WARNING）。覆写基类通用生命周期，
+        # 使 _do_push/_do_escalate 中的 PUSHING/ESCALATING 等生态状态合法，
+        # 避免触发 state_fail（评审点 #1）。不污染 agent_core 全局状态表。
+        self.transitions = {
+            "BOOT": ["IDLE", "TRACKING", "PUSHING", "ESCALATING", "WARNING"],
+            "IDLE": ["TRACKING", "PUSHING", "ESCALATING", "WARNING", "STOPPED"],
+            "TRACKING": ["IDLE", "PUSHING", "ESCALATING", "WARNING"],
+            "PUSHING": ["IDLE", "TRACKING", "ESCALATING", "WARNING"],
+            "WARNING": ["IDLE", "TRACKING", "PUSHING", "ESCALATING"],
+            "ESCALATING": ["IDLE", "TRACKING", "WARNING"],
+        }
         self._last_scan = 0.0
         self.pushed_at: Dict[str, float] = {}       # task_id -> 上次催办时间
         self.push_count: Dict[str, int] = {}        # task_id -> 累计正式催办次数(firm)

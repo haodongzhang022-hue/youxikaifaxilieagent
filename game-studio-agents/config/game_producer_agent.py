@@ -38,6 +38,9 @@ except Exception:  # pragma: no cover
 DEPT_KEY_BY_NAME = {
     "策划线": "design", "程序线": "program", "美术线": "art",
     "测试线": "qa", "项目管理": "pm", "运营线": "ops",
+    # 生态角色（非六大执行部门）：进度督导等协作支持角色登记于此，
+    # 供 _load_roles 识别，不静默跳过；组装时归入 pm 兜底（跨部门服务岗）。
+    "协作支持圈": "support",
 }
 
 # 游戏开发六大板块及其可承接的工作类型（供经理拆分派单）
