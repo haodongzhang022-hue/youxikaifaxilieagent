@@ -113,6 +113,25 @@ class GameProducerAgent(BaseAgent):
         # 部门能力表：实例级副本，避免 _load_departments 改写模块级全局
         # DEPARTMENTS 造成多实例间全局状态污染。以模块级默认表为起点。
         self.departments = {k: dict(v) for k, v in DEPARTMENTS.items()}
+        # v0.9: 实例化团队成员 role_id 集合（装配来源）。_assign_resources
+        # 用该集合精确区分实例化角色与 roles.yaml 的 base_role（二者均含
+        # 下划线，不能以 '_' in role_id 判定）。仅由 register_instantiated_team
+        # 填充，保证装配来源显式且可追溯。
+        self.instantiated_role_ids: set = set()
+        # v0.9: 模块 → 期望的 base_role，用于把工作包精确指派给对应的
+        # 实例化成员（如 wp_server → server_dev 派生角色 server_dev_unity_1），
+        # 对齐 Issue 派发清单（wp_client→client_dev、wp_server→server_dev、
+        # wp_engine→engine_dev、wp_ai_logic→ai_programmer）。
+        self.MODULE_BASE_ROLE = {
+            "client": "client_dev", "server": "server_dev",
+            "engine": "engine_dev", "ai_logic": "ai_programmer",
+            "art_direction": "tech_artist", "audio": "audio_designer",
+            "gameplay": "balance_designer", "numeric_model": "balance_designer",
+            "ui_ux": "tech_artist", "testing": "qa_engineer",
+            "release": "project_manager", "data_ops": "game_operator",
+        }
+        # 实例化角色 base_role → 实例化 role_id 列表（供精确指派主责）
+        self.instantiated_by_base: Dict[str, List[str]] = {}
 
     # ---------- 覆写 BaseAgent 钩子 ----------
     def on_boot(self):
@@ -286,11 +305,68 @@ class GameProducerAgent(BaseAgent):
             })
         return wps
 
+    # ---------- v0.9: 实例化团队注册与装配 ----------
+    def register_instantiated_team(self, instantiated_roles: List[Dict[str, Any]]):
+        """把预设实例化器产出的真实团队注册进部门能力表，作为装配来源。
+
+        v0.8 的 PresetInstantiator 产出为纯内存结构，带后缀的实例化 role_id
+        （如 client_dev_unity_1）无法被 _load_departments()（仅读 roles.yaml）
+        识别。本方法把实例化角色并入对应部门 roles，使经理在 _assign_resources
+        时能优先以实例化团队成员作为工作包主责/协办，从而把「预设装配出的
+        真实团队」真正接入部门执行流水线（机制驱动，无需改 roles.yaml）。
+
+        幂等：重复注册同一 role_id 会被去重，避免实例化团队反复装配。
+        """
+        # 部门中文名 → 内部键
+        dept_key = DEPT_KEY_BY_NAME
+        for r in instantiated_roles:
+            dept_name = (r.get("department") or "").strip()
+            role_id = (r.get("role_id") or "").strip()
+            if not dept_name or not role_id:
+                continue
+            # 排除经理融合岗位自身（producer 及变体），经理是编排者不派单
+            if role_id == self.role_id or role_id.startswith(self.role_id + "_"):
+                continue
+            key = dept_key.get(dept_name)
+            if key is None:
+                continue
+            if key not in self.departments:
+                self.departments[key] = {"name": dept_name, "roles": []}
+            if role_id not in self.departments[key]["roles"]:
+                self.departments[key]["roles"].append(role_id)
+            # 记录实例化 role_id，供 _assign_resources 精确区分装配来源
+            self.instantiated_role_ids.add(role_id)
+            # 记录 base_role → 实例化 role_id，便于按模块精确指派主责
+            base_role = r.get("_base_role") or r.get("base_role")
+            if base_role:
+                self.instantiated_by_base.setdefault(base_role, [])
+                if role_id not in self.instantiated_by_base[base_role]:
+                    self.instantiated_by_base[base_role].append(role_id)
+        self._log("register_team",
+                  f"已注册实例化团队 {len(instantiated_roles)} 个正式角色到部门能力表")
+        return self
+
     def _assign_resources(self, wp: Dict[str, Any]):
         """为工作包分配责任角色与资源（人力/优先级/DDL）。"""
         dept_roles = self.departments[wp["department"]]["roles"]
-        wp["owner"] = dept_roles[0]               # 主责角色
-        wp["support"] = dept_roles[1:]            # 协办角色
+        # v0.9: 优先使用实例化团队成员（role_id 记录在 instantiated_role_ids）
+        # 作为主责角色；否则回退到 roles.yaml 的 base_role。
+        instantiated = [r for r in dept_roles if r in self.instantiated_role_ids]
+        base_roles = [r for r in dept_roles if r not in instantiated]
+        # 按工作包模块精确指派主责：取该模块对应 base_role 派生的实例化成员
+        owner = None
+        expect_base = self.MODULE_BASE_ROLE.get(wp.get("module"))
+        if expect_base and self.instantiated_by_base.get(expect_base):
+            owner = self.instantiated_by_base[expect_base][0]
+        if owner is None and instantiated:
+            owner = instantiated[0]               # 回退：部门首个实例化成员
+        if owner is None:
+            owner = dept_roles[0]                 # 回退：roles.yaml base_role
+        wp["owner"] = owner
+        # 协办：该部门其余实例化成员（主责除外）+ base_role 兜底
+        support = [r for r in instantiated if r != owner]
+        support += [r for r in base_roles if r not in support][:2]
+        wp["support"] = support
         # 为工作包设定基线 DDL（部门工期），供 heartbeat 的"逾期督导"分支
         # 真正触发（此前任务从不设 DDL，逾期扫描成为死代码）。
         wp["ddl"] = time.time() + self._dept_duration_days(wp["department"]) * 86400
