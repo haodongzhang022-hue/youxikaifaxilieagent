@@ -110,12 +110,16 @@ python3 config/run_end_to_end.py
 > （`EndToEndOrchestrator(..., with_progress_pusher=True)`），避免 producer 不再盯逾期后出现
 > “逾期无人盯守”责任真空；`attach_progress_pusher()` 提供手动挂载入口。
 
-## 🛡️ 评审-修复闭环护栏（默认直接改 + 最大 10 轮防循环）
+## 🛡️ 评审-修复闭环护栏（多源触发 + 默认直接改 + 最大 10 轮防循环）
 
 > 评审返回问题后 **CodeBuddy 默认直接修复**，并设 **最大 10 轮上限**防无限循环，
-> 超限反馈人类改需求/框架。完整运行规范见
-> [docs/评审修复闭环护栏.md](./docs/评审修复闭环护栏.md)。
-> 已在 `.cnb.yml` 的 `pull_request.changes_requested` 落地为「CodeBuddy 自动修复」流水线。
+> 超限反馈人类改需求/框架。采用**多源触发、按场景分**（不互相替换）：
+> - **`pull_request`（主闭环）**：`评审 → 就地修复 → 重推`，任何修复 push 都重跑，钩子没 bug 就停；
+> - **`pull_request.changes_requested`**：兼容人工 git 级「需要改进」打回；
+> - **`pull_request.comment@npc`**：兼容人类 @CodeBuddy 手动兜底；
+> - **驳回必然触发 push**：无法就地解决时转交其他 issue/PR 并关闭，或 push 文档性「放弃此部分迭代」对齐进度。
+>
+> 完整运行规范见 [docs/评审修复闭环护栏.md](./docs/评审修复闭环护栏.md)。
 
 ## 🌐 信息接口层（接口层与人工可视层分离）
 
