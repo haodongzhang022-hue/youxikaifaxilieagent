@@ -44,12 +44,12 @@ else
   report "工作包派发（dispatch_work_package）" 1
 fi
 
-# 3. 批量派发成功
+# 3. 批量派发成功（wp_art_testing 依赖未满足应 dispatched=False —— Bug2 修复）
 if echo "$out" | grep -q "美术品质基准 → eco_art_director dispatched=True" \
-   && echo "$out" | grep -q "美术线验收回归 → qa_engineer dispatched=True"; then
-  report "批量派发（dispatch_batch）" 0
+   && echo "$out" | grep -q "美术线验收回归 → qa_engineer dispatched=False"; then
+  report "批量派发（dispatch_batch，依赖未满足不派发）" 0
 else
-  report "批量派发（dispatch_batch）" 1
+  report "批量派发（dispatch_batch，依赖未满足不派发）" 1
 fi
 
 # 4. 任务状态统计
@@ -157,6 +157,72 @@ if grep -q "DISPATCH_GUIDE" "../config/dispatch_capability.py" \
   report "DISPATCH_GUIDE 用法规则定义" 0
 else
   report "DISPATCH_GUIDE 用法规则定义" 1
+fi
+
+echo "== 5. 修复项回归（4 Bug + 3 质量/架构） =="
+reg=$($PY << 'REGRESSION_EOF'
+import sys
+sys.path.insert(0, '.')
+from dispatch_capability import DispatchCapability
+from message_bus import MessageBus
+import io, contextlib, yaml
+
+res = {}
+
+# Bug1: message_id 非空
+bus = MessageBus()
+cap = DispatchCapability('producer', bus=bus)
+bus.register('tech_artist'); bus.on('tech_artist', lambda m: None)
+r1 = cap.dispatch('UI 制作', 'tech_artist')
+res['bug1'] = bool(r1.message_id)
+
+# Bug2+Bug3: 依赖未满足不派发，解锁后只派发一次
+bus2 = MessageBus()
+cap2 = DispatchCapability('producer', bus=bus2)
+for r in ['tech_artist','qa_engineer']:
+    bus2.register(r); bus2.on(r, lambda m: None)
+cap2.dispatch_work_package({'id':'wp_ui_ux','label':'UI','owner':'tech_artist','depends_on':[]})
+cap2.dispatch_work_package({'id':'wp_art_testing','label':'Test','owner':'qa_engineer','depends_on':['wp_ui_ux']})
+n_before = len([m for m in bus2.delivered if m.type=='TASK_ASSIGN' and m.content['name']=='Test'])
+res['bug2'] = (n_before == 0)
+cap2.on_complete('wp_ui_ux')
+n_after = len([m for m in bus2.delivered if m.type=='TASK_ASSIGN' and m.content['name']=='Test'])
+res['bug3'] = (n_after == 1)
+
+# Bug4: task_id 唯一
+ids = set()
+for i in range(5):
+    ids.add(cap.dispatch('t'+str(i), 'tech_artist').task_id)
+res['bug4'] = (len(ids) == 5)
+
+# Quality1: 未注册角色拒绝
+rg = cap.dispatch('ghost', 'ghost_role')
+res['q1'] = (rg.dispatched is False)
+
+# Quality2: demo 已注册 eco_audio_designer
+import dispatch_capability
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    dispatch_capability.demo()
+res['q2'] = ('生态音频接入流水线 → eco_audio_designer dispatched=True' in buf.getvalue())
+
+# 架构: roles.yaml 含 dispatch_capability
+roles = yaml.safe_load(open('roles.yaml'))
+res['arch'] = ('dispatch_capability' in str(roles))
+
+ok = all(res.values())
+for k, v in res.items():
+    print('  %s: %s' % (k, 'OK' if v else 'FAIL'))
+print('REGRESSION_PASS' if ok else 'REGRESSION_FAIL')
+REGRESSION_EOF
+)
+
+if echo "$reg" | grep -q "REGRESSION_PASS"; then
+  report "修复项回归（Bug1-4 + 质量/架构）" 0
+  echo "$reg"
+else
+  report "修复项回归（Bug1-4 + 质量/架构）" 1
+  echo "$reg"
 fi
 
 echo ""

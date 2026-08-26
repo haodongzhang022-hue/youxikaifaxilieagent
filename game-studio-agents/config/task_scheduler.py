@@ -165,6 +165,7 @@ class Scheduler:
                  bus: Optional[MessageBus] = None):
         self.queue = queue or TaskQueue()
         self.bus = bus or MessageBus()
+        self._dispatched: set = set()   # 已派发过的任务 id（避免重复派发）
 
     def enqueue(self, task: Task) -> Task:
         self.queue.add(task)
@@ -173,18 +174,21 @@ class Scheduler:
 
     def _dispatch_if_ready(self, task_id: str):
         task = self.queue.tasks.get(task_id)
-        if task and task.state == TaskState.TODO.value and task.owner:
+        # 仅当任务为 TODO 且有 owner、且依赖全部满足时才派发 TASK_ASSIGN
+        if (task and task.state == TaskState.TODO.value and task.owner
+                and task.id not in self._dispatched
+                and self.queue._is_ready(task)):
             msg = Message("TASK_ASSIGN", "scheduler", task.owner,
                           {"task_id": task.id, "name": task.name,
                            "payload": task.payload},
                           priority=task.priority)
             self.bus.publish(msg)
+            self._dispatched.add(task.id)
 
     def on_complete(self, task_id: str, from_role: str):
         """收到执行完成信号，更新队列并解锁下游"""
         self.queue.complete(task_id)
-        # 解锁的下游任务重新派发
-        task = self.queue.tasks.get(task_id)
+        # 解锁的下游任务重新派发（_dispatch_if_ready 内部已用 _dispatched 防重复）
         for other in self.queue.tasks.values():
             if task_id in other.depends_on and other.state == TaskState.TODO.value:
                 self._dispatch_if_ready(other.id)

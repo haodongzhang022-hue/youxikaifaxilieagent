@@ -98,6 +98,11 @@ roles:
         - "历史里程碑验收记录"
         - "市场竞品分析库"
       response_format: "结构化决策报告 + 理由 + 影响评估"
+    # 统一派发工作能力（所有 Agent 共享的高频复用能力，见 docs/dispatch-capability.md）
+    infrastructure:
+      dispatch_capability: "config/dispatch_capability.py::DispatchCapability"  # 拆解→派发→依赖解锁→跟踪闭环
+      scheduler: "config/task_scheduler.py::Scheduler"  # 任务队列/优先级/依赖派发
+      message_bus: "config/message_bus.py::MessageBus"  # 事件驱动协作（DIRECT/TOPIC/ANYCAST）
 
   # ---------------- 主策划 ----------------
   - role_id: "lead_designer"

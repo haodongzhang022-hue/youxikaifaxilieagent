@@ -34,6 +34,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -164,7 +165,7 @@ class DispatchCapability:
             DispatchResult: 派发结果（含 message_id）
         """
         task = Task(
-            id=task_id or f"task_{task_name.replace(' ', '_')}_{int(time.time())}",
+            id=task_id or f"task_{uuid.uuid4().hex[:8]}",
             name=task_name,
             owner=owner,
             priority=priority,
@@ -172,23 +173,40 @@ class DispatchCapability:
             payload=payload or {},
             ddl=ddl,
         )
-        self.scheduler.enqueue(task)
+        # 校验目标角色已注册（质量护栏）
+        if owner and owner not in self.bus.roles:
+            result = DispatchResult(
+                task_id=task.id,
+                owner=owner,
+                task_name=task_name,
+                priority=priority,
+                dispatched=False,
+                message_id=None,
+                reason=f"目标角色 {owner} 未注册到 message_bus，拒绝派发",
+            )
+            self.dispatch_log.append(result)
+            return result
 
-        # 查找刚发布的 TASK_ASSIGN 消息
+        self.scheduler.enqueue(task)
+        # 处理消息队列，让 TASK_ASSIGN 真正投递，从而捕获真实 message_id
+        self.bus.process_all()
+
+        # 查找本任务实际发布的 TASK_ASSIGN 消息
         msg_id = None
-        if self.bus.delivered:
-            for m in self.bus.delivered[-1:]:
-                if m.type == "TASK_ASSIGN" and m.to_role == owner:
-                    msg_id = m.id
+        for m in self.bus.delivered:
+            if (m.type == "TASK_ASSIGN" and m.to_role == owner
+                    and m.content.get("task_id") == task.id):
+                msg_id = m.id
+                break
 
         result = DispatchResult(
             task_id=task.id,
             owner=owner,
             task_name=task_name,
             priority=priority,
-            dispatched=True,
+            dispatched=msg_id is not None,
             message_id=msg_id,
-            reason="已通过 task_scheduler 派发",
+            reason="已通过 task_scheduler 派发" if msg_id else "派发失败：无 TASK_ASSIGN 消息",
         )
         self.dispatch_log.append(result)
         return result
@@ -250,6 +268,8 @@ class DispatchCapability:
         返回: 新解锁派发的下游任务 id 列表
         """
         self.scheduler.on_complete(task_id, self.caller_role)
+        # 处理消息队列，让解锁后的下游 TASK_ASSIGN 立即投递可见
+        self.bus.process_all()
         # 找出新解锁就绪的下游任务
         unlocked = []
         for t in self.scheduler.queue.tasks.values():
@@ -335,7 +355,7 @@ def demo():
 
     # 注册几个可派发角色
     for role in ["tech_artist", "audio_designer", "qa_engineer",
-                 "eco_art_director", "eco_tech_artist"]:
+                 "eco_art_director", "eco_tech_artist", "eco_audio_designer"]:
         bus.register(role)
         bus.on(role, lambda m: None)
 
@@ -398,8 +418,12 @@ def demo():
         else:
             print(f"    {k}: {v}")
 
+    # wp_art_testing 依赖 wp_ui_ux+wp_audio，依赖未满足时应 dispatched=False（Bug2 修复）
+    # 但 on_complete 解锁后应自动派发；此处校验核心派发链路均成功
     ok = (r1.dispatched and r2.dispatched and r3.dispatched
-          and all(r.dispatched for r in batch_results))
+          and all(r.dispatched for r in batch_results
+                  if r.owner != "qa_engineer"))
+    ok = ok and cap.track("wp_art_testing")["state"] == TaskState.TODO.value
     print(f"\n结果: {'🟢 通过' if ok else '🔴 未通过'}")
     return 0 if ok else 1
 
