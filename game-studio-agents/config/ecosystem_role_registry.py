@@ -152,30 +152,6 @@ class EcosystemRoleRegistry:
             "dispatchable": sorted(self.roles.keys()),
         }
 
-    # ---------- 便捷装配：把生态角色作为部门可派发 Agent 并入 ----------
-    def assemble_into_departments(self, manager_register_fn,
-                                  dept_key_by_name: Dict[str, str]) -> List[str]:
-        """把生态角色并入经理的部门能力表，作为可派发 Agent 装配来源。
-
-        manager_register_fn: 类似 GameProducerAgent.register_instantiated_team 的
-            回调，把生态角色（含 department 圈层 + role_id）注册为可派发来源。
-        dept_key_by_name: 圈层中文名 → 部门键映射（如 {"协作支持圈":"support"}）。
-        """
-        # 生态角色没有 DEPARTMENT 字段，用 circle 圈层作为其"部门归属"，
-        # 交由经理按圈层登记（跨部门服务岗 / 外部 / 玩家圈）。
-        payload = []
-        for role_id, r in self.roles.items():
-            circle = r.get("circle", "")
-            dept_name = CIRCLE_NAME.get(circle, circle)
-            payload.append({
-                "role_id": role_id,
-                "department": dept_name,
-                "name": r.get("name", role_id),
-            })
-        if payload:
-            manager_register_fn(payload)
-        return [p["role_id"] for p in payload]
-
 
 # ============================================================
 # 三、演示

@@ -194,8 +194,13 @@ class InstantiatedTeamOrchestrator:
 
     def _all_done(self) -> bool:
         # 仅评估「部门工作包流水线」任务（带 work_package payload），
-        # 不含生态角色演示派发任务（eco_*，它们代表可派发 Agent，非部门产出），
-        # 避免生态角色派发任务停留在 TODO 影响部门全链路 DONE 判定。
+        # 不含生态角色演示派发任务（eco_*）。
+        #
+        # 说明（评审点）：生态角色派发（dispatch_ecosystem）为**演示性派发**——
+        # 生态角色已注册为可派发 owner 并 publish 到 message_bus，但它们没有真实
+        # 承接 handler，任务恒停留在 TODO、永不 DONE。因此 _all_done 刻意过滤
+        # 掉 eco_*，仅以部门工作包流水线是否全部 DONE 作为全链路完成判定，
+        # 避免演示派发任务阻塞“部门全链路 DONE”。
         wp_tasks = [t for t in self.scheduler.queue.tasks.values()
                     if t.payload.get("work_package")]
         return bool(wp_tasks) and all(t.state == TaskState.DONE.value for t in wp_tasks)

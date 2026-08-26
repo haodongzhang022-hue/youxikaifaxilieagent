@@ -42,20 +42,9 @@ def build_real_department_workpackages(with_stress: bool = True) -> Dict[str, An
     scheduler = orch.scheduler
     queue = scheduler.queue
 
-    # 对真实工作包施加督导场景（保留真实 owner / wp_* id / 依赖）
+    # 对真实工作包施加督导场景（保留真实 owner / wp_* id / 依赖）。
+    # now 作为基准时间戳，供下方真实场景 DDL 计算使用（逾期/临近 DDL）。
     now = time.time()
-    for tid, task in queue.tasks.items():
-        if not task.payload.get("work_package"):
-            continue
-        # 让已完成的任务保持 DONE，无需督导
-        if task.state == TaskState.DONE.value:
-            continue
-        # 对未完成任务施加真实督导条件：
-        #   - wp_gameplay：逾期 3 天 → 应 PUSH（若未完成）
-        #   - wp_client：临近 DDL → 应 WARN（若未完成）
-        #   - wp_testing：催满 3 次仍未完成 → 应 ESCALATE（若未完成）
-        #   - 其余正常任务 → 应 WATCH
-        pass
 
     # 重新构建一批「真实工作包」督导场景（保留部门/owner 语义）：
     # 为验证四类决策，把部分真实 wp_* 任务状态/DDL 调到触发对应决策。

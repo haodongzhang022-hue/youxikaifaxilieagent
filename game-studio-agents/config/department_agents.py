@@ -22,7 +22,7 @@ from message_bus import Message, MessageBus
 from game_producer_agent import DEPARTMENTS
 from market_input_bridge import build_market_input
 from data_ops_diagnosis import run_data_ops
-from release_gate import run_release_gate
+from release_gate import aggregate_and_release, run_release_gate
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -470,6 +470,10 @@ class PmDeptAgent(DepartmentAgent):
 
     接收 wp_release 工作包，基于测试通过情况制定版本计划并放行。
     """
+    # 发版门禁递归护栏：aggregate_and_release 内部会真实跑通全链路
+    # （含 verify_fullchain / 市场预演），可能再次触达本部门，用类级锁
+    # 防止无限递归（评审点：发版门禁不应被部门全链路再次调用重入）。
+    _GATE_LOCK = False
 
     def __init__(self, bus: MessageBus):
         super().__init__("project_manager", "项目管理", bus)
@@ -484,20 +488,19 @@ class PmDeptAgent(DepartmentAgent):
     def _execute(self, work_package, assign):
         label = work_package.get("label", "")
         project = work_package.get("project", "未命名")
-        # 对生态角色接入 + 市场预演产出发版质量门禁与验收放行
-        gate = run_release_gate({
-            "market_preview": {
-                "equilibrium": {"mass_player": {"strategy": "低门槛"}},
-                "metrics": {"roi": 3.0, "dau": 20000},
-                "diagnosis": {"position": "健康/蓝海"},
-            },
-            "ecosystem_roles": {
-                "registered": True, "dispatchable": True, "publish_to_bus": True,
-            },
-            "progress_pusher": {
-                "watch": True, "push": True, "escalate": True, "warn": True,
-            },
-        })
+        # 对生态角色接入 + 市场预演产出发版质量门禁与验收放行。
+        # 评审点：此前门禁输入硬编码全 True，流水线内恒 GO、质量门禁失效。
+        # 改为复用 aggregate_and_release() 的**真实全链路产出**做验收；
+        # 加 _GATE_LOCK 递归护栏，避免被部门全链路内 PmDeptAgent 再次
+        # 调用造成无限递归（重入时安全回退为真实门禁默认）。
+        if PmDeptAgent._GATE_LOCK:
+            gate = run_release_gate({})
+        else:
+            PmDeptAgent._GATE_LOCK = True
+            try:
+                gate = aggregate_and_release()
+            finally:
+                PmDeptAgent._GATE_LOCK = False
         artifact = {
             "module": "release", "label": label, "project": project,
             "artifact_type": "release_plan",
@@ -554,7 +557,16 @@ class OpsDeptAgent(DepartmentAgent):
         # 消费上游 wp_numeric_model 的市场预演纳什均衡结果做生态位诊断。
         # 若无上游市场预演输入，回退到内置数值模型跑一次市场预演再诊断。
         content = assign.get("payload", {}) or {}
+        # 上游产出由经理在验收通过时注入到下游 payload['_upstream'][wp_id]
+        # （跨部门数据流打通，评审点）。这里从 _upstream 取市场预演结果，
+        # 避免恒走回退分支的死代码路径。
+        upstream_blocks = content.get("_upstream") or {}
         upstream = content.get("market_simulation") or {}
+        for _up in upstream_blocks.values():
+            _sim = _up.get("market_simulation") or {}
+            if _sim:
+                upstream = _sim
+                break
         market_report = None
         if upstream.get("equilibrium") and upstream.get("metrics"):
             # 已有上游市场预演结果：直接诊断（含敏感性分析）
