@@ -123,7 +123,6 @@ class MergedConfirmAgent:
         """从 Issue 描述中尝试解析关联 PR 编号（如 PR #15 / pulls/15）。"""
         if not body:
             return None
-        import re
         m = re.search(r"(?:PR\s*#|pulls/)(\d+)", body)
         return f"#{m.group(1)}" if m else None
 
@@ -175,13 +174,25 @@ class MergedConfirmAgent:
                      or any(kw.lower() in joined for kw in block_keywords))
 
         # 后续推进关键词（命中且无下游承接 → 判定 NEW_ISSUE）
+        # 注意：不再用宽泛的「后续」（「后续方案/后续讨论」等模糊表述易误判），
+        #       只用能表达「明确未派发后续任务」的精准关键词。
         next_keywords = [
             "下一阶段", "待联动", "待推进", "待实施", "继续完善", "继续推进",
-            "待收尾", "后续", "下一步", "v0.9", "v1.0", "下一阶段v", "待派发",
-            "待合并", "待合入", "待验收", "待回归",
+            "待收尾", "下一步", "v0.9", "v1.0", "下一阶段v", "待派发",
+            "待合并", "待合入", "待验收", "待回归", "后续任务", "后续推进",
+            "有待推进", "后续待办", "下一轮", "二期", "v2",
         ]
-        # 后续未派发才判定 NEW_ISSUE；若已带编号被下游承接则不算“未派发的后续”
+        # 后续未派发才判定 NEW_ISSUE；若已带编号被下游承接则不算"未派发的后续"
         has_next = any(kw.lower() in joined for kw in next_keywords) and not has_downstream
+
+        # 模糊讨论中（无明确承接对象/目标/排期）→ 保守 KEEP，不新建 Issue 不关闭
+        vague_discussion_patterns = [
+            r'(?:正在|仍在|还在)(?:讨论|研究|探讨|规划|筹备)',
+            r'(?:待|尚待|还需)(?:讨论|研究|确认|明确)',
+            r'(?:负责人|相关方)(?:正在|仍在)(?:讨论|推进|跟踪)',
+            r'(?:讨论中|研究中|探讨中)',
+        ]
+        has_vague_discussion = any(re.search(pt, joined) for pt in vague_discussion_patterns)
 
         # 评论数多且 open，可能仍在推进 → 保守 KEEP
         active_discussion = mi.comment_count >= 5 and not has_downstream
@@ -190,6 +201,10 @@ class MergedConfirmAgent:
             return (DECISION_KEEP,
                     f"Issue #{mi.number} 命中阻塞/待复核关键词，可能仍有依赖或阻塞未收尾",
                     "保留 Issue，交由对应负责人继续推进，暂不关闭")
+        if has_vague_discussion and not has_next:
+            return (DECISION_KEEP,
+                    f"Issue #{mi.number} 仍处于模糊讨论/规划阶段（无明确承接对象或排期）",
+                    "保留 Issue，待讨论收敛后再评估关闭或新建承接")
         if has_next:
             return (DECISION_NEW_ISSUE,
                     f"Issue #{mi.number} 已合并但描述/标签明确有「下一阶段/待联动/待推进」等后续任务且未派发",
@@ -301,6 +316,13 @@ if __name__ == "__main__":
             "labels": [{"name": "跨仓库已合并"}, {"name": "下一阶段"}],
             "comment_count": 3,
         },
+        {
+            "number": "30", "state": "open",
+            "title": "讨论中的功能",
+            "body": "已合并，已由负责人正在讨论后续方案",
+            "labels": [{"name": "已合并"}],
+            "comment_count": 2,
+        },
     ]
 
     candidates = a.probe(issues)
@@ -317,7 +339,7 @@ if __name__ == "__main__":
     print(f"\n统计: close={result['close_count']} new_issue={result['new_issue_count']} keep={result['keep_count']}")
 
     # 断言
-    assert result["probed_count"] == 5, "应探查到 5 个候选（#14/#10/#8/#1 合并 + #29 下一阶段）"
+    assert result["probed_count"] == 6, "应探查到 6 个候选（#14/#10/#8/#1 合并 + #29 下一阶段 + #30 模糊讨论）"
     assert any(d["number"] == "14" and d["decision"] == "close" for d in result["decided"]), \
         "#14 应判定 close（下游已由 #24 承接）"
     assert any(d["number"] == "10" and d["decision"] == "close" for d in result["decided"]), \
@@ -328,4 +350,6 @@ if __name__ == "__main__":
         "#1 应判定 close（下游已由 #27 承接）"
     assert any(d["number"] == "29" and d["decision"] == "new_issue" for d in result["decided"]), \
         "#29 应判定 new_issue（有下一阶段但未派发）"
+    assert any(d["number"] == "30" and d["decision"] == "keep" for d in result["decided"]), \
+        "#30 应判定 keep（模糊讨论中，不新建不关闭）"
     print("\n合并确认 Agent 自测通过 ✅")

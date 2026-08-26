@@ -162,9 +162,8 @@ decided = a.confirm(a.probe(issues))
 res = {d.number: d.decision for d in decided}
 # 201：无后续/无阻塞 → CLOSE（完成态），不得误判 KEEP
 ok_201 = res.get("201") == DECISION_CLOSE
-# 202：无 # 锚点、无后续推进、无阻塞 → CLOSE（虽未落地讨论，但无后续推进信号）；
-#      核心是不得因宽泛「已由」而误判，且不得因「负责人讨论」误判 KEEP
-ok_202 = res.get("202") != DECISION_KEEP
+# 202：含「正在讨论」模糊后续 → KEEP（保守保留，不新建 Issue 不关闭）
+ok_202 = res.get("202") == DECISION_KEEP
 
 # 评审点3：decide() 未 confirm 但有候选时自动补齐，probed>0 时 decided 非空
 b = MergedConfirmAgent()
@@ -179,9 +178,43 @@ print("no_dup=%s ok_201=%s ok_202=%s ok_autofill=%s" % (no_dup, ok_201, ok_202, 
 PY
 )
 if echo "$out" | grep -q "no_dup=True ok_201=True ok_202=True ok_autofill=True"; then
-  report "启发式防误判回归（无重复/不误关/不误KEEP/decide自动补齐）" 0
+  report "启发式防误判回归（无重复/不误关/模糊讨论KEEP/decide自动补齐）" 0
 else
-  report "启发式防误判回归（无重复/不误关/不误KEEP/decide自动补齐）" 1
+  report "启发式防误判回归（无重复/不误关/模糊讨论KEEP/decide自动补齐）" 1
+  echo "$out"
+fi
+
+echo "== 5. 「后续」精度回归（评审点 3 修正验证）=="
+out=$($PY - <<'PY'
+from merged_confirm_agent import (
+    MergedConfirmAgent, DECISION_CLOSE, DECISION_KEEP, DECISION_NEW_ISSUE,
+)
+
+# 评审点3a：宽泛「后续方案」不触发 NEW_ISSUE（已由负责人正在讨论 → KEEP）
+a = MergedConfirmAgent()
+issues = [
+    # 模糊「后续方案」→ 不触发 NEW_ISSUE；「正在讨论」→ KEEP
+    {"number": "301", "state": "open", "title": "讨论中的方案",
+     "body": "已合并，已由负责人正在讨论后续方案", "labels": [{"name": "已合并"}], "comment_count": 2},
+    # 精准「后续任务」→ NEW_ISSUE（明确有后续但未派发）
+    {"number": "302", "state": "open", "title": "有后续任务",
+     "body": "已合并，但仍有后续任务待推进，未派发", "labels": [{"name": "已合并"}], "comment_count": 3},
+    # 「后续方案已定」无模糊讨论 → 不误判 KEEP，也不 NEW_ISSUE（无精准关键词）→ CLOSE
+    {"number": "303", "state": "open", "title": "方案已定",
+     "body": "已合并，后续方案已确定并落地", "labels": [{"name": "已合并"}], "comment_count": 1},
+]
+decided = a.confirm(a.probe(issues))
+res = {d.number: d.decision for d in decided}
+ok_301 = res.get("301") == DECISION_KEEP
+ok_302 = res.get("302") == DECISION_NEW_ISSUE
+ok_303 = res.get("303") == DECISION_CLOSE
+print("ok_301=%s ok_302=%s ok_303=%s" % (ok_301, ok_302, ok_303))
+PY
+)
+if echo "$out" | grep -q "ok_301=True ok_302=True ok_303=True"; then
+  report "「后续」精度回归（模糊讨论KEEP/精准后续NEW/无后续CLOSE）" 0
+else
+  report "「后续」精度回归（模糊讨论KEEP/精准后续NEW/无后续CLOSE）" 1
   echo "$out"
 fi
 

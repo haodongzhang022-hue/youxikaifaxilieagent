@@ -2837,6 +2837,9 @@ roles:
     agent_priority: 17
     status: "agent_enabled"
     personality: "审慎核验：以工作内容是否收尾为准，已合并≠可关闭，需先确认后续任务、阻塞与依赖是否真正落地。"
+    integration: "crontab-only"
+    # 说明: 本角色仅由 .cnb.yml crontab 驱动（merged-confirm-sweep），
+    #       不接入 message_bus / task_scheduler / 依赖解锁。声明保持与实现一致。
 
     responsibilities:
       - "探查带「已合并」标签 + open 状态的 Issue"
@@ -2870,7 +2873,7 @@ roles:
         steps: ["探查已合并标签 Issue → 确认工作内容 → 决策(close/new_issue/keep) → 执行"]
 
     collaboration:
-      receives_from: ["代码审查员", "CodeBuddy"]
+      receives_from: ["项目经理", "各执行岗"]
       sends_to: ["各执行岗", "项目经理"]
       needs_approval_from: ["项目经理"]
       approves: []

@@ -24,7 +24,7 @@
 ## 二、触发链（事件驱动，无需人工）
 
 ```
-crontab（每日 06:00 UTC）
+crontab（每日 06:00 Asia/Shanghai）
    └─ 合并标签探查（config/merged_confirm_agent.py 自测）
         └─ 合并确认员 NPC 逐个确认（npc:go）
              ├─ N == 0 → 无需确认，结束
@@ -47,7 +47,7 @@ crontab（每日 06:00 UTC）
 | 文件 | 作用 |
 |------|------|
 | `config/merged_confirm_agent.py` | 合并确认 Agent 核心逻辑：探查（probe）/ 确认（confirm）/ 决策（decide） |
-| `tests/test_merged_confirm_agent.sh` | 测试信号灯（5 项断言） |
+| `tests/test_merged_confirm_agent.sh` | 测试信号灯（7 项断言） |
 | `.cnb.yml`（`main:` 下 crontab） | 每日定时触发确认流程 |
 | `.cnb/settings.yml` | 注册「合并确认员」角色 |
 
