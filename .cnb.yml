@@ -95,7 +95,7 @@ $:
               在 PR 评论中输出审查结论。
               【CodeBuddy 触发机制·评审后闭环】
               5. 若评审结论为"需修改/需改进"：在评论末尾**必须**用
-                 「@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)」完整格式
+                 「@dongdongxiaozu/youxikaifaxilieagent(仓库修复专员)」完整格式
                  （仓库路径 + 角色名）点名**本仓库的 CodeBuddy**，说明已完成的
                  评审结论与需要修复的具体点，触发 `pull_request.comment@npc`
                  让本仓库 CodeBuddy 接手修复闭环。
@@ -150,7 +150,7 @@ $:
                    CodeBuddy（其职责只是读和审，本就不具备推送权限）。这是调取错误被
                    护栏拦住了，属于护栏正常生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
-                   用「`@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)`」完整格式
+                   用「`@dongdongxiaozu/youxikaifaxilieagent(仓库修复专员)`」完整格式
                    （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
                    `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
                    - 说明文本需写明：已完成的修复点、本次 push 因执行身份不是本仓库
@@ -298,7 +298,7 @@ $:
                    只是读和审，本就不具备推送权限）。这是调取错误被护栏拦住，属于护栏正常
                    生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
-                   用「`@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)`」完整格式
+                   用「`@dongdongxiaozu/youxikaifaxilieagent(仓库修复专员)`」完整格式
                    （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
                    `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
                    说明文本需写明已修复点、本次 push 因执行身份不是本仓库 CodeBuddy
@@ -321,7 +321,7 @@ $:
         - name: CodeBuddy 按 @ 指令处理
           type: npc:go
           options:
-            role: CodeBuddy
+            role: 仓库修复专员
             systemPrompt: |
               你是代码修复 NPC（CodeBuddy）。人类在 PR 评论中 @你，请按指令处理，
               并遵循"评审-修复闭环护栏"（docs/评审修复闭环护栏.md）：默认直接改、
