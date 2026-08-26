@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from agent_core import BaseAgent
 from message_bus import Message, MessageBus, build_task_assign, build_message
 from task_scheduler import Scheduler, Task, TaskState
+from role_collaboration import RoleCollabHub, COLLAB_MESSAGE_TYPES
 
 # 尝试加载 PyYAML 用于从 roles.yaml 解析部门角色（缺失时回退到内置默认表）
 try:
@@ -110,6 +111,9 @@ class GameProducerAgent(BaseAgent):
         # 对齐 roles.yaml：经理融合岗位默认使用制作人 producer
         super().__init__(role_id or MANAGER_ROLE_ID, bus)
         self.scheduler = scheduler or Scheduler(bus=self.bus)
+        # 角色间协作工作台：横向 @转交 / @分工 / 协作能力
+        # （对纵向"经理→部门"派单的横向补强，任意角色可互相 @ 协作）
+        self.collab = RoleCollabHub(self.bus)
         self.biz_state = "IDLE"
         self.work_packages: List[Dict[str, Any]] = []   # 已拆分的工作包
         self.accepted: List[str] = []                    # 已验收的部门产出
@@ -261,11 +265,75 @@ class GameProducerAgent(BaseAgent):
         elif msg.type == "REVIEW_RESULT":
             self._on_department_delivery(msg.content)
 
+        elif msg.type in COLLAB_MESSAGE_TYPES:
+            # 多角色互相 @ 的协作事件：@转交 / @分工 / @协作请求 统一路由到协作工作台
+            self._handle_collab(msg)
+
         elif msg.type == "STATUS_REPORT":
             self.reply(msg, "STATUS_REPORT", self.report())
 
         elif msg.type == "NOTIFICATION":
             self._log("notification", str(msg.content))
+
+    # ---------- 多角色互相 @ 协作（转交 / 分工 / 协作请求） ----------
+    def _handle_collab(self, msg: Message):
+        """统一处理角色间 @ 协作事件：转交 / 分工 / 协作请求。"""
+        mtype = msg.type
+        content = msg.content
+        from_role, to_role = msg.from_role, msg.to_role
+
+        if mtype == "TASK_TRANSFER":
+            # A @B 转交任务：本 Agent（经理）作为编排者记录转交并广播到新负责人
+            task_id = content.get("task_id")
+            self._log("collab", f"{from_role} @转交 任务 {task_id} 给 {to_role}: "
+                                f"{content.get('reason','')}")
+            self.bus.publish(build_message(
+                "NOTIFICATION", self.role_id, to_role,
+                {"notice": f"你被 @转交 了任务 {task_id}（原主 {from_role}），"
+                           f"请承接或退回。原因: {content.get('reason','')}"}))
+        elif mtype in ("TRANSFER_ACCEPT", "TRANSFER_REJECT", "TRANSFER_BACK"):
+            task_id = content.get("task_id")
+            self._log("collab", f"{from_role} {mtype} 任务 {task_id} "
+                                f"(接受/拒绝/退回 原主 {to_role})")
+        elif mtype == "COLLAB_REQUEST":
+            # A @请求 B 协助某任务
+            self._log("collab", f"{from_role} @请求 {to_role} 协助任务 "
+                                f"{content.get('task_id')}: {content.get('reason','')}")
+            self.bus.publish(build_message(
+                "NOTIFICATION", self.role_id, to_role,
+                {"notice": f"你被 @请求 协助任务 {content.get('task_id')}"
+                           f"（来自 {from_role}）。"}))
+        elif mtype in ("COLLAB_RESPONSE", "SPLIT_ACK"):
+            self._log("collab", f"{from_role} {mtype} {content.get('sub_task_id','')}")
+        elif mtype == "WORKSPLIT":
+            # 发起 @分工：把一个任务拆给多个角色并行协作
+            self._log("collab", f"{from_role} @分工 任务 {content.get('parent_task_id')} "
+                                f"派给 {to_role}: {content.get('sub_task','')}")
+            self.bus.publish(build_message(
+                "NOTIFICATION", self.role_id, to_role,
+                {"notice": f"你被 @分工 承接子任务 {content.get('sub_task_id','')}"
+                           f"（父任务 {content.get('parent_task_id')}）："
+                           f"{content.get('sub_task','')}"}))
+        elif mtype == "CALLBACK_ACK":
+            self._log("collab", f"{from_role} 确认协作回退 {content.get('task_id','')}")
+
+    # ---------- 经理便捷协作入口 ----------
+    def handoff_wp(self, wp_id: str, to_role: str, reason: str = "") -> Message:
+        """经理 @转交 一个工作包给指定角色（如跨部门转交专业任务）。"""
+        wp = self._find_work_package(wp_id)
+        if not wp:
+            return build_message("NOTIFICATION", self.role_id, to_role,
+                                 {"notice": f"工作包 {wp_id} 不存在，无法转交"})
+        task = Task(id=wp["id"], name=wp.get("label", wp_id), owner=wp.get("owner", ""))
+        return self.collab.transfer.handoff(
+            self.role_id, to_role, task, reason or f"工作包 {wp_id} 转交")
+
+    def delegate_wp(self, wp_id: str, assignments: List[Dict[str, Any]]) -> List[Message]:
+        """经理 @分工：把一个工作包 @拆为多个子任务分发给多个角色并行协作。"""
+        wp = self._find_work_package(wp_id)
+        parent_name = wp.get("label", wp_id) if wp else wp_id
+        return self.collab.split.delegate(
+            self.role_id, wp_id, parent_name, assignments)
 
     # ---------- 编排各阶段 ----------
     def _start_orchestration(self, architecture: Dict[str, Any]):
