@@ -38,3 +38,32 @@ python3 game-studio-agents/api/main.py   # http://localhost:8000/docs
   - [触发时机](./game-studio-agents/docs/reference-learning-agent/03-trigger-timing.md)
   - [Mod 数据规范](./game-studio-agents/docs/reference-learning-agent/04-mod-schema.md)
   - [端到端工作流](./game-studio-agents/docs/reference-learning-agent/05-workflow.md)
+
+## 跨仓库 NPC 召唤指南
+
+本仓库的 NPC 角色（游戏向经理 / 代码审查员 / CodeBuddy）可在**其它仓库**跨仓库召唤，
+无需在本仓库内操作。跨仓库 `@` 调用平台已原生支持，格式如下：
+
+```
+@dongdongxiaozu/youxikaifaxilieagent(角色名) 需求描述
+```
+
+### 支持的角色
+
+| 角色 | 用途 |
+|------|------|
+| 游戏向经理 | 机制化拆解需求 / 派发部门工作包 / 推进协作 |
+| 代码审查员 | 审查 PR 代码质量 / 架构 / 安全 |
+| CodeBuddy | 评审修复 / 手动指令处理 |
+
+### 让角色出现在 `@` 选择器（可点选，无需手敲全名）
+
+CNB 平台的 `@` 选择器只收录「已关注仓库中的 NPC」。要让角色自动补全、直接点选：
+
+1. **关注（Star）本仓库** `dongdongxiaozu/youxikaifaxilieagent`（及需要召唤的其它仓库）；
+2. 关注后，在本仓库或其它仓库输入 `@`，选择器即可检索到本仓库已注册的 NPC 角色，
+   输入角色关键词（如"经理""审查")还能自动联想补全；
+3. 直接点选或手敲 `@slug(角色名)` 即可跨仓库调用。
+
+> 若在 `@` 选择器里没看到角色，通常是因为**尚未关注该仓库**——关注后即建立关联。
+> 相关角色配置见 [.cnb/settings.yml](./.cnb/settings.yml)。

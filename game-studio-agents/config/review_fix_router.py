@@ -147,6 +147,35 @@ class ReviewFixRouter:
                 f"修复 {global_id} 时无上下文可记录历史（哈希降级中），"
                 f"本次修复信息不会沉淀，无法被后续上下文路由复用。")
 
+    # ---------- 闭环健康判别（区分「正常待评审」与「真正闭环中断」） ----------
+    LOOP_PENDING_REVIEW = "pending_review"   # 正常待评审：修复已 push，新评审下一轮才产生
+    LOOP_INTERRUPTED = "interrupted"         # 真正闭环中断：须满足至少一个硬性信号
+    LOOP_OK = "ok"                           # 闭环正常：已有评审结论
+
+    def classify_loop_state(self, global_id: str, has_newest_review: bool = False,
+                            push_success: bool = True, review_timeout: bool = False,
+                            rounds_over_limit: bool = False) -> str:
+        """判别评审闭环当前处于「正常待评审」还是「真正闭环中断」。
+
+        规则（对应「评审修复闭环护栏」第七章判别规则，防误报）：
+          - 真正中断：须满足**至少一个硬性信号**——
+            ① push 失败（403 权限缺失，修复根本没推上去）；
+            ② push 成功但长时间无后续评审 run 跟进（review_timeout）；
+            ③ 评审长期停留"需修改"且超轮次上限未收敛（rounds_over_limit）。
+          - 正常待评审：push 成功且已触发新一轮评审事件，但**最新 head 评审结论尚未
+            产生**（has_newest_review=False）——这是修复 push 后、新评审在下一轮才产生的
+            **正常状态**，禁止仅因"暂无最新评审结论"就误判中断。
+          - 闭环正常：最新 head 已有评审结论（has_newest_review=True）且无硬性中断信号。
+        """
+        # 先判硬性中断信号（任一命中即为真正中断，优先于"暂无评审结论"）。
+        if not push_success or review_timeout or rounds_over_limit:
+            return self.LOOP_INTERRUPTED
+        # 无硬性中断信号 + 已有最新评审结论 → 闭环正常。
+        if has_newest_review:
+            return self.LOOP_OK
+        # push 成功、无硬性中断信号、仅"最新 head 暂无评审结论" → 正常待评审（不误报）。
+        return self.LOOP_PENDING_REVIEW
+
     # ---------- 诊断 ----------
     def summary(self) -> Dict[str, Any]:
         """路由机制运行概况：上下文路由 vs 降级哈希校验的使用统计。"""

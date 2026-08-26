@@ -94,6 +94,60 @@ else
   report "机制可观测：路由统计区分上下文路由 vs 降级哈希校验" 1
 fi
 
+# ============================================================
+# 6. 评审闭环健康判别：区分「正常待评审」与「真正闭环中断」（防误报）
+# ============================================================
+echo "== 6. 闭环健康判别（正常待评审 vs 真正中断，防误报）=="
+out_loop=$($PY - <<'PY'
+from review_fix_router import ReviewFixRouter
+r = ReviewFixRouter()
+
+# 场景A：修复已 push 成功、新评审在下一轮才产生（最新 head 暂无评审结论）→ 正常待评审，不中断
+pending = r.classify_loop_state("PR-31", has_newest_review=False, push_success=True,
+                                review_timeout=False, rounds_over_limit=False)
+print("pending=%s" % pending)
+
+# 场景B：push 403（修复没推上去）→ 真正中断（硬性信号①）
+interrupt_push = r.classify_loop_state("PR-31", has_newest_review=False,
+                                       push_success=False, review_timeout=False,
+                                       rounds_over_limit=False)
+print("interrupt_push=%s" % interrupt_push)
+
+# 场景C：push 成功但长时间无后续评审 run 跟进 → 真正中断（硬性信号②）
+interrupt_timeout = r.classify_loop_state("PR-31", has_newest_review=False,
+                                          push_success=True, review_timeout=True,
+                                          rounds_over_limit=False)
+print("interrupt_timeout=%s" % interrupt_timeout)
+
+# 场景D：push 成功且有最新评审结论 → 闭环正常（有结论）
+ok = r.classify_loop_state("PR-31", has_newest_review=True, push_success=True,
+                           review_timeout=False, rounds_over_limit=False)
+print("ok=%s" % ok)
+PY
+)
+
+# 6.1 正常待评审：push 成功、仅"暂无最新评审结论" → 必须判 pending_review（不误报中断）
+if echo "$out_loop" | grep -q "pending=pending_review"; then
+  report "闭环判别：修复 push 成功、新评审尚在下一轮（暂无最新评审结论）→ 正常待评审，不误报中断" 0
+else
+  report "闭环判别：修复 push 成功、新评审尚在下一轮（暂无最新评审结论）→ 正常待评审，不误报中断" 1
+fi
+
+# 6.2 真正中断须有硬性信号：push 403 / 评审超时 → 判 interrupted
+if echo "$out_loop" | grep -q "interrupt_push=interrupted" \
+   && echo "$out_loop" | grep -q "interrupt_timeout=interrupted"; then
+  report "闭环判别：真正中断须有硬性信号（push 403 / 评审超时）才判 interrupted" 0
+else
+  report "闭环判别：真正中断须有硬性信号（push 403 / 评审超时）才判 interrupted" 1
+fi
+
+# 6.3 有最新评审结论且无硬性信号 → 闭环正常
+if echo "$out_loop" | grep -q "ok=ok"; then
+  report "闭环判别：有最新评审结论且无硬性信号 → 闭环正常（ok）" 0
+else
+  report "闭环判别：有最新评审结论且无硬性信号 → 闭环正常（ok）" 1
+fi
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"
