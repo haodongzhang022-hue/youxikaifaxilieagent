@@ -71,7 +71,7 @@ class MergedConfirmAgent:
     """
 
     # 匹配的「已合并」标签关键词（支持模糊匹配，如「安全加固已合并」「经理编排已合并」）
-    MERGED_LABEL_KEYWORDS = ("已合并", "已合入", "merged", "已上线")
+    MERGED_LABEL_KEYWORDS = ("已合并", "已合入", "merged")
 
     def __init__(self, log_fn: Any = None) -> None:
         self._log = log_fn or (lambda *a, **k: None)
@@ -111,10 +111,11 @@ class MergedConfirmAgent:
         return candidates
 
     def _find_merged_label(self, labels: List[str]) -> Optional[str]:
-        """在标签列表中匹配「已合并」相关标签。"""
+        """在标签列表中匹配「已合并」相关标签（大小写不敏感）。"""
+        lb_lower = {lb.lower() for lb in labels}
         for lb in labels:
             for kw in self.MERGED_LABEL_KEYWORDS:
-                if kw in lb:
+                if kw.lower() in lb.lower():
                     return lb
         return None
 
@@ -155,11 +156,16 @@ class MergedConfirmAgent:
         body = mi.body or ""
         joined = f"{title} {body}".lower()
 
-        # —— 下游已承接信号：仅当命中具体 Issue 锚点（#编号）才判定已派发 → CLOSE ——
-        # 「已由 #xx 承接」「关联：#12」「解锁自 #3」「下游工作包 #7」等带编号才算落地；
-        # 「已由负责人正在讨论」「承接中」「Ref:（未带编号）」等未落地表述不判定。
+        # —— 下游已承接信号：仅当命中「明确承接语义 + 具体 Issue 锚点（#编号）」才判定已派发 → CLOSE ——
+        # 「已由 #xx 承接」「解锁自 #3」「下游工作包 #7」「#xx 承接」等明确承接才落地；
+        # 「该需求由 #100 提出」「已完成，关联 #55」（来源/关联引用）不判定为下游已承接；
+        # 「已由负责人正在讨论」「承接中」「Ref:（未带编号）」等未落地表述也不判定。
         downstream_handled_re = re.compile(
-            r'(?:已由|由|承接|关联|解锁自|下游工作包)\s*#\d+', re.IGNORECASE)
+            r'(?:已由)\s*#\d+(?:/\s*#?\d+)*\s*(?:承接|派发|落地|负责|跟进|处理)'
+            r'|(?:解锁自)\s*#\d+'
+            r'|(?:下游工作包)\s*#\d+'
+            r'|#\d+\s*(?:承接|派发|落地)',
+            re.IGNORECASE)
         has_downstream = bool(downstream_handled_re.search(joined))
 
         # 阻塞 / 待复核：仅「状态前缀(待/未/仍/还有)+主题词」组合才算未完成 → KEEP
@@ -173,17 +179,33 @@ class MergedConfirmAgent:
         has_block = (any(re.search(pt, joined) for pt in block_patterns)
                      or any(kw.lower() in joined for kw in block_keywords))
 
+        # —— 否定前缀 / 完成态剥离（Bug A 防护）——
+        # 「无后续任务」「没有后续推进」「后续任务已完成落地」等否定/完成态表述
+        # 不应触发 NEW_ISSUE，应判 CLOSE。先剥离否定与完成态语境再判后续关键词。
+        stripped = re.sub(
+            r'(?:无|没有|不需要|不再|未|尚未)\s*(?:后续|下一阶段|下一步|待推进|待实施|后续任务|后续推进)',
+            ' ', joined)
+        stripped = re.sub(
+            r'(?:后续任务|后续推进|后续待办|待收尾|下一阶段|下一步|待推进|待实施)\s*(?:已完成|已落地|已收尾|已实施|已实现|已推进完|已完工|已结束)',
+            ' ', stripped)
+
         # 后续推进关键词（命中且无下游承接 → 判定 NEW_ISSUE）
         # 注意：不再用宽泛的「后续」（「后续方案/后续讨论」等模糊表述易误判），
         #       只用能表达「明确未派发后续任务」的精准关键词。
+        #       裸版本号 v0.9/v1.0/v2 也会被「已上线」等完成态提及，不再单独判 NEW，
+        #       改为「阶段前缀 + 版本号」组合正则才判 NEW。
         next_keywords = [
             "下一阶段", "待联动", "待推进", "待实施", "继续完善", "继续推进",
-            "待收尾", "下一步", "v0.9", "v1.0", "下一阶段v", "待派发",
+            "待收尾", "下一步", "下一阶段v", "待派发",
             "待合并", "待合入", "待验收", "待回归", "后续任务", "后续推进",
-            "有待推进", "后续待办", "下一轮", "二期", "v2",
+            "有待推进", "后续待办", "下一轮", "二期",
         ]
+        next_version_re = re.compile(
+            r'(?:下一阶段|待联动|待推进|待实施|二期)\s*v?\d+(?:\.\d+)*', re.IGNORECASE)
+        has_next_version = bool(next_version_re.search(stripped))
         # 后续未派发才判定 NEW_ISSUE；若已带编号被下游承接则不算"未派发的后续"
-        has_next = any(kw.lower() in joined for kw in next_keywords) and not has_downstream
+        has_next = (any(kw.lower() in stripped for kw in next_keywords)
+                    or has_next_version) and not has_downstream
 
         # 模糊讨论中（无明确承接对象/目标/排期）→ 保守 KEEP，不新建 Issue 不关闭
         vague_discussion_patterns = [
@@ -192,7 +214,7 @@ class MergedConfirmAgent:
             r'(?:负责人|相关方)(?:正在|仍在)(?:讨论|推进|跟踪)',
             r'(?:讨论中|研究中|探讨中)',
         ]
-        has_vague_discussion = any(re.search(pt, joined) for pt in vague_discussion_patterns)
+        has_vague_discussion = any(re.search(pt, stripped) for pt in vague_discussion_patterns)
 
         # 评论数多且 open，可能仍在推进 → 保守 KEEP
         active_discussion = mi.comment_count >= 5 and not has_downstream
@@ -201,6 +223,11 @@ class MergedConfirmAgent:
             return (DECISION_KEEP,
                     f"Issue #{mi.number} 命中阻塞/待复核关键词，可能仍有依赖或阻塞未收尾",
                     "保留 Issue，交由对应负责人继续推进，暂不关闭")
+        # 下游已承接优先于模糊讨论：既有明确承接锚点又提及「正在讨论」，优先判定 CLOSE
+        if has_downstream:
+            return (DECISION_CLOSE,
+                    f"Issue #{mi.number} 已合并（标签「{mi.merged_label}」），后续任务已由下游 Issue 承接",
+                    "关闭 Issue（工作已完成，后续已派发到新 Issue）")
         if has_vague_discussion and not has_next:
             return (DECISION_KEEP,
                     f"Issue #{mi.number} 仍处于模糊讨论/规划阶段（无明确承接对象或排期）",
@@ -209,11 +236,6 @@ class MergedConfirmAgent:
             return (DECISION_NEW_ISSUE,
                     f"Issue #{mi.number} 已合并但描述/标签明确有「下一阶段/待联动/待推进」等后续任务且未派发",
                     "新建 Issue 承接后续任务，并关闭原 Issue（保留合并记录）")
-        if has_downstream:
-            # 后续任务已由下游 Issue 承接，原 Issue 可关闭
-            return (DECISION_CLOSE,
-                    f"Issue #{mi.number} 已合并（标签「{mi.merged_label}」），后续任务已由下游 Issue 承接",
-                    "关闭 Issue（工作已完成，后续已派发到新 Issue）")
         if active_discussion:
             return (DECISION_KEEP,
                     f"Issue #{mi.number} 评论数较多（{mi.comment_count}）且状态仍 open，可能仍有讨论在推进",

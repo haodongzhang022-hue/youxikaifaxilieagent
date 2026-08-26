@@ -218,6 +218,69 @@ else
   echo "$out"
 fi
 
+echo "== 6. 启发式精度回归（Bug A/B + 版本号 + 下游优先 + merged大小写）=="
+out=$($PY - <<'PY'
+from merged_confirm_agent import (
+    MergedConfirmAgent, DECISION_CLOSE, DECISION_KEEP, DECISION_NEW_ISSUE,
+)
+
+# Bug A：否定/完成态不误判 NEW_ISSUE
+a = MergedConfirmAgent()
+issues = [
+    {"number": "401", "state": "open", "title": "无后续",
+     "body": "已合并，无后续任务，可关闭", "labels": [{"name": "已合并"}], "comment_count": 1},
+    {"number": "402", "state": "open", "title": "后续已完成",
+     "body": "已合并，后续任务已完成落地", "labels": [{"name": "已合并"}], "comment_count": 1},
+    # Bug B：来源/关联引用不误判 close（有未派发后续时不该被短路为 close）
+    {"number": "403", "state": "open", "title": "来源引用",
+     "body": "已合并，仍有下一阶段待推进未派发。该需求由 #100 提出",
+     "labels": [{"name": "已合并"}], "comment_count": 1},
+    {"number": "404", "state": "open", "title": "关联引用",
+     "body": "已合并，仍有后续任务待推进未派发。已完成，关联 #55",
+     "labels": [{"name": "已合并"}], "comment_count": 1},
+    # 真实承接 → close
+    {"number": "405", "state": "open", "title": "真实承接",
+     "body": "已合并，下游工作包已由 #24 承接", "labels": [{"name": "已合并"}], "comment_count": 1},
+    # 裸版本号完成态 → 不误判 NEW_ISSUE
+    {"number": "406", "state": "open", "title": "版本号",
+     "body": "已在 v1.0 交付完成", "labels": [{"name": "已合并"}], "comment_count": 1},
+    # 阶段+版本组合 → NEW_ISSUE
+    {"number": "407", "state": "open", "title": "版本阶段",
+     "body": "已合并，下一阶段 v2.0 待推进未派发", "labels": [{"name": "已合并"}], "comment_count": 1},
+]
+decided = a.confirm(a.probe(issues))
+res = {d.number: d.decision for d in decided}
+ok_401 = res.get("401") == DECISION_CLOSE
+ok_402 = res.get("402") == DECISION_CLOSE
+ok_403 = res.get("403") == DECISION_NEW_ISSUE
+ok_404 = res.get("404") == DECISION_NEW_ISSUE
+ok_405 = res.get("405") == DECISION_CLOSE
+ok_406 = res.get("406") == DECISION_CLOSE
+ok_407 = res.get("407") == DECISION_NEW_ISSUE
+
+# merged 大小写不敏感 + 无「已上线」
+b = MergedConfirmAgent()
+cands = b.probe([
+    {"number": "501", "state": "open", "title": "t", "body": "已完成",
+     "labels": [{"name": "MERGED 完成"}], "comment_count": 1},
+    {"number": "502", "state": "open", "title": "t", "body": "已完成",
+     "labels": [{"name": "已上线"}], "comment_count": 1},  # 已移除 → 不probe
+])
+ok_merged = sorted(c.number for c in cands) == ["501"]
+no_shangxian = "已上线" not in MergedConfirmAgent.MERGED_LABEL_KEYWORDS
+
+print("ok_401=%s ok_402=%s ok_403=%s ok_404=%s ok_405=%s ok_406=%s ok_407=%s ok_merged=%s no_shangxian=%s" %
+      (ok_401, ok_402, ok_403, ok_404, ok_405, ok_406, ok_407, ok_merged, no_shangxian))
+PY
+)
+if echo "$out" | grep -q "ok_401=True ok_402=True ok_403=True ok_404=True ok_405=True ok_406=True ok_407=True ok_merged=True no_shangxian=True"; then
+  report "启发式精度回归（否定/完成态/来源关联引用/版本号/下游/merged大小写）" 0
+else
+  report "启发式精度回归（否定/完成态/来源关联引用/版本号/下游/merged大小写）" 1
+  echo "$out"
+fi
+
+
 echo ""
 echo "======== 汇总 ========"
 echo "通过: $pass  失败: $fail"
