@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from agent_core import BaseAgent
 from message_bus import Message, MessageBus, build_task_assign, build_message
 from task_scheduler import Scheduler, Task, TaskState
+from role_collaboration import CollaborationWorkbench
 
 # 尝试加载 PyYAML 用于从 roles.yaml 解析部门角色（缺失时回退到内置默认表）
 try:
@@ -146,6 +147,8 @@ class GameProducerAgent(BaseAgent):
         # balance_designer）时，同一实例化成员被并行 WP 反复指派为唯一主责
         # 而成为产能瓶颈。
         self._owner_load: Dict[str, int] = {}
+        # 角色间协作工作台：支持多角色互相@（任务转交/分工协作/协作请求）
+        self.collab = CollaborationWorkbench()
 
     # ---------- 覆写 BaseAgent 钩子 ----------
     def on_boot(self):
@@ -266,6 +269,78 @@ class GameProducerAgent(BaseAgent):
 
         elif msg.type == "NOTIFICATION":
             self._log("notification", str(msg.content))
+
+        elif msg.type in ("HANDOFF", "DELEGATE", "COLLAB_REQ", "ACK", "COLLAB_NOTIFY"):
+            self._on_collab_event(msg)
+
+    # ---------- 多角色互相@ 协作（任务转交 + 分工协作） ----------
+    def _on_collab_event(self, msg: Message):
+        """路由角色间互相@ 的协作事件。"""
+        c = msg.content or {}
+        task_id = c.get("task_id", "")
+        if not task_id:
+            self._log("collab", f"协作事件缺少 task_id: {msg.type}")
+            return
+        try:
+            if msg.type == "HANDOFF":
+                # 经理/角色把工作包转交给另一位角色
+                res = self.collab.handoff(task_id, c.get("title", ""),
+                                          msg.from_role, msg.to_role,
+                                          note=c.get("note", ""))
+                self._log("collab_handoff", f"{msg.from_role}@转交 {task_id} -> {msg.to_role}")
+            elif msg.type == "DELEGATE":
+                # 经理/角色把一个工作包拆分为多子任务分发给多角色并行
+                res = self.collab.delegate(task_id, c.get("title", ""),
+                                           msg.from_role,
+                                           c.get("assignments", []),
+                                           note=c.get("note", ""))
+                self._log("collab_delegate",
+                          f"{msg.from_role}@分工 {task_id} -> {c.get('assignments', [])}")
+                # 汇总分工进度并发回发起者
+                self.bus.publish(build_message(
+                    "COLLAB_NOTIFY", self.role_id, msg.from_role,
+                    {"task_id": task_id, "sub_tasks": res.get("sub_tasks", []),
+                     "event": "DELEGATE_OFFERED"}))
+            elif msg.type == "COLLAB_REQ":
+                res = self.collab.request_collab(task_id, c.get("title", ""),
+                                                 msg.from_role, msg.to_role,
+                                                 need=c.get("need", ""))
+                self._log("collab_request", f"{msg.from_role}@请求 {msg.to_role} 协助 {task_id}")
+            elif msg.type == "ACK":
+                res = self.collab.acknowledge(task_id, msg.from_role,
+                                              c.get("action", ""),
+                                              reason=c.get("reason", ""),
+                                              reassign_to=c.get("reassign_to"))
+                self._log("collab_ack", f"{msg.from_role} 对 {task_id} 执行 {c.get('action')}")
+            elif msg.type == "COLLAB_NOTIFY":
+                self._log("collab_notify", f"协作进度通知: {task_id} {str(c)}")
+        except Exception as e:  # pragma: no cover
+            self._log("collab_error", f"{task_id}: {e}")
+
+    def handoff_wp(self, wp_id: str, from_role: str, to_role: str,
+                   title: str = "", note: str = "") -> dict:
+        """便捷：经理把工作包转交给指定角色。"""
+        res = self.collab.handoff(wp_id, title or wp_id, from_role, to_role, note=note)
+        self.bus.publish(build_message(
+            "HANDOFF", from_role, to_role,
+            {"task_id": wp_id, "title": title or wp_id, "note": note}))
+        return res
+
+    def delegate_wp(self, wp_id: str, from_role: str,
+                    assignments: List[Dict[str, str]],
+                    title: str = "") -> dict:
+        """便捷：经理把工作包拆分为多子任务分发给多角色并行协作。"""
+        res = self.collab.delegate(wp_id, title or wp_id, from_role, assignments)
+        for a in assignments:
+            self.bus.publish(build_message(
+                "DELEGATE", from_role, a["role"],
+                {"task_id": wp_id, "title": title or wp_id,
+                 "assignments": assignments, "note": a.get("desc", "")}))
+        return res
+
+    def collab_status(self, wp_id: str) -> Dict[str, Any]:
+        """查询工作包的协作状态（转交链/进度/审计）。"""
+        return self.collab.audit(wp_id)
 
     # ---------- 编排各阶段 ----------
     def _start_orchestration(self, architecture: Dict[str, Any]):
