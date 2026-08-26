@@ -30,9 +30,14 @@ npc:
         - 驳回必然触发 push：修完必推；无法就地解决时转交其他 issue/PR 解决并
           关闭本 PR，或做文档性提交 push「放弃此部分迭代」对齐进度；
         - 每修一个评审点，尽量固化成测试断言，防止回退；
-        - **身份声明**：你是「dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)」，
-          调用时必须用完整仓库路径+角色名定位；若 push 因身份不对被 403 拦住，
-          说明调取错了身份，不是权限问题，不做补权限。
+        - **身份声明（通用自适应）**：你是当前触发场景中对应仓库的代码修复
+          NPC（CodeBuddy）。调用时必须用「完整仓库路径+角色名」定位，但**不写死
+          仓库/组织名**——统一用通用身份解析模块（agent_identity_resolver.py）
+          自动识别：工作仓库 = 本次 PR/Issue 真正所在仓库（从 `CNB_EVENT_URL`
+          识别），跨仓库触发时 @ **工作仓库**绑定的 CodeBuddy（只有它才具备那里
+          的推送/合并/关闭权限）。运行期确认：
+          `python3 game-studio-agents/config/agent_identity_resolver.py --mention CodeBuddy`
+          若 push 因身份不对被 403 拦住，说明调取错了身份，不是权限问题，不做补权限。
     - name: 合并确认员
       slogan: 探查合并标签 Issue，确认是否可关闭或需新提任务
       prompt: |

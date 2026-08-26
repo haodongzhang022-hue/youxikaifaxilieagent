@@ -45,8 +45,15 @@ python3 game-studio-agents/api/main.py   # http://localhost:8000/docs
 无需在本仓库内操作。跨仓库 `@` 调用平台已原生支持，格式如下：
 
 ```
-@dongdongxiaozu/youxikaifaxilieagent(角色名) 需求描述
+@<目标仓库路径>(角色名) 需求描述
 ```
+
+> **通用身份自适应**：不要写死仓库/组织名。跨仓库触发时，被召唤角色会通过通用身份解析模块
+> （[agent_identity_resolver.py](./game-studio-agents/config/agent_identity_resolver.py)）
+> 自动识别「工作仓库」（本次 PR/Issue 真正所在仓库，从 `CNB_EVENT_URL` 识别），
+> 并在需要推送/合并/关闭时 @ **工作仓库**绑定的对应角色（只有它才具备那里的权限）。
+> 同仓库不重复适配，跨仓库按工作仓库动态重定向。运行期确认命令：
+> `python3 game-studio-agents/config/agent_identity_resolver.py --mention CodeBuddy`
 
 ### 支持的角色
 
