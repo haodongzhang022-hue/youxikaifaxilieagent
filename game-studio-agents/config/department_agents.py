@@ -384,10 +384,43 @@ class ArtDeptAgent(DepartmentAgent):
         label = work_package.get("label", "")
         project = work_package.get("project", "未命名")
         if module == "art_direction":
+            # wp_art_direction：把美术风格/品质基准接入生态角色体系，
+            # 让美术品质进入市场预演的美术质量维度博弈。
+            numeric_model = {
+                "base_quality": 65.0,
+                "art_quality": 72.0,          # 美术品质基准（art_director 产出）
+                "art_sens": 0.2,              # 泛玩家美术敏感度偏好
+                "arpu": 2.5,
+                "ecpm": 6.0,
+                "ad_impressions": 8,
+                "channel_cut": 0.3,
+                "competition": 0.4,
+                "marketing_budget": 80000,
+                "mass_player_base": 200000,
+                "complexity": 0.35,
+                "monetization": {"iap_depth": 0.5, "iaa_density": 0.25},
+            }
+            # 美术品质进入市场预演沙盒：构建标准化输入并跑纳什均衡，
+            # 让玩家圈对美术品质的偏好生效（wp_art_direction 验收）。
+            market_input = build_market_input(numeric_model, project=project)
+            market_result = market_input.solve()
             artifact = {
                 "module": "art_direction", "label": label, "project": project,
                 "artifact_type": "style_guide",
-                "content": {"style": "美术风格定义", "palette": "配色方案"},
+                "content": {"style": "美术风格定义", "palette": "配色方案",
+                              "art_quality": numeric_model["art_quality"]},
+                # 美术品质接入市场预演：玩家圈对美术品质的偏好生效
+                "market_input": {
+                    "context": market_input.context,
+                    "roles": [{"role_id": r.role_id, "circle": r.circle,
+                                "strategies": [s.name for s in r.strategy_space]}
+                               for r in market_input.roles],
+                },
+                "market_simulation": {
+                    "equilibrium": market_result["equilibrium"],
+                    "iterations": market_result["iterations"],
+                    "metrics": market_result["metrics"],
+                },
             }
         elif module == "ui_ux":
             artifact = {

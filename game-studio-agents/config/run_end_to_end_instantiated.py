@@ -205,11 +205,11 @@ class InstantiatedTeamOrchestrator:
                     if t.payload.get("work_package")]
         return bool(wp_tasks) and all(t.state == TaskState.DONE.value for t in wp_tasks)
 
-    # ---------- 生态角色派发（wp_server / wp_ai_logic）----------
+    # ---------- 生态角色派发（wp_server / wp_ai_logic / wp_art_direction）----------
     def dispatch_ecosystem(self) -> Dict[str, Any]:
         """把生态角色作为可派发 Agent 接入 task_scheduler + message_bus。
 
-        选取代表性的生态角色（协作支持圈 / 玩家圈 / 外部市场圈）派发任务，
+        选取代表性的生态角色（协作支持圈 / 玩家圈 / 外部市场圈 / 美术圈）派发任务，
         证明生态角色已注册为可派发 Agent 并真正进入部门流水线派发。
         """
         if self.ecosystem is None:
@@ -312,8 +312,8 @@ def demo() -> InstantiatedTeamOrchestrator:
 
     # wp_server / wp_ai_logic：生态角色注册为可派发 Agent
     eco = orch.dispatch_ecosystem()
-    print("\n[4] 生态角色注册为可派发 Agent（wp_server / wp_ai_logic）")
-    print(f"    已注册生态角色: {len(orch.ecosystem.roles)} 个（协作支持/玩家/外部市场）")
+    print("\n[4] 生态角色注册为可派发 Agent（wp_server / wp_ai_logic / wp_art_direction）")
+    print(f"    已注册生态角色: {len(orch.ecosystem.roles)} 个（协作支持/玩家/外部市场/美术）")
     print(f"    已派发生态角色任务: {eco['dispatched']} 个 -> {', '.join(orch.eco_tasks)}")
     print(f"    派发消息已 publish 到 message_bus: {eco['publish_messages']} 条")
 

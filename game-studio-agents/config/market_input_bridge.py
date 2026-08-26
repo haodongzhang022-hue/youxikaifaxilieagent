@@ -33,6 +33,7 @@ from market_simulator import MarketSimulator, Role, Strategy, NashSolver, Outcom
 FIELD_MAP = {
     # 数值模型字段        市场模拟 context 字段
     "base_quality":       "base_quality",           # 研发产物品质（决定上限）
+    "art_quality":        "art_quality",            # wp_art_direction：美术品质基准
     "arpu":               "arpu_base",              # 人均付费基准(ARPU)
     "ecpm":               "ecpm_base",              # 广告千次曝光收益
     "ad_impressions":     "ad_impressions",         # 日均广告曝光次数
@@ -90,6 +91,14 @@ def build_roles(numeric_model: Dict[str, Any]) -> List[Role]:
     complexity_hi = min(0.9, complexity + 0.3)
     budget_lo = budget * 0.5
     budget_hi = budget * 1.5
+    # wp_art_direction：美术品质基准（默认以整体品质为锚点）
+    art_quality = float(numeric_model.get("art_quality",
+                                         numeric_model.get("base_quality", 60.0)))
+    # 泛玩家美术敏感度（偏好档案）：默认对美术敏感度较低（0.2），
+    # 核心/付费玩家对美术品质敏感，美术品质进入市场预演博弈。
+    art_sens = float(numeric_model.get("art_sens", 0.2))
+    art_sens_lo = max(0.05, art_sens - 0.1)
+    art_sens_hi = min(0.5, art_sens + 0.2)
 
     roles = [
         Role("mass_player", "泛玩家", "players",
@@ -97,9 +106,18 @@ def build_roles(numeric_model: Dict[str, Any]) -> List[Role]:
                  ctx["last_outcome"].metrics["reputation"]
                  * ctx["last_outcome"].metrics["dau"]),
              strategy_space=[
-                 Strategy("低门槛", {"complexity": round(complexity_lo, 2)}),
-                 Strategy("基准门槛", {"complexity": round(complexity, 2)}),
-                 Strategy("中门槛", {"complexity": round(complexity_hi, 2)}),
+                 Strategy("低门槛", {"complexity": round(complexity_lo, 2), "art_sens": round(art_sens_lo, 2)}),
+                 Strategy("基准门槛", {"complexity": round(complexity, 2), "art_sens": round(art_sens, 2)}),
+                 Strategy("中门槛", {"complexity": round(complexity_hi, 2), "art_sens": round(art_sens_hi, 2)}),
+             ]),
+        Role("core_player", "核心玩家", "players",
+             payoff_fn=lambda ctx, mine, others: (
+                 ctx["last_outcome"].metrics["art_satisfaction"]
+                 * ctx["last_outcome"].metrics["d30_retention"]),
+             strategy_space=[
+                 Strategy("美术宽松", {"art_preference": 0.3}),
+                 Strategy("基准偏好", {"art_preference": 0.5}),
+                 Strategy("美术挑剔", {"art_preference": 0.8}),
              ]),
         Role("payer", "付费玩家", "players",
              payoff_fn=lambda ctx, mine, others: (
@@ -210,6 +228,8 @@ def demo():
         "growth_curve": "成长曲线",
         "balance": "平衡性数值",
         "base_quality": 65.0,
+        "art_quality": 70.0,          # wp_art_direction：美术品质基准
+        "art_sens": 0.2,               # 泛玩家美术敏感度偏好
         "arpu": 2.5,
         "ecpm": 6.0,
         "ad_impressions": 8,
@@ -247,6 +267,7 @@ def demo():
     m = result["metrics"]
     print(f"      口碑: {m['reputation']:.2f}/10")
     print(f"      30日留存: {m['d30_retention']*100:.1f}%")
+    print(f"      美术品质: {m['art_quality']:.0f}  美术满意度: {m['art_satisfaction']:.2f}/10")
     print(f"      ROI: {m['roi']:.2f}")
     return result
 

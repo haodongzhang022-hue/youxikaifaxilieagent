@@ -68,6 +68,7 @@ $:
             bash game-studio-agents/tests/test_review_fix_loop.sh
             bash game-studio-agents/tests/test_market_input_bridge.sh
             bash game-studio-agents/tests/test_ecosystem_roles.sh
+            bash game-studio-agents/tests/test_art_direction.sh
             bash game-studio-agents/tests/test_data_ops_diagnosis.sh
             bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
             bash game-studio-agents/tests/test_release_gate.sh

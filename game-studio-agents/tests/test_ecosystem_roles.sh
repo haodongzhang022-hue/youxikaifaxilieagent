@@ -35,35 +35,45 @@ else
   report "三大生态圈角色注册（协作支持/玩家/外部市场）" 1
 fi
 
+# 1b. 美术圈生态角色注册（wp_art_direction）
+if echo "$out" | grep -q "美术圈.*art_director" \
+   && echo "$out" | grep -q "美术圈.*tech_artist" \
+   && echo "$out" | grep -q "美术圈.*audio_designer"; then
+  report "美术圈生态角色注册（art_director/tech_artist/audio_designer）" 0
+else
+  report "美术圈生态角色注册（art_director/tech_artist/audio_designer）" 1
+fi
+
 # 2. 生态角色接入 task_scheduler（可派发 owner）
-if echo "$out" | grep -q "owner=publisher" && echo "$out" | grep -q "owner=progress_pusher"; then
+if echo "$out" | grep -q "owner=publisher" && echo "$out" | grep -q "owner=progress_pusher" \
+   && echo "$out" | grep -q "owner=art_director"; then
   report "生态角色接入 task_scheduler 派发" 0
 else
   report "生态角色接入 task_scheduler 派发" 1
 fi
 
 # 3. 派发消息 publish 到 message_bus
-if echo "$out" | grep -q "TASK_ASSIGN: 3 条"; then
+if echo "$out" | grep -q "TASK_ASSIGN: 4 条"; then
   report "TASK_ASSIGN 派发消息 publish 到 message_bus" 0
 else
   report "TASK_ASSIGN 派发消息 publish 到 message_bus" 1
 fi
 
-# 4. 注册汇总（total>=18）
-if echo "$out" | grep -q "total: 18"; then
-  report "生态角色注册汇总（18 个）" 0
+# 4. 注册汇总（total>=21）
+if echo "$out" | grep -q "total: 21"; then
+  report "生态角色注册汇总（21 个，含美术圈 3 个）" 0
 else
-  report "生态角色注册汇总（18 个）" 1
+  report "生态角色注册汇总（21 个，含美术圈 3 个）" 1
 fi
 
 echo "== 2. 实例化团队端到端中的生态角色装配派发 =="
 out2=$($PY run_end_to_end_instantiated.py 2>&1)
 
 # 5. 实例化团队流程中生态角色注册为可派发 Agent
-if echo "$out2" | grep -q "已注册生态角色: 18 个"; then
-  report "端到端流程注册 18 个生态角色为可派发 Agent" 0
+if echo "$out2" | grep -q "已注册生态角色: 21 个"; then
+  report "端到端流程注册 21 个生态角色为可派发 Agent" 0
 else
-  report "端到端流程注册 18 个生态角色为可派发 Agent" 1
+  report "端到端流程注册 21 个生态角色为可派发 Agent" 1
 fi
 
 # 6. 生态角色任务已派发

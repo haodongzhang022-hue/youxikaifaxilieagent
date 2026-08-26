@@ -691,6 +691,104 @@ market_roles:
         - "历史审核红线"
 
 # ============================================================
+# 四·B、美术生态角色 (Art Ecosystem Roles)
+# ============================================================
+# wp_art_direction / wp_ui_ux / wp_audio（美术线·art_director / tech_artist /
+# audio_designer）落地产出：把美术圈角色登记为生态角色，复用
+# ecosystem_role_registry 注册为可派发 Agent，接入 task_scheduler + message_bus。
+art_roles:
+
+  # ---------------- 美术指导 ----------------
+  - role_id: "art_director"
+    name: "美术指导"
+    en_name: "Art Director"
+    circle: "art"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["品质挑剔", "风格严谨", "统一性优先"]
+      key_metrics: ["美术风格统一度", "品质基准", "美术满意度"]
+      preference_vector: {art_quality: 0.9, art_consistency: 0.8, content_taste: "premium"}
+
+    role_in_simulation:
+      - "把美术风格/品质基准接入生态角色体系（wp_art_direction）"
+      - "让玩家圈对美术品质的偏好进入市场预演的美术质量维度博弈"
+
+    agent_logic:
+      decision_points:
+        - "美术品质是否达标？→ 依据: 玩家圈美术满意度 + 风格统一度"
+        - "是否提升美术投入？→ 依据: 美术品质对留存/口碑的边际收益"
+      knowledge_base:
+        - "玩家美术偏好档案库"
+        - "美术品质对留存/口碑的影响曲线"
+
+    collaboration:
+      sends_to: ["tech_artist", "audio_designer", "core_player", "payer"]
+      receives_from: ["core_player", "payer", "mass_player"]
+      needs_approval_from: []
+      approves: ["美术风格规范", "美术产出品质"]
+
+  # ---------------- 技术美术 ----------------
+  - role_id: "tech_artist"
+    name: "技术美术"
+    en_name: "Tech Artist"
+    circle: "art"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["桥梁思维", "管线优化", "务实耐心"]
+      key_metrics: ["UI/UX 规范", "渲染效率", "管线顺畅度"]
+      preference_vector: {art_quality: 0.7, perf_priority: 0.8, content_taste: "tech"}
+
+    role_in_simulation:
+      - "接入美术线 UI/UX 与交互规范（wp_ui_ux）"
+      - "作为可派发 Agent 处理美术管线优化"
+
+    agent_logic:
+      decision_points:
+        - "管线是否顺畅？→ 依据: 美术与程序协作摩擦度"
+        - "UI/UX 是否达标？→ 依据: 交互规范 + 视觉一致"
+      knowledge_base:
+        - "渲染/管线基准库"
+        - "UI/UX 交互规范库"
+
+    collaboration:
+      sends_to: ["art_director", "client_dev", "ui_ux"]
+      receives_from: ["art_director", "client_dev"]
+      needs_approval_from: ["art_director"]
+      approves: ["美术资源管线", "UI/UX 规范"]
+
+  # ---------------- 音频设计师 ----------------
+  - role_id: "audio_designer"
+    name: "音频设计师"
+    en_name: "Audio Designer"
+    circle: "art"
+    type: "simulation_agent"
+
+    profile:
+      traits: ["氛围塑造", "音效细节", "情感引导"]
+      key_metrics: ["音频沉浸度", "音效匹配度", "BGM 品质"]
+      preference_vector: {art_quality: 0.6, audio_focus: 0.9, content_taste: "immersive"}
+
+    role_in_simulation:
+      - "接入美术线音频角色（wp_audio）"
+      - "音频资源纳入市场预演联动维度"
+
+    agent_logic:
+      decision_points:
+        - "音频是否沉浸？→ 依据: 音效匹配度 + BGM 情绪引导"
+        - "是否补充音频资源？→ 依据: 音频对玩家体验的边际提升"
+      knowledge_base:
+        - "音频品质基准库"
+        - "音效情绪映射库"
+
+    collaboration:
+      sends_to: ["art_director", "animator", "vfx_artist"]
+      receives_from: ["art_director", "player"]
+      needs_approval_from: ["art_director"]
+      approves: ["音频资源清单"]
+
+# ============================================================
 # 五、生态模拟与纳什均衡全局配置
 # ============================================================
 ecosystem_simulation:
