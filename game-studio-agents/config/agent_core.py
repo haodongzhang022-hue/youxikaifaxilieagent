@@ -20,6 +20,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from message_bus import Message, MessageBus
 
+# 统一派发工作能力（所有 Agent 共享的高频复用模块）
+# 延迟 import 以避免循环依赖（dispatch_capability 只依赖 message_bus / task_scheduler）
+
 
 # ============================================================
 # 一、生命周期状态（与 v0.1 agent_behavior.py 一致）
@@ -227,6 +230,60 @@ class BaseAgent(ABC):
         # 注册到消息总线
         self.bus.register(role_id)
         self.bus.on(role_id, self._receive)
+
+        # 统一派发工作能力（所有 Agent 共享）
+        # 通过 DispatchCapability 让每个 Agent 都能：
+        #   - dispatch(): 派发任务/工作包给其他角色
+        #   - dispatch_work_package(): 派发标准工作包
+        #   - dispatch_batch(): 批量派发（含依赖）
+        #   - on_complete(): 完成 → 自动解锁下游并派发
+        #   - on_fail(): 标记失败
+        #   - track(): 查询任务状态
+        # 用法见 config/dispatch_capability.py 的 DISPATCH_GUIDE
+        self._dispatch_cap = None  # 惰性初始化
+
+    def dispatch_capability(self):
+        """获取本 Agent 的统一派发能力（懒加载）。
+
+        返回 DispatchCapability 实例，即可使用 dispatch / dispatch_batch /
+        on_complete / on_fail / track 等能力。
+        """
+        if self._dispatch_cap is None:
+            # 延迟 import，避免循环依赖
+            from dispatch_capability import DispatchCapability
+            self._dispatch_cap = DispatchCapability(
+                caller_role=self.role_id, bus=self.bus)
+        return self._dispatch_cap
+
+    # ---------- 统一派发能力快捷方法 ----------
+
+    def dispatch(self, task_name: str, owner: str, priority: str = "NORMAL",
+                 depends_on: list = None, payload: dict = None, ddl: float = None,
+                 task_id: str = None):
+        """派发一个任务给指定角色。"""
+        return self.dispatch_capability().dispatch(
+            task_name=task_name, owner=owner, priority=priority,
+            depends_on=depends_on, payload=payload, ddl=ddl, task_id=task_id)
+
+    def dispatch_work_package(self, work_package: dict):
+        """派发一个标准工作包。"""
+        return self.dispatch_capability().dispatch_work_package(work_package)
+
+    def dispatch_batch(self, work_packages: list):
+        """批量派发多个工作包（含依赖）。"""
+        return self.dispatch_capability().dispatch_batch(work_packages)
+
+    def dispatch_complete(self, task_id: str, note: str = ""):
+        """标记任务完成 → 自动解锁下游并派发。"""
+        return self.dispatch_capability().on_complete(task_id, note)
+
+    def dispatch_fail(self, task_id: str, reason: str = ""):
+        """标记任务失败。"""
+        return self.dispatch_capability().on_fail(task_id, reason)
+
+    def dispatch_track(self, task_id: str):
+        """查询任务状态。"""
+        return self.dispatch_capability().track(task_id)
 
     # ---------- 生命周期 ----------
     def boot(self) -> "BaseAgent":

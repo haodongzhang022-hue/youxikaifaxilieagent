@@ -147,6 +147,14 @@ class GameProducerAgent(BaseAgent):
         # 而成为产能瓶颈。
         self._owner_load: Dict[str, int] = {}
 
+    def dispatch_capability(self):
+        """经理的统一派发能力（复用现有 scheduler，与派发流水线共享）。"""
+        if self._dispatch_cap is None:
+            from dispatch_capability import DispatchCapability
+            self._dispatch_cap = DispatchCapability(
+                caller_role=self.role_id, bus=self.bus, scheduler=self.scheduler)
+        return self._dispatch_cap
+
     # ---------- 覆写 BaseAgent 钩子 ----------
     def on_boot(self):
         """加载架构蓝图库与部门能力基线。"""
