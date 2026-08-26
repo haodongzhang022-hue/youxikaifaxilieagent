@@ -71,6 +71,7 @@ $:
             bash game-studio-agents/tests/test_data_ops_diagnosis.sh
             bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
             bash game-studio-agents/tests/test_release_gate.sh
+            bash game-studio-agents/tests/test_merged_confirm_agent.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
         - name: 自动分配评审人
@@ -296,6 +297,54 @@ $:
               2. 若指令是询问/探讨（如机制设计、选型）：直接给出分析与结论，
                  不修改代码；
               3. 若指令是要求落地某机制（如多源触发）：按指令修改 .cnb.yml 或文档
-                 并在 PR 源分支提交；
+                并在 PR 源分支提交；
               4. 若问题无法在本 PR 就地解决：说明转交其他 issue/PR 或做文档性提交。
               全程机制驱动。
+
+# ---- 合并标签确认机制（类似审查机制，探查合并标签 issue 个数）----
+# 说明: 定时探查仓库中带「已合并」标签但状态仍为 open 的 Issue，
+#       若数量 > 0 则触发「合并确认员」NPC 逐个确认：
+#         - 已合并且无后续任务 → 关闭 Issue；
+#         - 已合并但有明确后续任务（未派发）→ 新建 Issue 承接并分配任务，关闭原 Issue；
+#         - 已合并但仍有阻塞/待复核/依赖未收尾 → 保留 Issue。
+#   实现: config/merged_confirm_agent.py（探查 probe / 确认 confirm / 决策 decide）
+#   crontab 事件必须放在具体分支名下（此处放 main）。
+#   频率: 每天 06:00 UTC（可调整 cron 表达式）
+main:
+  "crontab: 0 6 * * *":
+    - name: merged-confirm-sweep
+      docker:
+        image: *npc_image
+      stages:
+        - name: 合并标签探查
+          script: |
+            cd game-studio-agents
+            echo "== 探查带「已合并」标签的 open Issue =="
+            python3 config/merged_confirm_agent.py
+        - name: 合并确认员逐个确认
+          type: npc:go
+          options:
+            role: 合并确认员
+            systemPrompt: |
+              你是「合并确认员」（Merged Confirmer）。负责对仓库中已打上「已合并」
+              标签但仍处于 open 状态的 Issue 做工作内容确认——判断当前对话是否还有
+              内容需要推进，还是已适合关闭。你独立于 CodeBuddy，专责确认环节。
+              使用 config/merged_confirm_agent.py 的探查/确认/决策逻辑。
+            userPrompt: |
+              请执行合并标签确认工作流：
+              1. 使用 CNB API 探查仓库中带「已合并」相关标签（如「安全加固已合并」
+                 「经理编排已合并」「预设体系已合并」「生态角色体系已合并」等）且
+                 状态仍为 open 的 Issue，统计数量 N；
+              2. 若 N == 0：说明无待确认 Issue，在本流水线日志输出「无需确认」并结束；
+              3. 若 N > 0：逐个确认每个候选 Issue——读取其标题/描述/标签/评论历史，
+                 判断是否有待推进内容：
+                 - 已合并且无后续任务（下游已由新 Issue 承接）→ 关闭该 Issue，
+                   在 Issue 评论输出确认结论「工作已完成，已合并，关闭」；
+                 - 已合并但有明确后续任务（未派发）→ 新建 Issue 承接该后续任务并
+                   分配处理人，然后关闭原 Issue，在原 Issue 评论说明「后续已派发到
+                   #新Issue」；
+                 - 已合并但仍有阻塞/待复核/依赖未收尾 → 保留 Issue，在评论说明
+                   「仍待推进」原因；
+              4. 在探查到的最新 Issue 上（或本流水线日志）汇总输出确认结果表。
+              全程机制驱动，无需人工推进。
+              注意：不要合并/修改代码，只做 Issue 状态确认与派发。

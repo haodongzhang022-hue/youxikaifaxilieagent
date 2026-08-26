@@ -148,6 +148,18 @@ bash tests/test_release_gate.sh
 >
 > 完整运行规范见 [docs/评审修复闭环护栏.md](./docs/评审修复闭环护栏.md)。
 
+## ✅ 合并确认机制（类似审查机制，确认已合并标签 Issue）
+
+> 针对已打上「已合并」标签但仍 open 的 Issue，由**合并确认员**（独立于 CodeBuddy）
+> 定时确认是否还有内容需要推进：
+> - **已合并且无后续任务** → 关闭 Issue；
+> - **已合并有后续（未派发）** → 新建 Issue 承接 + 关闭原 Issue；
+> - **有阻塞/待复核/依赖未收尾** → 保留 Issue。
+> - 类似审查机制：探查合并标签 Issue 个数，数量 > 0 即触发确认。
+>
+> 核心实现 [config/merged_confirm_agent.py](./config/merged_confirm_agent.py)，
+> 文档见 [docs/merged-confirm-mechanism.md](./docs/merged-confirm-mechanism.md)。
+
 ## 🌐 信息接口层（接口层与人工可视层分离）
 
 > 新增 `api/`：以 FastAPI 提供**信息接口层**。核心设计是**接口层与人工看的层分离**——

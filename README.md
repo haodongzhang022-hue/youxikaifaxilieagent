@@ -54,7 +54,27 @@ python3 game-studio-agents/api/main.py   # http://localhost:8000/docs
 |------|------|
 | 游戏向经理 | 机制化拆解需求 / 派发部门工作包 / 推进协作 |
 | 代码审查员 | 审查 PR 代码质量 / 架构 / 安全 |
+| 合并确认员 | 确认已合并标签 Issue 是否可关闭 / 需新提任务 |
 | CodeBuddy | 评审修复 / 手动指令处理 |
+
+### 合并标签确认机制
+
+仓库通过定时探查自动确认已打上「已合并」标签但仍 open 的 Issue，判断是否还有
+内容需要推进。机制类似审查机制（探查合并标签 Issue 个数，数量 > 0 即触发确认）：
+
+- **合并确认员**（[merged_confirm_agent.py](./game-studio-agents/config/merged_confirm_agent.py)）：
+  独立于 CodeBuddy，专责确认环节；
+- 已合并且无后续任务 → **关闭** Issue；
+- 已合并但有明确后续任务（未派发）→ **新建 Issue 承接**并分配任务，关闭原 Issue；
+- 已合并但仍有阻塞/待复核/依赖未收尾 → **保留** Issue。
+
+```bash
+# 运行合并确认 Agent 自测
+python3 game-studio-agents/config/merged_confirm_agent.py
+
+# 运行测试信号灯
+bash game-studio-agents/tests/test_merged_confirm_agent.sh
+```
 
 ### 让角色出现在 `@` 选择器（可点选，无需手敲全名）
 
