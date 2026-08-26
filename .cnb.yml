@@ -107,11 +107,17 @@ $:
               4. 给出"通过 / 需修改"结论及具体修改点。
               在 PR 评论中输出审查结论。
               【CodeBuddy 触发机制·评审后闭环】
-              5. 若评审结论为"需修改/需改进"：在评论末尾**必须**用
-                 「@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)」完整格式
-                 （仓库路径 + 角色名）点名**本仓库的 CodeBuddy**，说明已完成的
-                 评审结论与需要修复的具体点，触发 `pull_request.comment@npc`
-                 让本仓库 CodeBuddy 接手修复闭环。
+              5. 若评审结论为"需修改/需改进"：在评论末尾**必须**用完整格式点名
+                 **本仓库的 CodeBuddy**，说明已完成的评审结论与需要修复的具体点，
+                 触发 `pull_request.comment@npc` 让本仓库 CodeBuddy 接手修复闭环。
+                 - **仓库路径自适应**：通过环境变量 `$CNB_REPO_SLUG` 获取当前触发
+                   评审的仓库完整路径（格式为 `<组织名>/<仓库名>`），**禁止写死
+                   任何组织名或仓库名**——该仓库可能被 fork/迁移/复制到其他组织或
+                   改名，触发评审时以环境变量 `$CNB_REPO_SLUG` 实际值为准；
+                 - **NPC 名自适应**：通过环境变量 `$CNB_NPC_NAME` 获取本仓库
+                   CodeBuddy 角色名（值为 `CodeBuddy`）；
+                 - **召唤格式**：用「`@$CNB_REPO_SLUG($CNB_NPC_NAME)`」完整格式
+                   （即 `@<实际仓库路径>(CodeBuddy)`）定位到本仓库专属 CodeBuddy；
                  - **不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓 CodeBuddy，
                    权限不对无法推送）；
                  - 完整格式定位可确保调取到本仓库专属 CodeBuddy（具备推送权限），
@@ -163,9 +169,13 @@ $:
                    CodeBuddy（其职责只是读和审，本就不具备推送权限）。这是调取错误被
                    护栏拦住了，属于护栏正常生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
-                   用「`@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)`」完整格式
-                   （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
+                   用「`@$CNB_REPO_SLUG($CNB_NPC_NAME)`」完整格式
+                   （即 `@<当前仓库实际路径>(CodeBuddy)`，通过环境变量动态获取，
+                   **禁止写死组织名/仓库名**）定位到**本仓库的 CodeBuddy**，触发
                    `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
+                   - **自适应获取**：从环境变量 `$CNB_REPO_SLUG` 读取当前触发评审的
+                     仓库完整路径（组织/仓库名都可能变化），从 `$CNB_NPC_NAME` 读取
+                     CodeBuddy 角色名；
                    - 说明文本需写明：已完成的修复点、本次 push 因执行身份不是本仓库
                      CodeBuddy 被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支
                      完成推送并核对触发新一轮评审；
@@ -368,8 +378,9 @@ $:
                    只是读和审，本就不具备推送权限）。这是调取错误被护栏拦住，属于护栏正常
                    生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
-                   用「`@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)`」完整格式
-                   （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
+                   用「`@$CNB_REPO_SLUG($CNB_NPC_NAME)`」完整格式
+                   （即 `@<当前仓库实际路径>(CodeBuddy)`，通过环境变量动态获取，
+                   **禁止写死组织名/仓库名**）定位到**本仓库的 CodeBuddy**，触发
                    `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
                    说明文本需写明已修复点、本次 push 因执行身份不是本仓库 CodeBuddy
                    被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支完成推送并核对
