@@ -331,10 +331,12 @@ main:
       docker:
         image: *npc_image
       stages:
-        - name: 合并标签探查
+        # 阶段名保持与职责一致：此处仅运行 __main__ 自测（冒烟），
+        # 不执行真实探查；真实探查由下一阶段 npc:go「合并确认员」通过 CNB API 完成。
+        - name: 自测冒烟
           script: |
             cd game-studio-agents
-            echo "== 探查带「已合并」标签的 open Issue =="
+            echo "== 合并确认 Agent 自测冒烟（不执行真实探查）=="
             python3 config/merged_confirm_agent.py
         - name: 合并确认员逐个确认
           type: npc:go

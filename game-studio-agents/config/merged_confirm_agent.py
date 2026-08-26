@@ -24,6 +24,7 @@
 # ============================================================
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -70,7 +71,7 @@ class MergedConfirmAgent:
     """
 
     # 匹配的「已合并」标签关键词（支持模糊匹配，如「安全加固已合并」「经理编排已合并」）
-    MERGED_LABEL_KEYWORDS = ("已合并", "已合并")
+    MERGED_LABEL_KEYWORDS = ("已合并", "已合入", "merged", "已上线")
 
     def __init__(self, log_fn: Any = None) -> None:
         self._log = log_fn or (lambda *a, **k: None)
@@ -155,20 +156,23 @@ class MergedConfirmAgent:
         body = mi.body or ""
         joined = f"{title} {body}".lower()
 
-        # —— 下游已承接信号（若命中，即使有「下一阶段」也判定 CLOSE）——
-        # 描述/标签中出现「解锁自」「下游工作包」「已由 #xx 承接」「关联：#xx」等
-        # 表示后续任务已由新 Issue 承接，原 Issue 可关闭。
-        downstream_handled_keywords = [
-            "解锁自", "下游工作包", "已由", "承接", "关联：", "Ref:", "ref #",
-        ]
-        has_downstream = any(kw.lower() in joined for kw in downstream_handled_keywords)
+        # —— 下游已承接信号：仅当命中具体 Issue 锚点（#编号）才判定已派发 → CLOSE ——
+        # 「已由 #xx 承接」「关联：#12」「解锁自 #3」「下游工作包 #7」等带编号才算落地；
+        # 「已由负责人正在讨论」「承接中」「Ref:（未带编号）」等未落地表述不判定。
+        downstream_handled_re = re.compile(
+            r'(?:已由|由|承接|关联|解锁自|下游工作包)\s*#\d+', re.IGNORECASE)
+        has_downstream = bool(downstream_handled_re.search(joined))
 
-        # 阻塞 / 待复核关键词（命中 → 判定 KEEP）
-        block_keywords = [
-            "阻塞", "卡住", "待复核", "被驳回", "待修复", "评审",
-            "返工", "待人工", "需要人工", "待处理", "bug", "问题未解决",
+        # 阻塞 / 待复核：仅「状态前缀(待/未/仍/还有)+主题词」组合才算未完成 → KEEP
+        # 「已通过评审」「已修复 bug」等已完成表述不再误判为 KEEP。
+        block_patterns = [
+            r'(?:待|未|仍|还有)(?:评审|复核|修复|处理|解决|返工|人工|确认|收尾)',
+            r'(?:仍有|还有)(?:阻塞|卡住|问题)',
+            r'(?:被驳回|待人工|需要人工)',
         ]
-        has_block = any(kw.lower() in joined for kw in block_keywords)
+        block_keywords = ["阻塞", "卡住", "返工"]
+        has_block = (any(re.search(pt, joined) for pt in block_patterns)
+                     or any(kw.lower() in joined for kw in block_keywords))
 
         # 后续推进关键词（命中且无下游承接 → 判定 NEW_ISSUE）
         next_keywords = [
@@ -176,7 +180,8 @@ class MergedConfirmAgent:
             "待收尾", "后续", "下一步", "v0.9", "v1.0", "下一阶段v", "待派发",
             "待合并", "待合入", "待验收", "待回归",
         ]
-        has_next = any(kw.lower() in joined for kw in next_keywords)
+        # 后续未派发才判定 NEW_ISSUE；若已带编号被下游承接则不算“未派发的后续”
+        has_next = any(kw.lower() in joined for kw in next_keywords) and not has_downstream
 
         # 评论数多且 open，可能仍在推进 → 保守 KEEP
         active_discussion = mi.comment_count >= 5 and not has_downstream
@@ -185,15 +190,15 @@ class MergedConfirmAgent:
             return (DECISION_KEEP,
                     f"Issue #{mi.number} 命中阻塞/待复核关键词，可能仍有依赖或阻塞未收尾",
                     "保留 Issue，交由对应负责人继续推进，暂不关闭")
+        if has_next:
+            return (DECISION_NEW_ISSUE,
+                    f"Issue #{mi.number} 已合并但描述/标签明确有「下一阶段/待联动/待推进」等后续任务且未派发",
+                    "新建 Issue 承接后续任务，并关闭原 Issue（保留合并记录）")
         if has_downstream:
             # 后续任务已由下游 Issue 承接，原 Issue 可关闭
             return (DECISION_CLOSE,
                     f"Issue #{mi.number} 已合并（标签「{mi.merged_label}」），后续任务已由下游 Issue 承接",
                     "关闭 Issue（工作已完成，后续已派发到新 Issue）")
-        if has_next:
-            return (DECISION_NEW_ISSUE,
-                    f"Issue #{mi.number} 已合并但描述/标签明确有「下一阶段/待联动/待推进」等后续任务且未派发",
-                    "新建 Issue 承接后续任务，并关闭原 Issue（保留合并记录）")
         if active_discussion:
             return (DECISION_KEEP,
                     f"Issue #{mi.number} 评论数较多（{mi.comment_count}）且状态仍 open，可能仍有讨论在推进",
@@ -205,7 +210,15 @@ class MergedConfirmAgent:
 
     # ---------- 3. 汇总决策 ----------
     def decide(self) -> Dict[str, Any]:
-        """输出结构化决策表，供「合并确认员」NPC 在 Issue 评论中使用。"""
+        """输出结构化决策表，供「合并确认员」NPC 在 Issue 评论中使用。
+
+        调用顺序约定：probe() → confirm() → decide()。
+        若未 confirm() 但已存在候选，此处自动补齐 confirm()，
+        确保 probed_count 与 decided 语义一致（probed_count>0 时 decided 不会为空）。
+        """
+        if not self._decided and self._candidates:
+            # 未显式 confirm 但有候选：自动补齐确认，避免 probed/decided 自相矛盾
+            self.confirm()
         return {
             "probed_count": len(self._candidates),
             "decided": [

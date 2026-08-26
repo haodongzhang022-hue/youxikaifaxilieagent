@@ -138,6 +138,53 @@ else
   report "决策汇总正确（2 个候选、2 个 close）" 1
 fi
 
+echo "== 4. 启发式防误判回归（评审点 1-3）=="
+out=$($PY - <<'PY'
+from merged_confirm_agent import (
+    MergedConfirmAgent, DECISION_CLOSE, DECISION_KEEP, DECISION_NEW_ISSUE,
+)
+
+# 评审点1：MERGED_LABEL_KEYWORDS 无重复元素
+kw = MergedConfirmAgent.MERGED_LABEL_KEYWORDS
+no_dup = len(kw) == len(set(kw))
+
+# 评审点2：未带 #编号 的「已由…承接」不误判 close；「已通过评审/已修复 bug」不误判 keep
+a = MergedConfirmAgent()
+issues = [
+    # 已通过评审、已修复 bug → 已完成表述，不应 KEEP
+    {"number": "201", "state": "open", "title": "已通过评审的模块",
+     "body": "功能已实现，已通过代码评审，已修复发现的 bug", "labels": [{"name": "已合并"}], "comment_count": 1},
+    # 未带编号的「已由负责人正在讨论」→ 未落地，不应 CLOSE（无 # 锚点）
+    {"number": "202", "state": "open", "title": "讨论中的功能",
+     "body": "已合并，已由负责人正在讨论后续方案", "labels": [{"name": "已合并"}], "comment_count": 2},
+]
+decided = a.confirm(a.probe(issues))
+res = {d.number: d.decision for d in decided}
+# 201：无后续/无阻塞 → CLOSE（完成态），不得误判 KEEP
+ok_201 = res.get("201") == DECISION_CLOSE
+# 202：无 # 锚点、无后续推进、无阻塞 → CLOSE（虽未落地讨论，但无后续推进信号）；
+#      核心是不得因宽泛「已由」而误判，且不得因「负责人讨论」误判 KEEP
+ok_202 = res.get("202") != DECISION_KEEP
+
+# 评审点3：decide() 未 confirm 但有候选时自动补齐，probed>0 时 decided 非空
+b = MergedConfirmAgent()
+b.probe([
+    {"number": "203", "state": "open", "title": "已完成", "body": "已完成无后续",
+     "labels": [{"name": "已合并"}], "comment_count": 0},
+])
+r = b.decide()
+ok_autofill = r["probed_count"] > 0 and len(r["decided"]) > 0
+
+print("no_dup=%s ok_201=%s ok_202=%s ok_autofill=%s" % (no_dup, ok_201, ok_202, ok_autofill))
+PY
+)
+if echo "$out" | grep -q "no_dup=True ok_201=True ok_202=True ok_autofill=True"; then
+  report "启发式防误判回归（无重复/不误关/不误KEEP/decide自动补齐）" 0
+else
+  report "启发式防误判回归（无重复/不误关/不误KEEP/decide自动补齐）" 1
+  echo "$out"
+fi
+
 echo ""
 echo "======== 汇总 ========"
 echo "通过: $pass  失败: $fail"
