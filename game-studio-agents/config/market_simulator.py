@@ -123,7 +123,15 @@ class MarketSimulator:
 
         # ---- 美术满意度（wp_art_direction 验收指标）----
         # 玩家圈对美术品质的综合满意度（0~10），作为美术品质进入市场预演博弈的可见信号。
-        art_satisfaction = 4.0 + (art_quality / 10.0) * (1.0 - art_penalty)
+        # 修复（评审点1）：读取 core_player 的 art_preference 策略，用「美术品质与
+        # 核心玩家偏好」的匹配度调制满意度，使美术宽松/基准/挑剔三策略收益差异化，
+        # 纳什均衡不再退化为平凡解（art_preference 之前从未被读取）。
+        core_pref = strategies["core_player"].params.get("art_preference", 0.5)
+        quality_norm = art_quality / 100.0                  # 美术品质归一化 0~1
+        pref_match = 1.0 - abs(core_pref - quality_norm)     # 品质与偏好契合度
+        art_satisfaction = (4.0 + 6.0 * pref_match * (1.0 - art_penalty))
+        # 修复（评审点3）：满意度收敛到 0~10 区间，避免越界。
+        art_satisfaction = max(0.0, min(10.0, art_satisfaction))
 
         # ---- 汇总 ----
         metrics = {

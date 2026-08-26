@@ -185,7 +185,7 @@ def demo():
                            priority="NORMAL"))
     registry.dispatch(Task(id="eco_player", name="玩家反馈", owner="core_player",
                            priority="NORMAL"))
-    registry.dispatch(Task(id="eco_art", name="美术品质把控", owner="art_director",
+    registry.dispatch(Task(id="eco_art", name="美术品质把控", owner="eco_art_director",
                            priority="HIGH"))
 
     print("    已派发生态角色任务:")

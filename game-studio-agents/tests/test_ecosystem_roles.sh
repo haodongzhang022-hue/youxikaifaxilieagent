@@ -35,18 +35,18 @@ else
   report "三大生态圈角色注册（协作支持/玩家/外部市场）" 1
 fi
 
-# 1b. 美术圈生态角色注册（wp_art_direction）
-if echo "$out" | grep -q "美术圈.*art_director" \
-   && echo "$out" | grep -q "美术圈.*tech_artist" \
-   && echo "$out" | grep -q "美术圈.*audio_designer"; then
-  report "美术圈生态角色注册（art_director/tech_artist/audio_designer）" 0
+# 1b. 美术圈生态角色注册（wp_art_direction，评审点2：eco_ 前缀隔离命名）
+if echo "$out" | grep -q "美术圈.*eco_art_director" \
+   && echo "$out" | grep -q "美术圈.*eco_tech_artist" \
+   && echo "$out" | grep -q "美术圈.*eco_audio_designer"; then
+  report "美术圈生态角色注册（eco_art_director/eco_tech_artist/eco_audio_designer）" 0
 else
-  report "美术圈生态角色注册（art_director/tech_artist/audio_designer）" 1
+  report "美术圈生态角色注册（eco_art_director/eco_tech_artist/eco_audio_designer）" 1
 fi
 
 # 2. 生态角色接入 task_scheduler（可派发 owner）
 if echo "$out" | grep -q "owner=publisher" && echo "$out" | grep -q "owner=progress_pusher" \
-   && echo "$out" | grep -q "owner=art_director"; then
+   && echo "$out" | grep -q "owner=eco_art_director"; then
   report "生态角色接入 task_scheduler 派发" 0
 else
   report "生态角色接入 task_scheduler 派发" 1

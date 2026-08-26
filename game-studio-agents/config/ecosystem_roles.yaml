@@ -699,7 +699,7 @@ market_roles:
 art_roles:
 
   # ---------------- 美术指导 ----------------
-  - role_id: "art_director"
+  - role_id: "eco_art_director"
     name: "美术指导"
     en_name: "Art Director"
     circle: "art"
@@ -723,13 +723,13 @@ art_roles:
         - "美术品质对留存/口碑的影响曲线"
 
     collaboration:
-      sends_to: ["tech_artist", "audio_designer", "core_player", "payer"]
+      sends_to: ["eco_tech_artist", "eco_audio_designer", "core_player", "payer"]
       receives_from: ["core_player", "payer", "mass_player"]
       needs_approval_from: []
       approves: ["美术风格规范", "美术产出品质"]
 
   # ---------------- 技术美术 ----------------
-  - role_id: "tech_artist"
+  - role_id: "eco_tech_artist"
     name: "技术美术"
     en_name: "Tech Artist"
     circle: "art"
@@ -753,13 +753,13 @@ art_roles:
         - "UI/UX 交互规范库"
 
     collaboration:
-      sends_to: ["art_director", "client_dev", "ui_ux"]
-      receives_from: ["art_director", "client_dev"]
-      needs_approval_from: ["art_director"]
+      sends_to: ["eco_art_director", "client_dev", "ui_ux"]
+      receives_from: ["eco_art_director", "client_dev"]
+      needs_approval_from: ["eco_art_director"]
       approves: ["美术资源管线", "UI/UX 规范"]
 
   # ---------------- 音频设计师 ----------------
-  - role_id: "audio_designer"
+  - role_id: "eco_audio_designer"
     name: "音频设计师"
     en_name: "Audio Designer"
     circle: "art"
@@ -783,9 +783,9 @@ art_roles:
         - "音效情绪映射库"
 
     collaboration:
-      sends_to: ["art_director", "animator", "vfx_artist"]
-      receives_from: ["art_director", "player"]
-      needs_approval_from: ["art_director"]
+      sends_to: ["eco_art_director", "animator", "vfx_artist"]
+      receives_from: ["eco_art_director", "player"]
+      needs_approval_from: ["eco_art_director"]
       approves: ["音频资源清单"]
 
 # ============================================================
