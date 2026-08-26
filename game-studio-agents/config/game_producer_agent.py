@@ -113,6 +113,10 @@ class GameProducerAgent(BaseAgent):
         self.biz_state = "IDLE"
         self.work_packages: List[Dict[str, Any]] = []   # 已拆分的工作包
         self.accepted: List[str] = []                    # 已验收的部门产出
+        # 上游验收通过的产出缓存（wp_id -> 产出物字段）。用于把上游产出
+        # （如 wp_numeric_model 的 market_simulation）注入依赖它的下游任务
+        # payload，打通跨部门数据流（评审点：此前上游产出从未注入下游）。
+        self._upstream_outputs: Dict[str, Dict[str, Any]] = {}
         self.last_heartbeat = 0.0
         self.heartbeat_interval = 5.0   # 心跳间隔（秒）
         # 部门能力表：实例级副本，避免 _load_departments 改写模块级全局
@@ -522,6 +526,12 @@ class GameProducerAgent(BaseAgent):
             # 去重：同一产出重复验收不产生重复 id
             if wp_id not in self.accepted:
                 self.accepted.append(wp_id)
+            # 缓存上游产出，并把跨部门可消费字段（如 market_simulation /
+            # numeric_model / market_input）注入依赖该上游的下游任务 payload，
+            # 使下游（如 wp_data_ops 消费市场预演结果）能拿到真实上游产出，
+            # 打通跨部门数据流（评审点：此前上游产出从未注入下游 payload，
+            # 下游恒走回退分支，属不可达死代码）。
+            self._inject_upstream_output(wp_id, content)
             # 完成对应任务，调度器自动解锁依赖它的下游工作包
             # 任务 id 已与工作包 id 对齐（wp_xxx），直接按 id 定位
             if wp_id and wp_id in self.scheduler.queue.tasks:
@@ -556,6 +566,45 @@ class GameProducerAgent(BaseAgent):
                 self._log("blocked", f"部门产出 {wp_id} 被打回，已阻塞下游待返工（原因：{reason}）")
             else:
                 self._log("blocked", f"部门产出 {wp_id} 被打回，但未在队列中找到对应任务")
+
+    def _inject_upstream_output(self, wp_id: str, content: Dict[str, Any]):
+        """把验收通过的上游产出物注入依赖它的下游任务 payload，打通跨部门数据流。
+
+        上游部门（如策划线 wp_numeric_model）交付的 artifact 中含跨部门可消费
+        字段（market_simulation / numeric_model / market_input），此处缓存并按
+        依赖关系注入所有直接下游任务的 payload['_upstream'][wp_id]，使下游
+        （如运营线 wp_data_ops 消费市场预演纳什均衡结果）能取到真实上游产出，
+        而非恒走回退分支。
+        """
+        artifact = (content.get("artifact") or {})
+        # 提取上游产出中可被下游消费的字段（artifact.content 含市场预演等）
+        art_content = artifact.get("content") or {}
+        upstream_pick = {
+            k: v for k, v in artifact.items()
+            if k in ("market_simulation", "numeric_model", "market_input")
+        }
+        # content 兜底：部分部门把产出直接写在 content 平级字段
+        for k in ("market_simulation", "numeric_model", "market_input"):
+            if k in content and k not in upstream_pick:
+                upstream_pick[k] = content[k]
+        if not upstream_pick and art_content:
+            # 从 artifact.content 再兜底提取一次
+            for k in ("market_simulation", "numeric_model", "market_input"):
+                if k in art_content and k not in upstream_pick:
+                    upstream_pick[k] = art_content[k]
+        if not upstream_pick:
+            return
+        self._upstream_outputs[wp_id] = upstream_pick
+        # 注入所有直接依赖该上游的任务（含其子孙会通过各自上游逐步继承）
+        for tid, task in self.scheduler.queue.tasks.items():
+            if wp_id in (task.depends_on or []):
+                payload = dict(task.payload or {})
+                upstream = dict(payload.get("_upstream") or {})
+                upstream[wp_id] = upstream_pick
+                payload["_upstream"] = upstream
+                task.payload = payload
+                self._log("inject_upstream",
+                          f"注入上游 {wp_id} 产出到下游 {tid}: {list(upstream_pick.keys())}")
 
     def _cascade_block(self, wp_id: str, reason: str = "") -> List[str]:
         """级联阻塞依赖某被打回上游的全部下游任务，保证依赖一致性。

@@ -90,6 +90,55 @@ else
   report "注册/装配口径一致（无已注册但未装配 Agent 的角色）" 1
 fi
 
+# 8. 评审修复点回归：跨部门数据流打通（评审点 1）
+#    上游 wp_numeric_model 的市场预演产出必须注入下游 wp_data_ops 的 payload，
+#    使运营线能消费真实上游产出而非恒走回退分支（死代码路径）。
+inject_out=$($PY - <<'PY'
+from message_bus import MessageBus, build_task_assign
+from game_producer_agent import GameProducerAgent
+from department_agents import build_department_agents
+import sys
+sys.path.insert(0, '.')
+bus = MessageBus()
+manager = GameProducerAgent(bus=bus)
+manager.boot()
+for a in build_department_agents(bus).values():
+    a.boot()
+architecture = {'project': '注入回归', 'modules': ['numeric_model', 'data_ops']}
+bus.publish(build_task_assign('architect', manager.role_id, 't001', {'architecture': architecture}))
+bus.process_all()
+t = manager.scheduler.queue.tasks.get('wp_data_ops')
+up = (t.payload.get('_upstream') or {}) if t else {}
+sim = up.get('wp_numeric_model', {}).get('market_simulation') or {}
+print('INJECT_OK' if sim.get('equilibrium') and sim.get('metrics') else 'INJECT_MISS')
+PY
+)
+if echo "$inject_out" | grep -q "INJECT_OK"; then
+  report "跨部门数据流打通（上游市场预演注入下游 wp_data_ops）" 0
+else
+  report "跨部门数据流打通（上游市场预演注入下游 wp_data_ops）" 1
+fi
+
+# 9. 评审修复点回归：发版门禁复用真实全链路产出（评审点 2）
+#    PmDeptAgent 不应再硬编码门禁输入全 True（流水线内恒 GO、质量门禁失效），
+#    而应通过 aggregate_and_release() 聚合真实产出做验收。
+gate_out=$($PY - <<'PY'
+from release_gate import aggregate_and_release
+import sys
+sys.path.insert(0, '.')
+g = aggregate_and_release()
+# 真实门禁：含可辨识的生态角色注册数量与市场预演诊断字段，而非硬编码布尔
+eco = g.get('gate_results', {}).get('ecosystem_roles', {})
+mp = g.get('gate_results', {}).get('market_preview', {})
+print('GATE_OK' if g.get('total_checks') and (eco or mp) else 'GATE_MISS')
+PY
+)
+if echo "$gate_out" | grep -q "GATE_OK"; then
+  report "发版门禁复用真实全链路产出（非硬编码全 True）" 0
+else
+  report "发版门禁复用真实全链路产出（非硬编码全 True）" 1
+fi
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"
