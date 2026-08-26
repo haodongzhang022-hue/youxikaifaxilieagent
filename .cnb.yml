@@ -71,6 +71,7 @@ $:
             bash game-studio-agents/tests/test_data_ops_diagnosis.sh
             bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
             bash game-studio-agents/tests/test_release_gate.sh
+            bash game-studio-agents/tests/test_merged_confirm_agent.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
         - name: 自动分配评审人
@@ -92,6 +93,16 @@ $:
               3. 是否存在 Bug、安全漏洞或资源泄漏；
               4. 给出"通过 / 需修改"结论及具体修改点。
               在 PR 评论中输出审查结论。
+              【CodeBuddy 触发机制·评审后闭环】
+              5. 若评审结论为"需修改/需改进"：在评论末尾**必须**用
+                 「@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)」完整格式
+                 （仓库路径 + 角色名）点名**本仓库的 CodeBuddy**，说明已完成的
+                 评审结论与需要修复的具体点，触发 `pull_request.comment@npc`
+                 让本仓库 CodeBuddy 接手修复闭环。
+                 - **不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓 CodeBuddy，
+                   权限不对无法推送）；
+                 - 完整格式定位可确保调取到本仓库专属 CodeBuddy（具备推送权限），
+                   避免 push 403 导致闭环在"推送"一步静默中断。
         - name: CodeBuddy 闭环修复（评审→修复→重推，钩子没 bug 就停）
           type: npc:go
           options:
@@ -132,11 +143,23 @@ $:
                    的原因与处置），再 push 一次以对齐进度，让评审/监控能持续追踪；
               6. 全程机制驱动，修复完成即结束本阶段，等待下一轮评审。
               7. 【推送稳定性·强制自检】每次修复后必须 push，push 后立即验证是否成功：
-                 - 若 push 返回权限错误 / 403（多为 NPC 机器人 token 缺 `repo-code:rw`
-                   推送权限）：**不得静默卡死**，必须立即在本 PR 评论中显式告警，明确
-                   @ 仓库负责人「需要给机器人 token 补 `repo-code:rw` 推送权限」，并列出
-                   已完成的修复点，说明推不上去将无法触发下一轮评审闭环；
                  - 若 push 成功：确认触发新一轮 pull_request 评审事件，继续闭环；
+                 - 若 push 返回权限错误 / 403：**不是补权限的问题，是调用身份错了**——
+                   push 403 说明本次执行所用身份不是本仓库绑定的 CodeBuddy（对应仓库下
+                   具备推送/合并/关闭 Issue 权限的那个），而是评审 NPC 或其他仓库的
+                   CodeBuddy（其职责只是读和审，本就不具备推送权限）。这是调取错误被
+                   护栏拦住了，属于护栏正常生效，**不做补权限处理**。
+                   **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
+                   用「`@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)`」完整格式
+                   （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
+                   `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
+                   - 说明文本需写明：已完成的修复点、本次 push 因执行身份不是本仓库
+                     CodeBuddy 被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支
+                     完成推送并核对触发新一轮评审；
+                   - 强调调取时必须用「仓库路径(角色名)」完整格式定位到本仓库的
+                     CodeBuddy，**不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓
+                     CodeBuddy，权限不对）；
+                   - 转交后本轮先告警结束，由本仓库 CodeBuddy 在评论驱动上下文中完成推送；
                  - 绝不允许：修复完成后因 push 失败而无任何告警地结束，导致评审闭环
                    在"推送"这一步静默中断、看起来像评审机制失效。
         - name: 评审闭环健康检查
@@ -156,12 +179,13 @@ $:
                  且已触发新一轮评审事件，即视为闭环正常推进，放行等下一轮跟进，不得中断；
 
               B. 真正闭环中断（须满足**至少一个硬性信号**，否则不算中断）：
-                 - 推送失败：push 返回 403（缺 repo-code:rw 推送权限），且修复根本没推上去；
+                 - 推送失败：push 返回 403（身份非本仓库 CodeBuddy / 执行 agent 权限不足），
+                   且修复根本没推上去；
                  - 推送成功但长时间（超时阈值）无任何后续评审 run 跟进；
                  - 评审结论长期停留在"需修改"且超过 10 轮上限仍未收敛。
                  满足任一信号才显式输出"评审闭环中断"告警，说明中断环节（推送 / 评审触发 /
-                 评审结论）与处置建议（如补机器人 token 的 repo-code:rw 推送权限），并中断
-                 流水线返回失败，不放行合并；
+                 评审结论）与处置建议（**用「仓库路径(角色名)」完整格式定位本仓库 CodeBuddy
+                 代推，不做补权限**），并中断流水线返回失败，不放行合并；
 
               4. 若闭环正常且已有评审结论：进入合并门禁校验。
         - name: 合并门禁检查
@@ -267,10 +291,23 @@ $:
               6. 若某问题无法在本 PR 就地解决：优先转交其他 issue/PR 解决并关闭本 PR，
                  否则做文档性提交 push 对齐进度。
               7. 【推送稳定性·强制自检】push 后立即验证是否成功：
-                 - 若 push 返回权限错误 / 403（多为机器人 token 缺 `repo-code:rw`）：
-                   **不得静默卡死**，立即在本 PR 评论显式告警 @ 仓库负责人补推送权限，
-                   列出已修复点并说明推不上去将无法触发下一轮评审；
                  - 若 push 成功：确认触发新一轮 pull_request 评审，继续闭环。
+                 - 若 push 返回权限错误 / 403：**不是补权限的问题，是调用身份错了**——
+                   本次执行所用身份不是本仓库绑定的 CodeBuddy（对应仓库下具备推送/合并/
+                   关闭 Issue 权限的那个），而是评审 NPC 或其他仓库的 CodeBuddy（其职责
+                   只是读和审，本就不具备推送权限）。这是调取错误被护栏拦住，属于护栏正常
+                   生效，**不做补权限处理**。
+                   **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
+                   用「`@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)`」完整格式
+                   （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
+                   `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
+                   说明文本需写明已修复点、本次 push 因执行身份不是本仓库 CodeBuddy
+                   被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支完成推送并核对
+                   触发新一轮评审；**不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓
+                   CodeBuddy，权限不对）。转交后本轮先告警结束，由本仓库 CodeBuddy 在
+                   评论驱动上下文中完成推送；
+                 - 绝不允许：修复完成后因 push 失败而无任何告警地结束，导致评审闭环在
+                   "推送"这一步静默中断、看起来像评审机制失效。
               全程机制驱动。
 
 # ---- 触发源 3：人类主动 @CodeBuddy 点名驱动（手动兜底）----
@@ -296,6 +333,67 @@ $:
               2. 若指令是询问/探讨（如机制设计、选型）：直接给出分析与结论，
                  不修改代码；
               3. 若指令是要求落地某机制（如多源触发）：按指令修改 .cnb.yml 或文档
-                 并在 PR 源分支提交；
+                并在 PR 源分支提交；
               4. 若问题无法在本 PR 就地解决：说明转交其他 issue/PR 或做文档性提交。
               全程机制驱动。
+
+# ---- 合并标签确认机制（类似审查机制，探查合并标签 issue 个数）----
+# 说明: 定时探查仓库中带「已合并」标签但状态仍为 open 的 Issue，
+#       若数量 > 0 则触发「合并确认员」NPC 逐个确认：
+#         - 已合并且无后续任务 → 关闭 Issue；
+#         - 已合并但有明确后续任务（未派发）→ 新建 Issue 承接并分配任务，关闭原 Issue；
+#         - 已合并但仍有阻塞/待复核/依赖未收尾 → 保留 Issue。
+#   实现: config/merged_confirm_agent.py（探查 probe / 确认 confirm / 决策 decide）
+#   crontab 事件必须放在具体分支名下（此处放 main）。
+#   频率: 每天 06:00 Asia/Shanghai（可调整 cron 表达式）
+main:
+  "crontab: 0 6 * * *":
+    - name: merged-confirm-sweep
+      docker:
+        image: *npc_image
+      stages:
+        # 阶段名保持与职责一致：此处仅运行 __main__ 自测（冒烟），
+        # 不执行真实探查；真实探查由下一阶段 npc:go「合并确认员」通过 CNB API 完成。
+        - name: 自测冒烟
+          script: |
+            cd game-studio-agents
+            echo "== 合并确认 Agent 自测冒烟（不执行真实探查）=="
+            python3 config/merged_confirm_agent.py
+        - name: 合并确认员逐个确认
+          type: npc:go
+          options:
+            role: 合并确认员
+            systemPrompt: |
+              你是「合并确认员」（Merged Confirmer）。负责对仓库中已打上「已合并」
+              标签但仍处于 open 状态的 Issue 做工作内容确认——判断当前对话是否还有
+              内容需要推进，还是已适合关闭。你独立于 CodeBuddy，专责确认环节。
+              使用 config/merged_confirm_agent.py 的探查/确认/决策逻辑。
+            userPrompt: |
+              请执行合并标签确认工作流：
+              1. 使用 CNB API 探查仓库中带「已合并」相关标签（如「安全加固已合并」
+                 「经理编排已合并」「预设体系已合并」「生态角色体系已合并」等）且
+                 状态仍为 open 的 Issue，统计数量 N；
+              2. 若 N == 0：说明无待确认 Issue，在本流水线日志输出「无需确认」并结束；
+              3. 若 N > 0：逐个确认每个候选 Issue——读取其标题/描述/标签/评论历史，
+                 判断是否有待推进内容：
+                 - 已合并且无后续任务（下游已由新 Issue 承接）→ 关闭该 Issue，
+                   在 Issue 评论输出确认结论「工作已完成，已合并，关闭」；
+                 - 已合并但有明确后续任务（未派发）→ 新建 Issue 承接该后续任务并
+                   分配处理人，然后关闭原 Issue，在原 Issue 评论说明「后续已派发到
+                   #新Issue」；
+                 - 已合并但仍有阻塞/待复核/依赖未收尾 → 保留 Issue，在评论说明
+                   「仍待推进」原因；
+              4. 在探查到的最新 Issue 上（或本流水线日志）汇总输出确认结果表。
+              5. 【防静默失效·强制自检】每次执行关闭 Issue / 新建 Issue / 评论回写
+                 等写操作后，必须核验 CNB API 实际返回结果：
+                 - 若操作成功（HTTP 200）：确认在日志与评论中记录实际结果；
+                 - 若操作失败（非 200 / 返回错误码）：**不得静默吞掉**，必须在本
+                   流水线日志与 PR/Issue 评论中显式告警 @ 仓库负责人，说明失败环节、
+                   失败原因与处置建议（如检查 NPC 身份/权限配置）；
+                 - N==0 时仍需验证探查 API 调用本身成功（HTTP 200 且有数据返回），
+                   若探查本身失败（403/超时/返回异常），同样需要显式告警而非输出
+                   「无需确认」；
+              6. 若因身份/权限不足导致写操作全部失败，停止后续操作并汇总告警，
+                 禁止把「操作失败」吞成「无需确认」。
+              全程机制驱动，无需人工推进。
+              注意：不要合并/修改代码，只做 Issue 状态确认与派发。

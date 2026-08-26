@@ -2822,6 +2822,85 @@ roles:
         - "历史催办效果记录"
         - "各岗位负载情况"
         - "督导策略文件: config/progress_pusher_policy.yaml（声明化，可调不碰代码）"
+  # ---------------- 合并确认员（协作支持圈）----------------
+  # 说明: 对带「已合并」标签但仍 open 的 Issue 做工作内容确认，
+  #       与「代码审查员」机制类似但独立于 CodeBuddy，专责确认环节。
+  #       程序规则负责"生效"（config/merged_confirm_agent.py 的 probe/confirm/decide），
+  #       声明负责"可调"，用法文档负责"会用"（docs/merged-confirm-mechanism.md）。
+  # 职责分工: 审查员负责"读与审"，本角色负责"合并后确认"：已合并无后续→关闭、
+  #       有后续未派发→新 Issue 承接、有阻塞/待复核→保留。
+  - role_id: "merged_confirmer"
+    name: "合并确认员"
+    en_name: "Merged Confirmer"
+    department: "协作支持圈"
+    level: "服务岗"
+    agent_priority: 17
+    status: "agent_enabled"
+    personality: "审慎核验：以工作内容是否收尾为准，已合并≠可关闭，需先确认后续任务、阻塞与依赖是否真正落地。"
+    integration: "crontab-only"
+    # 说明: 本角色仅由 .cnb.yml crontab 驱动（merged-confirm-sweep），
+    #       不接入 message_bus / task_scheduler / 依赖解锁。声明保持与实现一致。
+
+    responsibilities:
+      - "探查带「已合并」标签 + open 状态的 Issue"
+      - "确认每个候选 Issue 是否还有内容需要推进"
+      - "按确认结论执行关闭 / 新建承接 / 保留"
+
+    tasks:
+      - id: "mc.probe"
+        name: "合并标签探查"
+        inputs: ["已合并标签 Issue", "open 状态"]
+        process: "筛选候选 → 计算数量 N → N>0 触发确认"
+        outputs: ["候选 Issue 清单"]
+        trigger: "crontab 定时 / 事件"
+
+      - id: "mc.confirm"
+        name: "合并确认"
+        inputs: ["候选 Issue", "评论历史", "后续任务标记"]
+        process: "已合并无后续→CLOSE / 有后续未派发→NEW_ISSUE / 有阻塞待复核→KEEP"
+        outputs: ["逐条确认结论"]
+        trigger: "探查数量 > 0"
+
+      - id: "mc.decide"
+        name: "确认决策"
+        inputs: ["确认结论"]
+        process: "汇总决策表 → 输出到 Issue 评论 → 按决策执行"
+        outputs: ["决策表", "关闭/新建/保留操作"]
+        trigger: "确认完成"
+
+    workflows:
+      - name: "合并确认闭环"
+        steps: ["探查已合并标签 Issue → 确认工作内容 → 决策(close/new_issue/keep) → 执行"]
+
+    collaboration:
+      receives_from: ["项目经理", "各执行岗"]
+      sends_to: ["各执行岗", "项目经理"]
+      needs_approval_from: ["项目经理"]
+      approves: []
+
+    state_machine:
+      states: ["IDLE", "PROBE", "CONFIRM", "DECIDE"]
+      transitions:
+        - {from: "IDLE", event: "TICK", to: "PROBE"}
+        - {from: "PROBE", event: "FOUND", to: "CONFIRM"}
+        - {from: "PROBE", event: "NONE", to: "IDLE"}
+        - {from: "CONFIRM", event: "DONE", to: "DECIDE"}
+        - {from: "DECIDE", event: "CLOSE", to: "IDLE"}
+        - {from: "DECIDE", event: "NEW_ISSUE", to: "IDLE"}
+        - {from: "DECIDE", event: "KEEP", to: "IDLE"}
+
+    agent_logic:
+      decision_points:
+        - "是否已合并？→ 依据: 命中「已合并」标签关键词"
+        - "是否还有后续任务？→ 依据: 明确的下游承接(#编号) 或 未派发的后续推进描述"
+        - "是否有阻塞/待复核/依赖未收尾？→ 依据: 状态前缀+主题词组合（待/未/仍/还有 + 主题）"
+        - "关闭还是保留？→ 依据: 无后续且无阻塞→CLOSE；有未派发后续→NEW_ISSUE；有阻塞→KEEP"
+      knowledge_base:
+        - "已合并标签 Issue 清单"
+        - "各 Issue 评论历史"
+        - "下游承接与后续任务标记"
+        - "确认逻辑文件: config/merged_confirm_agent.py（probe/confirm/decide）"
+
 
 
 # ============================================================
