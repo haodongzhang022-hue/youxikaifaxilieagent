@@ -62,8 +62,8 @@ else
     FAIL=$((FAIL+1))
 fi
 
-# 测试4: 能生成修复方（CodeBuddy）的 @ 召唤格式（统一为已注册执行角色）
-echo -n "[4/8] 修复方 @ 召唤格式（统一 CodeBuddy）... "
+# 测试4: 能生成修复方（仓库修复专员）的 @ 召唤格式（故意设计的独立修复角色）
+echo -n "[4/8] 修复方 @ 召唤格式（仓库修复专员）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -71,7 +71,7 @@ from agent_identity import get_identity
 id = get_identity()
 print(id.get_fixer_mention())
 ")
-if echo "$OUT" | grep -q "@.*(CodeBuddy)"; then
+if echo "$OUT" | grep -q "@.*(仓库修复专员)"; then
     echo "✅ ($OUT)"
     PASS=$((PASS+1))
 else
@@ -239,19 +239,19 @@ else
     FAIL=$((FAIL+1))
 fi
 
-# 测试12: KNOWN_ROLES 无未注册的"仓库修复专员"（统一为 CodeBuddy）
-echo -n "[12/12] KNOWN_ROLES 无未注册仓库修复专员... "
+# 测试12: KNOWN_ROLES 应含故意设计的"仓库修复专员"角色（不统一为 CodeBuddy）
+echo -n "[12/12] KNOWN_ROLES 含仓库修复专员角色... "
 OUT=$(python3 <<'PYEOF'
 import sys
 sys.path.insert(0, '.')
 from agent_identity import AgentIdentity
 roles = list(AgentIdentity.KNOWN_ROLES)
-print('HAS_UNREG=' + str('仓库修复专员' in roles))
+print('HAS_FIXER=' + str('仓库修复专员' in roles))
 print('HAS_CODEBUDDY=' + str('CodeBuddy' in roles))
 PYEOF
 )
-if echo "$OUT" | grep -q "HAS_UNREG=False" && echo "$OUT" | grep -q "HAS_CODEBUDDY=True"; then
-    echo "✅ (KNOWN_ROLES 已移除未注册仓库修复专员，CodeBuddy 保留)"
+if echo "$OUT" | grep -q "HAS_FIXER=True" && echo "$OUT" | grep -q "HAS_CODEBUDDY=True"; then
+    echo "✅ (KNOWN_ROLES 保留仓库修复专员，CodeBuddy 亦保留)"
     PASS=$((PASS+1))
 else
     echo "❌"
