@@ -8,8 +8,8 @@
 |---|---|---|---|---|---|
 | 策划线 | `DesignDeptAgent` | lead_designer | lead_designer / system_designer / balance_designer / level_designer / narrative_designer / combat_designer | `gameplay` | 核心玩法循环 / 系统架构设计 |
 | 策划线 | `DesignDeptAgent` | lead_designer | （同上） | `numeric_model` | 数值模型 / 经济产出 / 成长曲线，经 market_input_bridge 转译市场预演 |
-| 策划线 | `DesignDeptAgent` | lead_designer | narrative_designer | `narrative` | 世界观 / 主线剧情 / 角色卡 / 任务文案 |
-| 策划线 | `DesignDeptAgent` | lead_designer | combat_designer | `combat` | 战斗机制 / 技能职业 / NPC AI / 平衡验证 |
+| 策划线 | `DesignDeptAgent` | lead_designer | （同上） | `narrative` | 世界观 / 剧情 / 任务文案，主责 narrative_designer |
+| 策划线 | `DesignDeptAgent` | lead_designer | （同上） | `combat` | 战斗机制 / 技能 / NPC AI，主责 combat_designer |
 | 程序线 | `ProgramDeptAgent` | cto | cto / client_dev / server_dev / engine_dev / ai_programmer / tools_dev | `client` | 客户端渲染管线 / UI 绑定 |
 | 程序线 | `ProgramDeptAgent` | cto | （同上） | `server` | 服务端 API / 数据存储 |
 | 程序线 | `ProgramDeptAgent` | cto | （同上） | `engine` | 引擎核心 / 性能优化 |
@@ -29,6 +29,8 @@
 | reference_learner | `reference_learner_agent.py` | `ReferenceLearnerAgent` | 独立 Agent，参考学习 |
 | progress_pusher | `progress_pusher.py` | `ProgressPusherAgent` | 独立 Agent，进度督导 |
 | merged_confirmer | `merged_confirm_agent.py` | `MergedConfirmAgent` | 独立 Agent，合并确认 |
+| narrative_designer | `ecosystem_handlers.py` | `NarrativeDesignerHandler` | 剧情策划基角色，世界观/剧情/任务文案 |
+| combat_designer | `ecosystem_handlers.py` | `CombatDesignerHandler` | 战斗策划基角色，战斗机制/技能/NPC AI |
 
 ## 三、生态角色 handler 承接（WP-02）
 

@@ -52,17 +52,17 @@ roles_inventory:
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::DesignDeptAgent
-  note: 已注册到策划线 DEPARTMENTS 表，经部门 Agent 聚合承接 narrative 模块
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::DesignDeptAgent
+  note: 专属 handler 挂接到总线（NarrativeDesignerHandler）+ 部门 Agent 双路径承接
 - role_id: combat_designer
   name: 战斗策划（手感派）
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::DesignDeptAgent
-  note: 已注册到策划线 DEPARTMENTS 表，经部门 Agent 聚合承接 combat 模块
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::DesignDeptAgent
+  note: 专属 handler 挂接到总线（CombatDesignerHandler）+ 部门 Agent 双路径承接
 - role_id: producer_alt
   name: 制作人（进取型）
   department: 策划线
@@ -627,9 +627,9 @@ statistics:
   roles_yaml_count: 58
   ecosystem_roles_yaml_count: 21
   total_declared: 79
-  implemented: 59
-  registered_only: 20
+  implemented: 61
+  registered_only: 18
   declared_only: 0
   unique_roles: 78
-  note: 策划线 narrative_designer/combat_designer 已注册到部门，declared_only 清零
+  note: narrative_designer/combat_designer 经专属 handler（implemented）+ 部门 Agent 双路径承接，declared_only 清零
   version: WP-02/WP-02b/PR63 后快照（declared_only 收口）

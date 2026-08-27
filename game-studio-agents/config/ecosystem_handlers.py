@@ -702,6 +702,63 @@ class CombatDesignerAltHandler(EcosystemHandler):
             },
         }
 
+
+class NarrativeDesignerHandler(EcosystemHandler):
+    """剧情策划（文艺派）基角色 handler。
+
+    与部门流水线衔接：承接 narrative_designer 角色任务，
+    产出世界观/剧情/任务文案，映射到 DesignDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("narrative_designer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "narrative_design",
+            "style": "文艺派",
+            "output": {
+                "focus": "世界观与剧情叙事",
+                "dept_pipeline": "通过 narrative_designer 的 DesignDeptAgent 派发到 策划线",
+                "approach": "情感共鸣+叙事感染力",
+                "world_depth": "high",
+                "emotional_impact": True,
+                "dialogue_quality": "premium"
+            },
+        }
+
+
+class CombatDesignerHandler(EcosystemHandler):
+    """战斗策划（手感派）基角色 handler。
+
+    与部门流水线衔接：承接 combat_designer 角色任务，
+    产出战斗机制/技能/NPC AI，映射到 DesignDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("combat_designer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "combat_design",
+            "style": "手感派",
+            "output": {
+                "focus": "战斗机制与手感调优",
+                "dept_pipeline": "通过 combat_designer 的 DesignDeptAgent 派发到 策划线",
+                "approach": "打击感优先+实时反馈",
+                "feel_priority": True,
+                "combat_flow": "smooth",
+                "feedback_latency": "minimal"
+            },
+        }
+
+
 class ClientDevAltHandler(EcosystemHandler):
     """客户端程序员（表现型） handler：表现型风格。
 
@@ -1232,6 +1289,10 @@ ECOSYSTEM_HANDLERS: Dict[str, EcosystemHandler] = {
     "eco_tech_artist": EcoTechArtistHandler(),
     "eco_audio_designer": EcoAudioDesignerHandler(),
 
+    # 基角色 handler（narrative_designer / combat_designer）
+    "narrative_designer": NarrativeDesignerHandler(),
+    "combat_designer": CombatDesignerHandler(),
+
     # _alt 变体 handler（WP-02b 批量实体化，28 个）
     "producer_alt": ProducerAltHandler(),
     "lead_designer_alt": LeadDesignerAltHandler(),
@@ -1303,15 +1364,24 @@ def attach_handlers_to_registry(registry: EcosystemRoleRegistry,
 
     _alt 变体（producer_alt / cto_alt / server_dev_alt）来自 roles.yaml，
     不在生态注册表中，但需要注册到 message_bus 才能接收 TASK_ASSIGN。
+    部门基角色（narrative_designer / combat_designer）同样来自 roles.yaml 的
+    正式角色（非生态注册表、非 _alt 变体），必须挂接到总线才能真实执行。
     """
     bus = bus or registry.bus
     count = 0
     for role_id, handler in ECOSYSTEM_HANDLERS.items():
         if role_id in registry.roles:
+            # 生态注册表角色：挂接到总线（bus.on 内部会 register）
             bus.on(role_id, handler.handle)
             count += 1
         elif role_id.endswith("_alt"):
             # _alt 变体：注册到总线（bus.on 内部会 register）
+            bus.on(role_id, handler.handle)
+            count += 1
+        else:
+            # 部门基角色（narrative_designer / combat_designer 等来自 roles.yaml）：
+            # 既不在生态注册表也不以 _alt 结尾，此前被静默跳过导致 handler 成死代码。
+            # 统一挂接到总线，使其能承接 TASK_ASSIGN 真实执行。
             bus.on(role_id, handler.handle)
             count += 1
     return count
@@ -1364,7 +1434,13 @@ def verify_inventory_alignment() -> Dict[str, Any]:
     # _alt 变体来自 roles.yaml（非 ecosystem_roles.yaml），
     # 从 handler 清单中排除后再与生态角色 registry 对照。
     alt_handlers = {rid for rid in handler_ids if rid.endswith("_alt")}
-    eco_handler_ids = handler_ids - alt_handlers
+    # 部门基角色 handler（如 narrative_designer / combat_designer）来自 roles.yaml
+    # 的策划线正式角色，不属于生态角色，从生态对照中排除。
+    # 判定：非 _alt 且在 inv_eco_ids（生态角色清单）之外的非生态 handler。
+    non_eco_handlers = {
+        rid for rid in handler_ids - alt_handlers if rid not in inv_eco_ids
+    }
+    eco_handler_ids = handler_ids - alt_handlers - non_eco_handlers
 
     inv_only = inv_eco_ids - eco_handler_ids          # inventory 有但无 handler
     handler_only = eco_handler_ids - inv_eco_ids      # handler 有但不在 inventory

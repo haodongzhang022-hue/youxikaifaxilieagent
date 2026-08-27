@@ -81,11 +81,19 @@ else
   report "ecosystem_handlers.py 演示通过（handler 注册 + 任务 DONE）" 1
 fi
 
-# 7. 生态角色 handler 数量（21 生态 + 28 _alt = 49）
-if echo "$out" | grep -q "handler_count: 49"; then
-  report "生态角色 handler 实体化（49 个：21 生态 + 28 _alt）" 0
+# 7. handler 数量（21 生态 + 28 _alt + 2 部门基角色 = 51）
+if echo "$out" | grep -q "handler_count: 51"; then
+  report "handler 实体化（51 个：21 生态 + 28 _alt + 2 部门基角色）" 0
 else
   report "生态角色 handler 实体化（49 个：21 生态 + 28 _alt）" 1
+fi
+
+# 7b. handler 全部挂接到总线（attached == 51，含 narrative_designer / combat_designer）
+#     防止 handler_count: 51 掩盖 2 个部门基角色 handler 未挂接。
+if echo "$out" | grep -q "生态角色 handler 挂接: 51 个"; then
+  report "全部 handler 挂接到总线（51 个，含 narrative_designer / combat_designer）" 0
+else
+  report "全部 handler 挂接到总线（51 个，含 narrative_designer / combat_designer）" 1
 fi
 
 # 8. inventory / registry 对齐
