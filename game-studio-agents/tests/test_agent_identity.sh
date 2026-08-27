@@ -1,8 +1,10 @@
 #!/bin/bash
 # ============================================================
 # 测试: 通用 Agent 身份自适应模块 (agent_identity.py)
-# 版本: v1.1
+# 版本: v1.2
 # 说明: 验证 AgentIdentity 模块能正确探测仓库上下文并生成 @ 召唤格式。
+#       v1.2 新增：检测本组织/仓库能力——git remote 误指向他仓（如 dongjiagoushi）
+#       时以平台权威 CNB_REPO_SLUG 为准，杜绝误识别成他仓。
 #       v1.1 新增：评审 NPC 专用 get_review_operational_advice() 自适应
 #       召唤 CodeBuddy 操作建议（组织/仓库名不写死，跨仓可用）。
 # ============================================================
@@ -15,7 +17,7 @@ PASS=0
 FAIL=0
 
 # 测试1: 模块可导入且自测通过
-echo -n "[1/8] 模块自测运行... "
+echo -n "[1/9] 模块自测运行... "
 python3 agent_identity.py > /dev/null 2>&1
 if [ $? -eq 0 ]; then
     echo "✅"
@@ -26,7 +28,7 @@ else
 fi
 
 # 测试2: 能探测到当前仓库 slug
-echo -n "[2/8] 仓库 slug 探测... "
+echo -n "[2/9] 仓库 slug 探测... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -44,7 +46,7 @@ else
 fi
 
 # 测试3: 能生成正确的 CodeBuddy @ 召唤格式
-echo -n "[3/8] CodeBuddy @ 召唤格式... "
+echo -n "[3/9] CodeBuddy @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -61,7 +63,7 @@ else
 fi
 
 # 测试4: 能生成修复专员的 @ 召唤格式
-echo -n "[4/8] 修复专员 @ 召唤格式... "
+echo -n "[4/9] 修复专员 @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -78,7 +80,7 @@ else
 fi
 
 # 测试5: 跨仓库策略识别
-echo -n "[5/8] 跨仓库策略识别... "
+echo -n "[5/9] 跨仓库策略识别... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -99,7 +101,7 @@ else
 fi
 
 # 测试6: 评审 NPC 自适应召唤 CodeBuddy 操作建议（组织/仓库名不写死）
-echo -n "[6/8] 评审召唤 CodeBuddy 操作建议（自适应）... "
+echo -n "[6/9] 评审召唤 CodeBuddy 操作建议（自适应）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -117,7 +119,7 @@ else
 fi
 
 # 测试7: 评审召唤操作建议支持按目标仓库（跨仓）生成，不写死
-echo -n "[7/8] 评审召唤跨仓操作建议（按目标仓库）... "
+echo -n "[7/9] 评审召唤跨仓操作建议（按目标仓库）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -135,7 +137,7 @@ else
 fi
 
 # 测试8: 部门统一头（小组）角色结构——六大部门 + 协作支持圈独立
-echo -n "[8/8] 部门统一头 KNOWN_ROLES 结构... "
+echo -n "[8/9] 部门统一头 KNOWN_ROLES 结构... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -152,6 +154,41 @@ if echo "$OUT" | grep -q "HAS_SIX=True" && echo "$OUT" | grep -q "SUPPORT_AFTER_
     PASS=$((PASS+1))
 else
     echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
+echo ""
+# 测试9: 检测本组织/仓库能力——git remote 误指向他仓（如 dongjiagoushi）时，
+#        以平台权威 slug（CNB_REPO_SLUG）为准，不误识别成本仓库之外的仓库。
+echo -n "[9/9] 检测本组织/仓库能力（git 误指向他仓时以 env 权威为准）... "
+OUT=$(python3 - <<'PYEOF' 2>&1
+import os, subprocess, tempfile, shutil
+import sys
+sys.path.insert(0, '.')
+import agent_identity
+
+# 造一个临时 git 仓库，remote 指向「他仓」dongjiagoushi
+tmp = tempfile.mkdtemp(prefix="simrepo_")
+try:
+    subprocess.run(["git","init","-q"], cwd=tmp, check=True)
+    subprocess.run(["git","remote","add","origin",
+                    "https://cnb.cool/dongdongxiaozu/dongjiagoushi.git"],
+                   cwd=tmp, check=True)
+    # 平台权威 slug 明确指向本仓库
+    os.environ["CNB_REPO_SLUG"] = "dongdongxiaozu/youxikaifaxilieagent"
+    os.environ["CNB_REPO_NAME"] = "youxikaifaxilieagent"
+    data = agent_identity._detect_from_git(tmp)
+    print(f"full_slug={data.get('full_slug')} src={data.get('detection_source')}")
+finally:
+    shutil.rmtree(tmp, ignore_errors=True)
+PYEOF
+)
+if echo "$OUT" | grep -q "full_slug=dongdongxiaozu/youxikaifaxilieagent" && echo "$OUT" | grep -qv "dongjiagoushi"; then
+    echo "✅ ($OUT)"
+    PASS=$((PASS+1))
+else
+    echo "❌ 误识别成 dongjiagoushi 或其他仓库"
     echo "$OUT"
     FAIL=$((FAIL+1))
 fi

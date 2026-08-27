@@ -1,6 +1,6 @@
 # ============================================================
 # 通用 Agent 身份自适应模块 (Agent Identity)
-# 版本: v1.1
+# 版本: v1.2
 # 说明: 让任意 Agent（CodeBuddy / 仓库修复专员 / 代码审查员 / 游戏向经理等）
 #       能**自动识别当前所在的仓库上下文**，并据此生成正确的 @ 召唤格式，
 #       不再硬编码 `dongdongxiaozu/youxikaifaxilieagent`。
@@ -21,6 +21,16 @@
 #       子目录 / 非仓库根目录也能可靠探测到「当前被评审的仓库」；
 #     - 新增 get_review_operational_advice()：评审 NPC 生成召唤 CodeBuddy 的
 #       操作建议时调用，组织名 / 仓库名全部自适应，跨仓可用，禁止写死。
+#
+#   v1.2 新增（修复「检测本组织 / 仓库能力」误识别）：
+#     - **env 权威优先 + 交叉校验**：平台注入的 CNB_REPO_SLUG 为最权威来源，
+#       当 git remote 探测到的仓库与平台 slug 不一致时，**以平台 slug 为准**
+#       （env_over_git），杜绝把本仓库误识别成其他仓库（如借鉴的
+#       dongjiagoushi）；
+#     - **git remote 遍历兜底**：不再只读 origin，遍历全部 remote 解析，
+#       优先返回与平台权威 slug / 仓库名一致的 remote；env 完全缺失时再回退；
+#     - **env 候选增强**：新增 CNB_PULL_REQUEST_SLUG / CNB_REPO_URL_HTTPS
+#       等候选变量 + slug 归一化（去空白 / 去 .git），提高 env 命中率。
 #
 #   使用方式（所有角色 prompt 中均引用此模块）：
 #     from agent_identity import AgentIdentity
@@ -58,46 +68,82 @@ class RepoContext:
 # 环境变量探测
 # ============================================================
 
+def _slug_normalize(slug: str) -> str:
+    """规范化仓库 slug：去掉首尾空白、可选 .git 后缀、统一小写尾缀（保留原文）。"""
+    slug = (slug or "").strip().rstrip("/")
+    if slug.endswith(".git"):
+        slug = slug[:-4]
+    return slug
+
+
 def _detect_from_env() -> Dict[str, str]:
     """从 CNB 平台环境变量中探测当前仓库上下文。
 
     优先使用 CNB_REPO_SLUG（格式: owner/repo），
     次选 CNB_GROUP_SLUG + CNB_REPO_NAME 组合，
-    最后尝试 CNB_WEB_ENDPOINT / CNB_BUILD_WEB_URL 解析。
+    再尝试 CNB_PULL_REQUEST_SLUG / CNB_REPO_URL_HTTPS / CNB_BUILD_WEB_URL 解析。
+
+    **权威性说明**：平台流水线注入的 CNB_REPO_SLUG / CNB_REPO_NAME 是判定
+    当前组织 + 仓库的**最权威来源**，任何 git remote 探测都不得覆盖它，
+    避免把「本仓库」误识别成其他仓库（例如借鉴的 dongjiagoushi）。
     """
     out: Dict[str, str] = {}
 
-    # 方法1: CNB_REPO_SLUG 直接给出完整路径
-    slug = os.environ.get("CNB_REPO_SLUG", "") or os.environ.get("CNB_REPO_SLUG_LOWERCASE", "")
-    if slug and "/" in slug:
-        owner, repo = slug.split("/", 1)
-        out["owner"] = owner
-        out["repo_name"] = repo
-        out["full_slug"] = slug
-        out["detection_source"] = "env_cnb_repo_slug"
-        return out
+    def _hit(owner: str, repo: str, src: str) -> Dict[str, str]:
+        owner = owner.strip()
+        repo = _slug_normalize(repo)
+        if owner and repo and "/" not in repo:
+            return {
+                "owner": owner,
+                "repo_name": repo,
+                "full_slug": f"{owner}/{repo}",
+                "detection_source": src,
+            }
+        return {}
 
-    # 方法2: CNB_GROUP_SLUG + CNB_REPO_NAME 组合
+    # 方法1: CNB_REPO_SLUG 直接给出完整路径（最权威）
+    for var in ("CNB_REPO_SLUG", "CNB_REPO_SLUG_LOWERCASE"):
+        slug = _slug_normalize(os.environ.get(var, ""))
+        if slug and "/" in slug:
+            owner, repo = slug.split("/", 1)
+            hit = _hit(owner, repo, "env_cnb_repo_slug")
+            if hit:
+                return hit
+
+    # 方法2: CNB_PULL_REQUEST_SLUG（平台在 PR/Issue 上下文注入）
+    pr_slug = _slug_normalize(os.environ.get("CNB_PULL_REQUEST_SLUG", ""))
+    if pr_slug and "/" in pr_slug:
+        owner, repo = pr_slug.split("/", 1)
+        hit = _hit(owner, repo, "env_cnb_pr_slug")
+        if hit:
+            return hit
+
+    # 方法3: CNB_GROUP_SLUG + CNB_REPO_NAME 组合
     group = os.environ.get("CNB_GROUP_SLUG", "") or os.environ.get("CNB_ROOT_SLUG", "")
     repo = os.environ.get("CNB_REPO_NAME", "")
     if group and repo:
-        out["owner"] = group
-        out["repo_name"] = repo
-        out["full_slug"] = f"{group}/{repo}"
-        out["detection_source"] = "env_cnb_group_repo"
-        return out
+        hit = _hit(group, repo, "env_cnb_group_repo")
+        if hit:
+            return hit
 
-    # 方法3: CNB_BUILD_WEB_URL 中解析
+    # 方法4: CNB_REPO_URL_HTTPS（格式: https://cnb.cool/owner/repo）
+    repo_url = _slug_normalize(os.environ.get("CNB_REPO_URL_HTTPS", ""))
+    if repo_url:
+        m = re.search(r'https?://[^/]+/([^/]+)/([^/]+)$', repo_url)
+        if m:
+            hit = _hit(m.group(1), m.group(2), "env_cnb_repo_url_https")
+            if hit:
+                return hit
+
+    # 方法5: CNB_BUILD_WEB_URL 中解析
     build_url = os.environ.get("CNB_BUILD_WEB_URL", "")
     if build_url:
         # 格式: https://cnb.cool/owner/repo/-/build/logs/...
         m = re.search(r'https?://[^/]+/([^/]+)/([^/]+)/', build_url)
         if m:
-            out["owner"] = m.group(1)
-            out["repo_name"] = m.group(2)
-            out["full_slug"] = f"{m.group(1)}/{m.group(2)}"
-            out["detection_source"] = "env_cnb_build_web_url"
-            return out
+            hit = _hit(m.group(1), m.group(2), "env_cnb_build_web_url")
+            if hit:
+                return hit
 
     return {}
 
@@ -118,35 +164,97 @@ def _git_root(start: str) -> Optional[str]:
         cur = parent
 
 
-def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
-    """从 git remote 探测仓库上下文（适用于本地开发/测试环境）。
+def _parse_remote_url(url: str) -> Optional[Dict[str, str]]:
+    """从 git remote URL 解析 owner/repo。
 
-    会从 start（默认当前目录）**向上查找 .git** 定位仓库根后再读取
-    remote.origin.url，保证在子目录执行时也能探测到当前被评审的仓库。
+    支持格式:
+      git@cnb.cool:owner/repo.git
+      https://cnb.cool/owner/repo.git
+      https://cnb.cool/owner/repo
+      ssh://git@cnb.cool/owner/repo.git
+    """
+    url = _slug_normalize(url)
+    if not url:
+        return None
+    m = re.search(r'(?:[:/])([^/:]+)/([^/:]+?)(?:\.git)?$', url)
+    if not m:
+        return None
+    owner, repo = m.group(1), m.group(2)
+    repo = _slug_normalize(repo)
+    if owner and repo and "/" not in repo:
+        return {
+            "owner": owner,
+            "repo_name": repo,
+            "full_slug": f"{owner}/{repo}",
+        }
+    return None
+
+
+def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
+    """从 git remote 探测仓库上下文（适用于本地开发/测试环境 / env 缺失场景）。
+
+    会从 start（默认当前目录）**向上查找 .git** 定位仓库根后，**遍历全部
+    remote** 解析 owner/repo；若平台注入的 CNB_REPO_SLUG / CNB_REPO_NAME
+    存在（已知本仓库），则**优先返回与之一致的 remote**——当 git 探测结果
+    与平台权威 slug 冲突时，以平台注入的 slug 为准，防止把本仓库误识别成
+    其他仓库（例如借鉴的 dongjiagoushi）。
     """
     try:
         root = _git_root(start or os.getcwd())
         if root is None:
             return {}
-        result = subprocess.run(
-            ["git", "-C", root, "config", "--get", "remote.origin.url"],
+
+        # 读取平台权威 slug（若存在），用于 git 结果交叉校验
+        env_slug = (_slug_normalize(os.environ.get("CNB_REPO_SLUG", ""))
+                    or _slug_normalize(os.environ.get("CNB_REPO_SLUG_LOWERCASE", "")))
+        env_repo_name = _slug_normalize(os.environ.get("CNB_REPO_NAME", ""))
+
+        # 列出所有 remote（遍历，不只 origin，增强多 remote 场景健壮性）
+        r = subprocess.run(
+            ["git", "-C", root, "remote"],
             capture_output=True, text=True, timeout=3)
-        url = (result.stdout or "").strip()
-        if not url:
+        remotes = [x.strip() for x in (r.stdout or "").splitlines() if x.strip()]
+        if not remotes:
+            remotes = ["origin"]
+
+        candidates = []
+        for remote in remotes:
+            res = subprocess.run(
+                ["git", "-C", root, "config", "--get", f"remote.{remote}.url"],
+                capture_output=True, text=True, timeout=3)
+            url = (res.stdout or "").strip()
+            parsed = _parse_remote_url(url)
+            if parsed:
+                candidates.append(parsed)
+
+        if not candidates:
             return {}
-        # 支持格式:
-        #   git@cnb.cool:owner/repo.git
-        #   https://cnb.cool/owner/repo.git
-        #   https://cnb.cool/owner/repo
-        m = re.search(r'(?:[:/])([^/:]+)/([^/:]+?)(?:\.git)?$', url)
-        if m:
-            owner, repo = m.group(1), m.group(2)
+
+        # 交叉校验：优先返回与平台权威 slug 一致的候选
+        for cand in candidates:
+            if env_slug and cand["full_slug"] == env_slug:
+                cand["detection_source"] = "git_remote_matches_env"
+                return cand
+            if env_repo_name and cand["repo_name"] == env_repo_name:
+                cand["detection_source"] = "git_remote_matches_env_repo"
+                return cand
+
+        # 平台权威 slug 存在但 git 探测到不同仓库：以平台为准，绝不误识别
+        if env_slug and "/" in env_slug:
+            owner, repo = env_slug.split("/", 1)
             return {
                 "owner": owner,
                 "repo_name": repo,
                 "full_slug": f"{owner}/{repo}",
-                "detection_source": "git_remote",
+                "detection_source": "env_over_git",
             }
+
+        # 无平台权威时，返回第一个可解析的 remote（用 origin 优先）
+        candidates.sort(key=lambda c: 0 if c["repo_name"] == "origin" else 1)
+        out = dict(candidates[0])
+        out["detection_source"] = "git_remote"
+        return out
+
     except (subprocess.SubprocessError, FileNotFoundError, ValueError):
         pass
     return {}
@@ -196,13 +304,16 @@ class AgentIdentity:
         if self.repo_context is not None:
             return self.repo_context
 
-        # 优先环境变量
+        # 优先环境变量（平台注入的 CNB_REPO_SLUG 为最权威来源）
         env_data = _detect_from_env()
         if env_data:
             self.repo_context = RepoContext(**env_data)
             return self.repo_context
 
-        # 其次 git remote（向上查找 .git 定位仓库根，健壮探测）
+        # 其次 git remote（向上查找 .git 定位仓库根，健壮探测）。
+        # _detect_from_git 内部已做交叉校验：若平台权威 slug 存在但 git
+        # 探测到别的仓库，会以平台 slug 为准（env_over_git），绝不误识别成
+        # 其他仓库（例如借鉴的 dongjiagoushi）。
         git_data = _detect_from_git()
         if git_data:
             self.repo_context = RepoContext(**git_data)
@@ -211,9 +322,9 @@ class AgentIdentity:
         # 保底：尝试从当前工作目录推断
         # 最后兜底返回空 context
         self.repo_context = RepoContext(
-            owner=os.environ.get("CNB_GROUP_SLUG", ""),
+            owner=os.environ.get("CNB_GROUP_SLUG", "") or os.environ.get("CNB_ROOT_SLUG", ""),
             repo_name=os.environ.get("CNB_REPO_NAME", ""),
-            full_slug=os.environ.get("CNB_REPO_SLUG", ""),
+            full_slug=os.environ.get("CNB_REPO_SLUG", "") or os.environ.get("CNB_PULL_REQUEST_SLUG", ""),
             detection_source="fallback_env",
         )
         return self.repo_context
