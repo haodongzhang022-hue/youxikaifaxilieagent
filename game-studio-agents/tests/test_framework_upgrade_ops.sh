@@ -265,6 +265,86 @@ else
   report "多记录场景审计结论：通过" 1
 fi
 
+echo "== 5. 不可变性回归（修订保留旧版本仍判只增不改）=="
+out5=$($PY - <<'PYEOF'
+import sys, os
+sys.path.insert(0, os.path.abspath("../../game-architect-team/src"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from framework_upgrade_ops import seed_known_upgrades, audit_upgrade_records
+from framework_upgrade_memory import FrameworkUpgradeMemory
+
+fmu = FrameworkUpgradeMemory()
+seed_known_upgrades(fmu)
+
+# 模拟一次修订：修订=追加高版本，原记录标 superseded 保留（只增不改只追加）
+target = next((r for r in fmu.get_all_records() if r.kind == "content"), None)
+if target:
+    fmu.memory.revise(target.mem_id, dict(target.content, note="修订"))
+
+audit = audit_upgrade_records(fmu)
+immut = audit["immutability"]
+print("IMMUTABLE_OK=", immut["immutable_ok"])
+print("SUPERSEDED=", immut["superseded"])
+print("VERDICT=", audit["verdict"])
+PYEOF
+)
+
+if echo "$out5" | grep -q "IMMUTABLE_OK= True"; then
+  report "修订保留旧版本（superseded）仍判只增不改（immutable_ok=True）" 0
+else
+  report "修订保留旧版本（superseded）仍判只增不改（immutable_ok=True）" 1
+fi
+
+if echo "$out5" | grep -q "SUPERSEDED= 1"; then
+  report "存在 1 条 superseded 旧版本（历史被保留未删除）" 0
+else
+  report "存在 1 条 superseded 旧版本（历史被保留未删除）" 1
+fi
+
+if echo "$out5" | grep -q "VERDICT= 通过"; then
+  report "修订场景审计结论仍为通过" 0
+else
+  report "修订场景审计结论仍为通过" 1
+fi
+
+echo "== 6. 共享内存复用持久化（跨调用复用同一 SharedMemory 幂等）=="
+out6=$($PY - <<'PYEOF'
+import sys, os
+sys.path.insert(0, os.path.abspath("../../game-architect-team/src"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from shared_memory import SharedMemory
+from framework_upgrade_ops import run_data_ops_upgrade
+
+# 模拟 OpsDeptAgent 模块级共享内存：跨多次调用复用同一 SharedMemory 实例
+sm = SharedMemory()
+r1 = run_data_ops_upgrade(shared_memory=sm)
+r2 = run_data_ops_upgrade(shared_memory=sm)
+
+print("FIRST_SEEDED=", r1["seeded"]["seeded"])
+print("SECOND_SEEDED=", r2["seeded"]["seeded"])
+print("SECOND_SKIPPED=", r2["seeded"]["skipped"])
+print("VERDICT=", r2["audit"]["verdict"])
+PYEOF
+)
+
+if echo "$out6" | grep -q "FIRST_SEEDED= 1"; then
+  report "首次调用沉淀 1 条升级记录" 0
+else
+  report "首次调用沉淀 1 条升级记录" 1
+fi
+
+if echo "$out6" | grep -q "SECOND_SEEDED= 0" && echo "$out6" | grep -q "SECOND_SKIPPED= 1"; then
+  report "复用同一 SharedMemory 二次调用幂等（seeded=0, skipped=1）" 0
+else
+  report "复用同一 SharedMemory 二次调用幂等（seeded=0, skipped=1）" 1
+fi
+
+if echo "$out6" | grep -q "VERDICT= 通过"; then
+  report "共享内存复用场景审计结论通过" 0
+else
+  report "共享内存复用场景审计结论通过" 1
+fi
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"

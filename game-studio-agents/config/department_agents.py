@@ -23,6 +23,7 @@ from game_producer_agent import DEPARTMENTS
 from market_input_bridge import build_market_input
 from data_ops_diagnosis import run_data_ops
 from framework_upgrade_ops import run_data_ops_upgrade
+from shared_memory import SharedMemory
 from release_gate import aggregate_and_release, run_release_gate
 
 
@@ -589,6 +590,9 @@ class PmDeptAgent(DepartmentAgent):
 # 六、运营线 Agent（data_analyst）
 # ============================================================
 
+# 运营线框架升级沉淀的模块级共享内存（跨 _execute 调用复用，保证幂等持久化）
+_OPS_UPGRADE_MEMORY: SharedMemory = SharedMemory()
+
 class OpsDeptAgent(DepartmentAgent):
     """运营线部门 Agent：负责数据分析与运营洞察。
 
@@ -663,7 +667,8 @@ class OpsDeptAgent(DepartmentAgent):
         # 框架升级记录沉淀 + 复盘审计（wp_data_ops 落地·只增不改只追加）
         # 幂等调用：已有记录自动跳过，不产生重复沉淀
         try:
-            upgrade_ops = run_data_ops_upgrade()
+            # 复用模块级共享内存，跨 _execute 调用持久化，幂等作用于同一份升级记录
+            upgrade_ops = run_data_ops_upgrade(shared_memory=_OPS_UPGRADE_MEMORY)
             artifact["framework_upgrade"] = {
                 "seeded": upgrade_ops.get("seeded", {}).get("seeded", 0),
                 "skipped": upgrade_ops.get("seeded", {}).get("skipped", 0),

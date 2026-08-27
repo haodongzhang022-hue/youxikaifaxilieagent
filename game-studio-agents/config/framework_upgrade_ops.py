@@ -32,6 +32,7 @@ if _ARCH_DIR not in sys.path:
 from framework_upgrade_memory import (
     FrameworkUpgradeMemory,
 )
+from agent_identity import current_repo_slug
 
 
 # ============================================================
@@ -61,10 +62,7 @@ _KNOWN_UPGRADES: List[Dict[str, Any]] = [
                 "实现 UPG 编号递增规则",
                 "实现四环节闭环留痕 API",
             ],
-            "pr_links": [
-                "https://cnb.cool/dongdongxiaozu/youxikaifaxilieagent/-/pulls/49",
-                "https://cnb.cool/dongdongxiaozu/youxikaifaxilieagent/-/pulls/51",
-            ],
+            "pr_nums": [49, 51],
             "version": "v0.6.4",
         },
         "status": "active",
@@ -87,6 +85,15 @@ def seed_known_upgrades(memory: Optional[FrameworkUpgradeMemory] = None) -> Dict
     skipped = 0
     seeded_ids: List[str] = []
 
+    # 动态生成 PR 链接（跨仓库泛化，不硬编码组织/仓库名）
+    try:
+        repo_slug = current_repo_slug()
+    except Exception:
+        repo_slug = "dongdongxiaozu/youxikaifaxilieagent"
+    pr_links_for = lambda nums: [
+        f"https://cnb.cool/{repo_slug}/-/pulls/{n}" for n in nums
+    ]
+
     # 查询共享记忆中已有的升级记录，避免重复沉淀
     existing = {r.content.get("upgrade_id")
                 for r in fmu.query_upgrades(keyword="upgrade")
@@ -107,7 +114,7 @@ def seed_known_upgrades(memory: Optional[FrameworkUpgradeMemory] = None) -> Dict
             decision=upgrade["decision"],
             reason=upgrade["decision_reason"],
             tasks=upgrade["implemented"]["tasks"],
-            pr_links=upgrade["implemented"]["pr_links"],
+            pr_links=pr_links_for(upgrade["implemented"].get("pr_nums", [])),
             version=upgrade["implemented"]["version"],
             owner="data_analyst",
             upg_id=upg_id,
@@ -177,9 +184,23 @@ def audit_upgrade_records(memory: Optional[FrameworkUpgradeMemory] = None) -> Di
     total_records = len(all_records)
     active_records = sum(1 for r in all_records if r.status == "active")
     superseded_records = sum(1 for r in all_records if r.status == "superseded")
-    # 检查是否有相同 mem_id 的旧版本保留（只增不改的标志）
-    mem_ids = [r.mem_id for r in all_records]
-    immutable_ok = len(set(mem_ids)) == len(mem_ids)  # 每个 mem_id 唯一
+    # 检查只增不改只追加：修订保留旧版本（superseded）并追加新版本，无删除/覆盖。
+    # 旧逻辑 len(set(mem_ids))==len(mem_ids) 会在存在 superseded 旧版本时
+    # （修订产生的同 mem_id 多版本）被误判为 False，语义恰好反转。
+    # SharedMemory 设计保证只增不改：修订=追加高版本，原记录标 superseded 保留
+    # （物理行不删）。故存在 superseded 旧版本恰是只增不改成立的佐证。
+    # 正确判据：每个 superseded 旧版本都能找到同 mem_id 的更新 active 版本
+    # （历史被保留、无孤儿/丢链）→ immutable_ok=True。
+    superseded_recs = [r for r in all_records if r.status == "superseded"]
+    active_by_mem: Dict[str, List[Any]] = {}
+    for r in all_records:
+        if r.status == "active":
+            active_by_mem.setdefault(r.mem_id, []).append(r)
+    immutable_ok = all(
+        any(a.mem_id == r.mem_id and a.version > r.version
+            for a in active_by_mem.get(r.mem_id, []))
+        for r in superseded_recs
+    )  # 无 superseded 记录时 all([])=True，天然通过
 
     # 3. 版本清晰：检查每条 upgrade 记录是否含版本号
     versioned = sum(1 for rec in complete_upgrades
@@ -264,16 +285,26 @@ def list_upgrade_summaries(memory: Optional[FrameworkUpgradeMemory] = None) -> L
 # 四、主入口：运营线升级记录沉淀 + 复盘审计
 # ============================================================
 
-def run_data_ops_upgrade(memory: Optional[FrameworkUpgradeMemory] = None) -> Dict[str, Any]:
+def run_data_ops_upgrade(memory: Optional[FrameworkUpgradeMemory] = None,
+                       shared_memory: Optional[Any] = None) -> Dict[str, Any]:
     """运营线主入口：先沉淀已知升级记录，再对全部记录做复盘审计。
+
+    Args:
+        memory: FrameworkUpgradeMemory 实例（优先使用）。
+        shared_memory: 外部持久化 SharedMemory 实例（未传 memory 时使用），
+            支持跨调用复用同一共享记忆，幂等判定与审计作用于持久化数据。
 
     Returns:
         {"seeded": ..., "audit": ..., "summaries": [...]}
     """
-    fmu = memory or FrameworkUpgradeMemory()
-    seed_result = seed_known_upgrades(fmu)
-    audit = audit_upgrade_records(fmu)
-    summaries = list_upgrade_summaries(fmu)
+    if memory is None:
+        if shared_memory is not None:
+            memory = FrameworkUpgradeMemory(memory=shared_memory)
+        else:
+            memory = FrameworkUpgradeMemory()
+    seed_result = seed_known_upgrades(memory)
+    audit = audit_upgrade_records(memory)
+    summaries = list_upgrade_summaries(memory)
     return {
         "seeded": seed_result,
         "audit": audit,
