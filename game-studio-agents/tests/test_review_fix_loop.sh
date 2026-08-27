@@ -102,43 +102,43 @@ out_loop=$($PY - <<'PY'
 from review_fix_router import ReviewFixRouter
 r = ReviewFixRouter()
 
-# 场景A：修复已 push 成功、新评审在下一轮才产生（最新 head 暂无评审结论）→ 正常待评审，不中断
-pending = r.classify_loop_state("PR-31", has_newest_review=False, push_success=True,
+# 场景A：修复已打标签成功、新评审在下一轮才产生（最新 head 暂无评审结论）→ 正常待评审，不中断
+pending = r.classify_loop_state("PR-31", has_newest_review=False, label_applied=True,
                                 review_timeout=False, rounds_over_limit=False)
 print("pending=%s" % pending)
 
-# 场景B：push 403（修复没推上去）→ 真正中断（硬性信号①）
-interrupt_push = r.classify_loop_state("PR-31", has_newest_review=False,
-                                       push_success=False, review_timeout=False,
-                                       rounds_over_limit=False)
-print("interrupt_push=%s" % interrupt_push)
+# 场景B：打标签失败（修复状态未正确标记）→ 真正中断（硬性信号①）
+interrupt_label = r.classify_loop_state("PR-31", has_newest_review=False,
+                                        label_applied=False, review_timeout=False,
+                                        rounds_over_limit=False)
+print("interrupt_label=%s" % interrupt_label)
 
-# 场景C：push 成功但长时间无后续评审 run 跟进 → 真正中断（硬性信号②）
+# 场景C：标签已打但长时间无后续评审 run 跟进 → 真正中断（硬性信号②）
 interrupt_timeout = r.classify_loop_state("PR-31", has_newest_review=False,
-                                          push_success=True, review_timeout=True,
+                                          label_applied=True, review_timeout=True,
                                           rounds_over_limit=False)
 print("interrupt_timeout=%s" % interrupt_timeout)
 
-# 场景D：push 成功且有最新评审结论 → 闭环正常（有结论）
-ok = r.classify_loop_state("PR-31", has_newest_review=True, push_success=True,
+# 场景D：标签已打且有最新评审结论 → 闭环正常（有结论）
+ok = r.classify_loop_state("PR-31", has_newest_review=True, label_applied=True,
                            review_timeout=False, rounds_over_limit=False)
 print("ok=%s" % ok)
 PY
 )
 
-# 6.1 正常待评审：push 成功、仅"暂无最新评审结论" → 必须判 pending_review（不误报中断）
+# 6.1 正常待评审：标签已打、仅"暂无最新评审结论" → 必须判 pending_review（不误报中断）
 if echo "$out_loop" | grep -q "pending=pending_review"; then
-  report "闭环判别：修复 push 成功、新评审尚在下一轮（暂无最新评审结论）→ 正常待评审，不误报中断" 0
+  report "闭环判别：修复已打标签、新评审尚在下一轮（暂无最新评审结论）→ 正常待评审，不误报中断" 0
 else
-  report "闭环判别：修复 push 成功、新评审尚在下一轮（暂无最新评审结论）→ 正常待评审，不误报中断" 1
+  report "闭环判别：修复已打标签、新评审尚在下一轮（暂无最新评审结论）→ 正常待评审，不误报中断" 1
 fi
 
-# 6.2 真正中断须有硬性信号：push 403 / 评审超时 → 判 interrupted
-if echo "$out_loop" | grep -q "interrupt_push=interrupted" \
+# 6.2 真正中断须有硬性信号：打标签失败 / 评审超时 → 判 interrupted
+if echo "$out_loop" | grep -q "interrupt_label=interrupted" \
    && echo "$out_loop" | grep -q "interrupt_timeout=interrupted"; then
-  report "闭环判别：真正中断须有硬性信号（push 403 / 评审超时）才判 interrupted" 0
+  report "闭环判别：真正中断须有硬性信号（打标签失败 / 评审超时）才判 interrupted" 0
 else
-  report "闭环判别：真正中断须有硬性信号（push 403 / 评审超时）才判 interrupted" 1
+  report "闭环判别：真正中断须有硬性信号（打标签失败 / 评审超时）才判 interrupted" 1
 fi
 
 # 6.3 有最新评审结论且无硬性信号 → 闭环正常
