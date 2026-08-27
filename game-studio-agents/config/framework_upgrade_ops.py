@@ -86,10 +86,12 @@ def seed_known_upgrades(memory: Optional[FrameworkUpgradeMemory] = None) -> Dict
     seeded_ids: List[str] = []
 
     # 动态生成 PR 链接（跨仓库泛化，不硬编码组织/仓库名）
-    try:
-        repo_slug = current_repo_slug()
-    except Exception:
-        repo_slug = "dongdongxiaozu/youxikaifaxilieagent"
+    repo_slug = current_repo_slug()
+    if not repo_slug or "/" not in repo_slug:
+        raise RuntimeError(
+            f"无法自动探测仓库 slug（current_repo_slug() 返回 {repo_slug!r}），"
+            "无法生成升级记录 PR 链接。请确认 CNB_REPO_SLUG / git remote 环境正确。"
+        )
     pr_links_for = lambda nums: [
         f"https://cnb.cool/{repo_slug}/-/pulls/{n}" for n in nums
     ]
@@ -123,7 +125,7 @@ def seed_known_upgrades(memory: Optional[FrameworkUpgradeMemory] = None) -> Dict
         seeded_ids.append(rec.mem_id)
 
         # 同时写入一条 task 记录（升级任务卡）
-        fmu._add("task", {
+        fmu.add_record("task", {
             "type": "upgrade_task",
             "upgrade_id": upg_id,
             "tasks": upgrade["implemented"]["tasks"],
@@ -131,7 +133,7 @@ def seed_known_upgrades(memory: Optional[FrameworkUpgradeMemory] = None) -> Dict
         }, owner="data_analyst")
 
         # 同时写入一条 skill 记录（升级经验沉淀）
-        fmu._add("skill", {
+        fmu.add_record("skill", {
             "type": "upgrade_lesson",
             "upgrade_id": upg_id,
             "lesson": "框架升级必须走完整闭环：触发→评估→人类拍板→落地留痕",

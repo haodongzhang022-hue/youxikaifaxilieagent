@@ -590,7 +590,9 @@ class PmDeptAgent(DepartmentAgent):
 # 六、运营线 Agent（data_analyst）
 # ============================================================
 
-# 运营线框架升级沉淀的模块级共享内存（跨 _execute 调用复用，保证幂等持久化）
+# 运营线框架升级沉淀的模块级共享内存（进程内纯内存 dict，
+# 仅同进程跨 _execute 调用复用；进程重启即清空，UPG-001 重新 seed）。
+# 如需跨进程持久化需另接落盘/共享存储。
 _OPS_UPGRADE_MEMORY: SharedMemory = SharedMemory()
 
 class OpsDeptAgent(DepartmentAgent):
@@ -664,25 +666,38 @@ class OpsDeptAgent(DepartmentAgent):
             "market_diagnosis": market_report,
         }
 
-        # 框架升级记录沉淀 + 复盘审计（wp_data_ops 落地·只增不改只追加）
-        # 幂等调用：已有记录自动跳过，不产生重复沉淀
-        try:
-            # 复用模块级共享内存，跨 _execute 调用持久化，幂等作用于同一份升级记录
-            upgrade_ops = run_data_ops_upgrade(shared_memory=_OPS_UPGRADE_MEMORY)
-            artifact["framework_upgrade"] = {
-                "seeded": upgrade_ops.get("seeded", {}).get("seeded", 0),
-                "skipped": upgrade_ops.get("seeded", {}).get("skipped", 0),
-                "audit_verdict": upgrade_ops.get("audit", {}).get("verdict", "-"),
-                "total_upgrades": upgrade_ops.get("audit", {}).get("summary", {}).get("total_upgrades", 0),
-            }
-        except Exception as e:
-            # 升级沉淀为附加能力，失败不影响主运营诊断
-            artifact["framework_upgrade"] = {
-                "error": str(e),
-                "seeded": 0,
-            }
+        # 框架升级记录沉淀 + 复盘审计（仅 upgrade 主题工作包触发，幂等只追加）
+        # 按工作包主题判断：label 含 "upgrade" 或 payload 含 "framework_upgrade" 才沉淀
+        _is_upgrade_topic = (
+            "upgrade" in str(label).lower()
+            or "framework_upgrade" in str(content)
+        )
+        if _is_upgrade_topic:
+            try:
+                # 复用模块级共享内存（进程内纯内存，同进程跨 _execute 幂等；
+                # 进程重启清空、UPG-001 重新 seed；真持久化需另接落盘/共享存储）
+                upgrade_ops = run_data_ops_upgrade(shared_memory=_OPS_UPGRADE_MEMORY)
+                artifact["framework_upgrade"] = {
+                    "seeded": upgrade_ops.get("seeded", {}).get("seeded", 0),
+                    "skipped": upgrade_ops.get("seeded", {}).get("skipped", 0),
+                    "audit_verdict": upgrade_ops.get("audit", {}).get("verdict", "-"),
+                    "total_upgrades": upgrade_ops.get("audit", {}).get("summary", {}).get("total_upgrades", 0),
+                }
+            except Exception as e:
+                # 升级沉淀为附加能力，失败不影响主运营诊断，但需显式告警避免静默吞错
+                self._log("framework_upgrade_error",
+                          f"升级记录沉淀失败：{e}")
+                artifact["framework_upgrade"] = {
+                    "error": str(e),
+                    "seeded": 0,
+                }
+        else:
+            # 非升级主题工作包跳过沉淀
+            artifact["framework_upgrade"] = {"enabled": False, "reason": "not_upgrade_topic"}
 
-        self._log("execute", f"运营线产出数据洞察 + 市场生态位诊断 + 框架升级记录沉淀")
+        self._log("execute",
+                 f"运营线产出数据洞察 + 市场生态位诊断"
+                 + (" + 框架升级记录沉淀" if _is_upgrade_topic else ""))
         return artifact
 
     def _verify(self, work_package, artifact):

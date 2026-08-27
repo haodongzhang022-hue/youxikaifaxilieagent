@@ -345,6 +345,87 @@ else
   report "共享内存复用场景审计结论通过" 1
 fi
 
+echo "== 7. 评审修复回归（硬编码路径/公开API/条件触发）=="
+out7=$($PY - <<'PYEOF'
+import sys, os
+sys.path.insert(0, os.path.abspath("../../game-architect-team/src"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# --- 1. 空 slug 必须抛 RuntimeError（不能 fallback 到硬编码路径）---
+import framework_upgrade_ops
+
+# 备份原函数后 mock 返回空串
+orig_fn = framework_upgrade_ops.current_repo_slug
+framework_upgrade_ops.current_repo_slug = lambda: ""
+try:
+    framework_upgrade_ops.seed_known_upgrades()
+    print("EMPTY_SLUG_RAISED=False")
+except RuntimeError as e:
+    print("EMPTY_SLUG_RAISED=True")
+    print("EMPTY_SLUG_MSG_OK=", "无法自动探测仓库 slug" in str(e))
+except Exception:
+    print("EMPTY_SLUG_RAISED=WrongException")
+finally:
+    framework_upgrade_ops.current_repo_slug = orig_fn
+
+# --- 2. 公开 add_record() API 可用 ---
+from framework_upgrade_memory import FrameworkUpgradeMemory
+fmu = FrameworkUpgradeMemory()
+rec = fmu.add_record("task", {"type": "upgrade_task", "test": "add_record_api"})
+print("ADD_RECORD_API_OK=", rec is not None and rec.mem_id is not None)
+print("ADD_RECORD_KIND_OK=", rec.kind == "task")
+
+# --- 3. 检查 department_agents 条件判断与异常告警 ---
+import department_agents
+src = open(department_agents.__file__).read()
+print("HAS_UPGRADE_TOPIC_GUARD=", "_is_upgrade_topic" in src)
+print("HAS_ERROR_LOG=", "framework_upgrade_error" in src)
+print("NO_HARDCODED_SLUG=", "dongdongxiaozu/youxikaifaxilieagent" not in src)
+PYEOF
+)
+
+if echo "$out7" | grep -q "EMPTY_SLUG_RAISED=True"; then
+  report "空 slug 触发 RuntimeError（不再 fallback 硬编码路径）" 0
+else
+  report "空 slug 触发 RuntimeError（不再 fallback 硬编码路径）" 1
+fi
+
+if echo "$out7" | grep -q "EMPTY_SLUG_MSG_OK= True"; then
+  report "空 slug 错误信息含清晰提示" 0
+else
+  report "空 slug 错误信息含清晰提示" 1
+fi
+
+if echo "$out7" | grep -q "ADD_RECORD_API_OK= True"; then
+  report "公开 add_record() API 可用（返回有效记录）" 0
+else
+  report "公开 add_record() API 可用（返回有效记录）" 1
+fi
+
+if echo "$out7" | grep -q "ADD_RECORD_KIND_OK= True"; then
+  report "add_record() 写入 kind 正确" 0
+else
+  report "add_record() 写入 kind 正确" 1
+fi
+
+if echo "$out7" | grep -q "HAS_UPGRADE_TOPIC_GUARD= True"; then
+  report "OpsDeptAgent 含 upgrade 主题条件判断（非升级跳过）" 0
+else
+  report "OpsDeptAgent 含 upgrade 主题条件判断（非升级跳过）" 1
+fi
+
+if echo "$out7" | grep -q "HAS_ERROR_LOG= True"; then
+  report "OpsDeptAgent 含异常显式告警（不静默吞错）" 0
+else
+  report "OpsDeptAgent 含异常显式告警（不静默吞错）" 1
+fi
+
+if echo "$out7" | grep -q "NO_HARDCODED_SLUG= True"; then
+  report "department_agents.py 无硬编码仓库 slug" 0
+else
+  report "department_agents.py 无硬编码仓库 slug" 1
+fi
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"

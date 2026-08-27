@@ -113,10 +113,27 @@ class FrameworkUpgradeMemory:
     # ---- 内部工具：把升级记录写入共享记忆 ----
     def _add(self, kind: str, content: Dict[str, Any],
              owner: str = "cto") -> SharedMemoryRecord:
-        """向 framework_upgrade 空间追加一条记录（只增）。"""
+        """向 framework_upgrade 空间追加一条记录（只增）。
+
+        内部实现，外部请优先使用公开方法 add_record()。
+        """
         return self.memory.add_record(
             FRAMEWORK_UPGRADE_SPACE, kind, content,
             owner=owner, acl_check=owner)
+
+    def add_record(self, kind: str, content: Dict[str, Any],
+                   owner: str = "cto") -> SharedMemoryRecord:
+        """公开接口：向 framework_upgrade 空间追加一条记录（只增）。
+
+        Args:
+            kind:    记录类型（content / task / skill）
+            content: 记录内容（字典）
+            owner:   记录者（默认 cto）
+
+        Returns:
+            新写入的 SharedMemoryRecord。
+        """
+        return self._add(kind, content, owner=owner)
 
     def _revise(self, mem_id: str, new_content: Dict[str, Any],
                 owner: str = "cto", weight_delta: float = 0.3) -> SharedMemoryRecord:
