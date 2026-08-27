@@ -236,6 +236,7 @@ $:
             bash game-studio-agents/tests/test_ecosystem_roles.sh
             bash game-studio-agents/tests/test_art_direction.sh
             bash game-studio-agents/tests/test_ui_ux.sh
+            bash game-studio-agents/tests/test_audio.sh
             bash game-studio-agents/tests/test_data_ops_diagnosis.sh
             bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
             bash game-studio-agents/tests/test_release_gate.sh
