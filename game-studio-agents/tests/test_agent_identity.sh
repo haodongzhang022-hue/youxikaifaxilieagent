@@ -1,8 +1,10 @@
 #!/bin/bash
 # ============================================================
 # 测试: 通用 Agent 身份自适应模块 (agent_identity.py)
-# 版本: v1.0
+# 版本: v1.1
 # 说明: 验证 AgentIdentity 模块能正确探测仓库上下文并生成 @ 召唤格式。
+#       v1.1 新增：评审 NPC 专用 get_review_operational_advice() 自适应
+#       召唤 CodeBuddy 操作建议（组织/仓库名不写死，跨仓可用）。
 # ============================================================
 set -e
 cd "$(dirname "$0")/../config"
@@ -13,7 +15,7 @@ PASS=0
 FAIL=0
 
 # 测试1: 模块可导入且自测通过
-echo -n "[1/5] 模块自测运行... "
+echo -n "[1/7] 模块自测运行... "
 python3 agent_identity.py > /dev/null 2>&1
 if [ $? -eq 0 ]; then
     echo "✅"
@@ -24,7 +26,7 @@ else
 fi
 
 # 测试2: 能探测到当前仓库 slug
-echo -n "[2/5] 仓库 slug 探测... "
+echo -n "[2/7] 仓库 slug 探测... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -42,7 +44,7 @@ else
 fi
 
 # 测试3: 能生成正确的 CodeBuddy @ 召唤格式
-echo -n "[3/5] CodeBuddy @ 召唤格式... "
+echo -n "[3/7] CodeBuddy @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -59,7 +61,7 @@ else
 fi
 
 # 测试4: 能生成修复专员的 @ 召唤格式
-echo -n "[4/5] 修复专员 @ 召唤格式... "
+echo -n "[4/7] 修复专员 @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -76,7 +78,7 @@ else
 fi
 
 # 测试5: 跨仓库策略识别
-echo -n "[5/5] 跨仓库策略识别... "
+echo -n "[5/7] 跨仓库策略识别... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -89,6 +91,42 @@ print(strategy['recommendation'])
 " 2>&1)
 if echo "$OUT" | grep -q "cross_repo"; then
     echo "✅ (跨仓库已识别)"
+    PASS=$((PASS+1))
+else
+    echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
+# 测试6: 评审 NPC 自适应召唤 CodeBuddy 操作建议（组织/仓库名不写死）
+echo -n "[6/7] 评审召唤 CodeBuddy 操作建议（自适应）... "
+OUT=$(python3 -c "
+import sys
+sys.path.insert(0, '.')
+from agent_identity import get_identity
+id = get_identity()
+print(id.get_review_operational_advice())
+" 2>&1)
+if echo "$OUT" | grep -q "@.*(CodeBuddy)" && echo "$OUT" | grep -q "仓库自适应识别"; then
+    echo "✅ (自适应带壳格式已生成)"
+    PASS=$((PASS+1))
+else
+    echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
+# 测试7: 评审召唤操作建议支持按目标仓库（跨仓）生成，不写死
+echo -n "[7/7] 评审召唤跨仓操作建议（按目标仓库）... "
+OUT=$(python3 -c "
+import sys
+sys.path.insert(0, '.')
+from agent_identity import get_identity
+id = get_identity()
+print(id.get_review_operational_advice('otherorg/otherrepo'))
+" 2>&1)
+if echo "$OUT" | grep -q "@otherorg/otherrepo(CodeBuddy)"; then
+    echo "✅ (按目标仓库自适应: @otherorg/otherrepo(CodeBuddy))"
     PASS=$((PASS+1))
 else
     echo "❌"

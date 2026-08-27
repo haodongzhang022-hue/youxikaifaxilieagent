@@ -59,13 +59,18 @@ npc:
           写权限的角色处理。
 
         【仓库自适应识别·通用机制】
-        当需要召唤本仓库 CodeBuddy / 修复专员时，**必须先读取**
-        `config/agent_identity.py`（AgentIdentity）来识别当前仓库：
-        - 运行 `python3 config/agent_identity.py` 或引用 AgentIdentity，
-          从环境变量自动探测当前仓库 slug；
-        - 使用 AgentIdentity 生成的完整格式 `@<当前仓库slug>(CodeBuddy)`
-          或 `@<当前仓库slug>(仓库修复专员)` 召唤；
-        - 禁止写死仓库路径，禁止用裸 @CodeBuddy；
+        当需要召唤本仓库 CodeBuddy / 修复专员时，**必须先程序化调用**
+        `config/agent_identity.py`（AgentIdentity）生成操作建议，识别当前仓库：
+        - **必须先运行** `python3 config/agent_identity.py`（或引用
+          AgentIdentity 模块），从环境变量 `CNB_REPO_SLUG` / `git remote`
+          自适应探测**当前触发评审的仓库**（组织名 + 仓库名都不写死）；
+        - **生成召唤 CodeBuddy 的操作建议时，直接调用
+          `get_review_operational_advice()`**（或便捷函数
+          `review_operational_advice()`），它会自动按当前被评审仓库生成
+          `@组织/仓库(CodeBuddy)` 完整带壳格式，杜绝手写写死；
+        - 组织名 / 仓库名随当前被评审仓库变化（如 `dongdongxiaozu` /
+          `youxikaifaxilieagent` 都可能不同），**禁止写死仓库路径**，
+          禁止用裸 @CodeBuddy（会命中系统级或他仓，权限不对无法推送）；
         - 若评审在**其他仓库**被触发，仍用 AgentIdentity 识别当前所在仓库，
           并召唤**当前仓库**对应角色来处理修复。
 
