@@ -123,3 +123,34 @@ flowchart TB
 3. `.cnb.yml` 使用 `default-npc:latest`，生产环境建议固定镜像版本（可用锚点统一改一处）。
 
 > 借鉴来源：`dongdongxiaozu/dongjiagoushi` 的 `架构八步方法论`、`测试信号灯`、`回转/打断协议`、`Issue 版本管理`。
+
+---
+
+## Issue #55 · 角色扩展 P1/P2 差距护栏收口（WP-04/05/06）
+
+> 承接架构师 CP1 定稿的分层实体化方案，P0（WP-01/02/02b）已合入，P1/P2 在此收口。
+
+### WP-04 · 部门角色 module 覆盖表
+
+新增 `config/department_module_coverage.md`，作为「角色 → 部门 Agent → module → 行为语义」的单一映射索引：
+
+- 六大部门 Agent（Design/Program/Art/Qa/Pm/Ops）→ 12 个 module 分支 → 承载角色全集
+- 独立实体化角色（producer / reference_learner / progress_pusher / merged_confirmer）单独列出
+- 生态角色 21 个 handler 承接（含协作支持圈 / 玩家圈 / 外部市场圈 / 美术圈）
+- `_alt` 变体样板 3 个 + 剩余 25 个按部门分组清单
+- 注册/装配口径：`DEPARTMENTS` 为事实源，部门 Agent 经 `DEPT_AGENT_CLASS` 装配
+
+### WP-05 · 角色-实现差距护栏
+
+新增 `tests/test_role_inventory.sh` 差距护栏，防「声明≠实现」回退：
+
+- `role_inventory.yaml` 结构完整性（58 + 21 覆盖）
+- `role_inventory.py --gap` 差距不劣化（declared_only ≤ 40，implemented ≥ 30）
+- 强制跑 `ecosystem_role_registry.summary()` 对照
+- `_alt` 样板变体与生态代表角色不回退为 `declared_only`
+- 端到端全链路 DONE + 生态任务真实 DONE
+
+### WP-06 · 流水线接入
+
+`.cnb.yml` 测试信号灯阶段接入 `test_role_inventory.sh` 差距护栏，
+与 `test_role_inventory_handlers.sh` 并列，形成「实现验证 + 差距护栏」双道防线。
