@@ -1,7 +1,7 @@
 # ============================================================
 # 通用 Agent 身份自适应模块 (Agent Identity)
 # 版本: v1.1
-# 说明: 让任意 Agent（CodeBuddy / 仓库修复专员 / 代码审查员 / 游戏向经理等）
+# 说明: 让任意 Agent（CodeBuddy / 代码审查员 / 游戏向经理等）
 #       能**自动识别当前所在的仓库上下文**，并据此生成正确的 @ 召唤格式，
 #       不再硬编码 `dongdongxiaozu/youxikaifaxilieagent`。
 #
@@ -159,7 +159,7 @@ def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
 class AgentIdentity:
     """通用 Agent 身份识别与 @ 召唤格式生成器。
 
-    所有角色（CodeBuddy / 仓库修复专员 / 代码审查员 / 游戏向经理 /
+    所有角色（CodeBuddy / 代码审查员 / 游戏向经理 /
     合并确认员等）都应引用本模块来生成跨仓库 / 同仓库的 @ 召唤格式，
     确保：
       - 不写死仓库名（自适应探测）；
@@ -171,7 +171,6 @@ class AgentIdentity:
     KNOWN_ROLES = [
         # 核心编排角色
         "CodeBuddy",
-        "仓库修复专员",
         "代码审查员",
         "游戏向经理",
         "合并确认员",
@@ -246,18 +245,18 @@ class AgentIdentity:
         """生成 @ 召唤格式。
 
         Args:
-            role: 角色名（如 "CodeBuddy"、"仓库修复专员"）
+            role: 角色名（如 "CodeBuddy"、"代码审查员"）
             target_slug: 目标仓库 slug（owner/repo）。
                 不传时使用当前仓库（self.repo_slug）。
 
         Returns:
             如 "@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)"
-            或 "@dongdongxiaozu/youxikaifaxilieagent(仓库修复专员)"
+            或 "@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)"
         """
         slug = target_slug or self.repo_slug
         if not slug or "/" not in slug:
             # 未探测到仓库时，退化到裸 @ 并告警
-            return f"@{role}（⚠️ 仓库未探测到，使用裸格式可能权限受限）"
+            return f"@{role}（⚠️ 仓库未探测到，使用裸格式可能路由错误，请用完整带壳格式）"
         return f"@{slug}({role})"
 
     def get_codebuddy_mention(self) -> str:
@@ -265,8 +264,8 @@ class AgentIdentity:
         return self.build_mention("CodeBuddy")
 
     def get_fixer_mention(self) -> str:
-        """获取本仓库修复专员（仓库修复专员）的完整 @ 召唤格式。"""
-        return self.build_mention("仓库修复专员")
+        """获取本仓库修复方（CodeBuddy，已注册执行角色）的完整 @ 召唤格式。"""
+        return self.build_mention("CodeBuddy")
 
     def get_reviewer_mention(self) -> str:
         """获取本仓库代码审查员的完整 @ 召唤格式。"""
@@ -349,12 +348,12 @@ class AgentIdentity:
             f"（识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）\n"
             f"- 召唤本仓库 CodeBuddy:\n"
             f"  {cb_mention}\n"
-            f"- 召唤本仓库修复专员:\n"
+            f"- 召唤本仓库修复方（CodeBuddy）:\n"
             f"  {fixer_mention}\n"
             f"- 同仓库调用: 可裸 @ 角色名，但建议用完整格式消除歧义\n"
             f"- **跨仓库调用: 必须用完整格式 `@{self.repo_slug}(角色名)` 带壳召唤，"
-            f"否则会被路由到错误仓库导致权限受限**\n"
-            f"- 禁止裸 @CodeBuddy（会命中系统级或他仓，权限不对）\n"
+            f"否则会被路由到错误仓库、召唤失败**\n"
+            f"- 禁止裸 @CodeBuddy（会命中系统级或他仓，召唤路由错误）\n"
         )
 
     def get_review_operational_advice(self,
@@ -391,8 +390,8 @@ class AgentIdentity:
             f"{cb_mention}\n"
             f"- 组织名 `{owner}` 与仓库名 `{repo}` 均**自适应探测**，随当前被评审仓库变化，"
             f"不写死固定路径；\n"
-            f"- **禁止裸 `@CodeBuddy`**（会命中系统级或他仓 CodeBuddy，权限不对、无法推送）；\n"
-            f"- 仅本仓库 CodeBuddy（{cb_mention}）具备推送/合并/关闭权限，可完成闭环。\n"
+            f"- **禁止裸 `@CodeBuddy`**（会命中系统级或他仓 CodeBuddy，召唤路由错误）；\n"
+            f"- 仅输出召唤壳格式本身，其余执行动作属执行方分工，不在本建议内。\n"
         )
 
 
@@ -432,7 +431,7 @@ def codebuddy_mention() -> str:
 
 
 def fixer_mention() -> str:
-    """快速获取本仓库修复专员的 @ 召唤格式。"""
+    """快速获取本仓库修复方（CodeBuddy）的 @ 召唤格式。"""
     return get_identity().get_fixer_mention()
 
 
@@ -457,7 +456,7 @@ if __name__ == "__main__":
     print(f"    来源={ctx.detection_source}")
 
     print(f"\n[2] 本仓库 CodeBuddy 召唤格式: {identity.get_codebuddy_mention()}")
-    print(f"    本仓库修复专员召唤格式: {identity.get_fixer_mention()}")
+    print(f"    本仓库修复方召唤格式: {identity.get_fixer_mention()}")
 
     # 同仓库策略
     print(f"\n[3] 同仓库策略: {identity.repo_slug}")

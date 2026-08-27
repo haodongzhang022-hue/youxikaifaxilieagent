@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # 测试: 通用 Agent 身份自适应模块 (agent_identity.py)
-# 版本: v1.2
+# 版本: v1.3
 # 说明: 验证 AgentIdentity 模块能正确探测仓库上下文并生成 @ 召唤格式。
 #       v1.1 新增：评审 NPC 专用 get_review_operational_advice() 自适应
 #       召唤 CodeBuddy 操作建议（组织/仓库名不写死，跨仓可用）。
@@ -62,8 +62,8 @@ else
     FAIL=$((FAIL+1))
 fi
 
-# 测试4: 能生成修复专员的 @ 召唤格式
-echo -n "[4/8] 修复专员 @ 召唤格式... "
+# 测试4: 能生成修复方（CodeBuddy）的 @ 召唤格式（统一为已注册执行角色）
+echo -n "[4/8] 修复方 @ 召唤格式（统一 CodeBuddy）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -71,7 +71,7 @@ from agent_identity import get_identity
 id = get_identity()
 print(id.get_fixer_mention())
 ")
-if echo "$OUT" | grep -q "@.*(仓库修复专员)"; then
+if echo "$OUT" | grep -q "@.*(CodeBuddy)"; then
     echo "✅ ($OUT)"
     PASS=$((PASS+1))
 else
@@ -210,6 +210,48 @@ print(f'PARSABLE={ok}')
 ")
 if echo "$OUT" | grep -q "PARSABLE=True"; then
     echo "✅ (召唤行@.../(CodeBuddy)独立成行、无反引号，可被平台解析触发)"
+    PASS=$((PASS+1))
+else
+    echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
+# 测试11: 评审召唤操作建议不含受限内容（权限/403/推送/合并）
+echo -n "[11/12] 评审召唤建议不含受限内容（权限/403/推送/合并）... "
+OUT=$(python3 <<'PYEOF'
+import sys
+sys.path.insert(0, '.')
+from agent_identity import get_identity
+id = get_identity()
+advice = id.get_review_operational_advice()
+restricted = ['权限', '403', '推送', 'repo-code', '合并/关闭权限', '无法推送', '具备推送']
+hits = [k for k in restricted if k in advice]
+print('HITS=' + repr(hits))
+PYEOF
+)
+if echo "$OUT" | grep -q "HITS=\[\]"; then
+    echo "✅ (评审召唤建议无权限/403/推送/合并残留)"
+    PASS=$((PASS+1))
+else
+    echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
+# 测试12: KNOWN_ROLES 无未注册的"仓库修复专员"（统一为 CodeBuddy）
+echo -n "[12/12] KNOWN_ROLES 无未注册仓库修复专员... "
+OUT=$(python3 <<'PYEOF'
+import sys
+sys.path.insert(0, '.')
+from agent_identity import AgentIdentity
+roles = list(AgentIdentity.KNOWN_ROLES)
+print('HAS_UNREG=' + str('仓库修复专员' in roles))
+print('HAS_CODEBUDDY=' + str('CodeBuddy' in roles))
+PYEOF
+)
+if echo "$OUT" | grep -q "HAS_UNREG=False" && echo "$OUT" | grep -q "HAS_CODEBUDDY=True"; then
+    echo "✅ (KNOWN_ROLES 已移除未注册仓库修复专员，CodeBuddy 保留)"
     PASS=$((PASS+1))
 else
     echo "❌"

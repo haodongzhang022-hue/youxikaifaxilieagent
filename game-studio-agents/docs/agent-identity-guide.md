@@ -47,7 +47,7 @@ mention = identity.get_codebuddy_mention()
 # "@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)"
 
 fixer = identity.get_fixer_mention()
-# "@dongdongxiaozu/youxikaifaxilieagent(仓库修复专员)"
+# "@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)"
 
 # 3. 判断策略
 strategy = identity.decide_mention_strategy("otherorg/otherrepo")
