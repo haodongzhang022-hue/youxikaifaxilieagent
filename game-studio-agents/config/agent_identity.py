@@ -1,6 +1,6 @@
 # ============================================================
 # 通用 Agent 身份自适应模块 (Agent Identity)
-# 版本: v1.3
+# 版本: v1.4
 # 说明: 让任意 Agent（CodeBuddy / 仓库调用专员 / 仓库修复专员 / 代码审查员 / 游戏向经理等）
 #       能**自动识别当前所在的仓库上下文**，并据此生成正确的 @ 召唤格式，
 #       不再硬编码 `dongdongxiaozu/youxikaifaxilieagent`。
@@ -14,7 +14,9 @@
 #     4. get_codebuddy_mention()：获取本仓库的 CodeBuddy 召唤格式；
 #     5. get_review_operational_advice()：**面向评审 NPC 的自适应操作建议**，
 #        —— 根据「当前触发评审的仓库」探测组织名 + 仓库名（都不写死），
-#          再生成带壳 `@组织/仓库(CodeBuddy)` 召唤格式，供评审输出操作建议。
+#          遵循「召唤优先级链」（仓库修复专员 → 仓库调用专员 → CodeBuddy），
+#          默认生成带壳 `@组织/仓库(仓库修复专员)` 召唤格式（CodeBuddy 兜底），
+#          支持 role= 显式指定，供评审输出操作建议。
 #
 #   v1.1 新增：
 #     - 增强 git 探测：从当前目录**向上查找 .git** 解析 remote，保证评审在
@@ -487,18 +489,26 @@ class AgentIdentity:
         )
 
     def get_review_operational_advice(self,
-                                      target_slug: Optional[str] = None) -> str:
-        """评审 NPC 专用：基于「当前触发评审的仓库」自适应生成召唤 CodeBuddy 的操作建议。
+                                      target_slug: Optional[str] = None,
+                                      role: str = "仓库修复专员") -> str:
+        """评审 NPC 专用：基于「当前触发评审的仓库」自适应生成召唤操作建议。
 
-        关键点：
-          - **组织名 / 仓库名都不写死**，通过 AgentIdentity 探测当前被评审仓库，
-            得到 `owner/repo` 后构造 `@owner/repo(CodeBuddy)` 带壳召唤；
-          - 支持跨仓：target_slug 不传时用当前仓库（即触发评审的仓库），
-            传了则按目标仓库生成（如评审在 A 仓、被评审对象是 B 仓时用 B 仓壳）；
-          - 输出可直接粘贴进 PR 评论的操作建议文本，杜绝用裸 @CodeBuddy。
+        遵循「召唤优先级链 · 逐个降级」原则：
+          - **优先级链**（由 REPAIR_PRIORITY_CHAIN 定义）：
+            仓库修复专员 → 仓库调用专员 → CodeBuddy → 兜底说明。
+            同一时刻**只召唤最高优先级的一个角色**，解决不了再降级到下一个，
+            绝不一股脑同时召唤多个角色；
+          - 默认优先召唤**仓库修复专员**（本仓库修复/推送/合并的第一执行者，
+            权限最匹配）；仓库修复专员不可用/降级时再召唤 CodeBuddy 兜底；
+          - 组织名 / 仓库名均不写死，通过 AgentIdentity 探测当前被评审仓库；
+          - 支持跨仓：target_slug 不传时用当前仓库，传了则按目标仓库生成。
+
+        Args:
+            target_slug: 目标仓库 slug（owner/repo），缺省用当前仓库。
+            role: 要召唤的角色（默认"仓库修复专员"，CodeBuddy 通用兜底）。
 
         Returns:
-            可直接输出的 Markdown 操作建议文本。
+            可直接输出的 Markdown 操作建议文本（召唤行裸 @、独立成行可被解析）。
         """
         self._detect_once()
 
@@ -507,23 +517,46 @@ class AgentIdentity:
             return (
                 "⚠️ 当前被评审仓库未能自动识别。请通过环境变量 "
                 "`CNB_REPO_SLUG` 或 `CNB_GROUP_SLUG`+`CNB_REPO_NAME` 确认，"
-                "再以 `@组织/仓库(CodeBuddy)` 完整格式召唤本仓库 CodeBuddy，禁止裸 @CodeBuddy。"
+                "再以 `@组织/仓库(角色名)` 完整格式召唤本仓库修复角色，禁止裸召唤。"
             )
 
+        # 校验 role 是否在已知角色内；不在则回退到优先级链最高角色
+        if role not in self.KNOWN_ROLES:
+            role = self.REPAIR_PRIORITY_CHAIN[0]
+
         owner, repo = target.split("/", 1)
-        cb_mention = self.build_mention("CodeBuddy", target)
+        mention = self.build_mention(role, target)
+        chain_text = " → ".join(f"`{r}`" for r in self.REPAIR_PRIORITY_CHAIN)
         return (
-            f"【召唤本仓库 CodeBuddy · 仓库自适应识别】\n"
+            f"【召唤本仓库{role} · 仓库自适应识别】\n"
             f"当前触发评审的仓库为 `{target}`（组织 `{owner}` / 仓库 `{repo}`，"
             f"识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）。\n"
-            f"请召唤本仓库 CodeBuddy，必须用带壳完整格式（召唤行不可用反引号/代码块包裹，否则平台不解析）:\n"
-            f"{cb_mention}\n"
-            f"- 组织名 `{owner}` 与仓库名 `{repo}` 均**自适应探测**，随当前被评审仓库变化，"
-            f"不写死固定路径；\n"
-            f"- **禁止裸 `@CodeBuddy`**（会命中系统级或他仓 CodeBuddy，权限不对、无法推送）；\n"
-            f"- 仅本仓库 CodeBuddy（{cb_mention}）具备推送/合并/关闭权限，可完成闭环。\n"
+            f"请召唤本仓库{role}，必须用带壳完整格式（召唤行不可用反引号/代码块包裹，否则平台不解析）:\n"
+            f"{mention}\n"
+            f"- **召唤优先级链**（逐个降级，一次只召唤一个）: {chain_text}\n"
+            f"  本次为最高优先级角色 `{role}`，若它无法承接（不可用/权限不足/超时），"
+            f"再降级召唤链中下一个角色，直至 CodeBuddy 兜底；\n"
+            f"- 组织名 `{owner}` 与仓库名 `{repo}` 均**自适应探测**，随当前被评审仓库变化，不写死固定路径；\n"
+            f"- 带壳完整格式 `{mention}` **即直接触发**本仓库{role}（非「禁止」，而是精确定位到对应仓库），"
+            f"不再需要额外的裸召唤；\n"
+            f"- **召唤了对应仓库的 `{mention}` 后，请勿再裸 `@CodeBuddy`/`@{role}`**"
+            f"（裸召唤可能路由到系统级或他仓，权限不对）；\n"
+            f"- 本仓库{role}（{mention}）具备本仓库推送/合并/关闭权限，可完成闭环。\n"
         )
 
+    # ---------- 召唤优先级链 ----------
+    @property
+    def REPAIR_PRIORITY_CHAIN(self) -> list:
+        """修复闭环的召唤优先级链（逐个降级，直到兜底）。
+
+        越靠前优先级越高，一次只召唤最高优先级可用角色；
+        它无法承接时降级到下一个，最后落到 CodeBuddy 通用兜底。
+        """
+        return ["仓库修复专员", "仓库调用专员", "CodeBuddy"]
+
+    def get_repair_priority_chain(self) -> list:
+        """获取修复闭环的召唤优先级链（仓库修复专员 → 仓库调用专员 → CodeBuddy）。"""
+        return list(self.REPAIR_PRIORITY_CHAIN)
 
 # ============================================================
 # 便捷函数（全局单例 / 一次性调用）
@@ -570,9 +603,10 @@ def repo_invoker_mention() -> str:
     return get_identity().get_repo_invoker_mention()
 
 
-def review_operational_advice(target_slug: Optional[str] = None) -> str:
-    """评审 NPC 专用：获取召唤本仓库 CodeBuddy 的自适应操作建议。"""
-    return get_identity().get_review_operational_advice(target_slug)
+def review_operational_advice(target_slug: Optional[str] = None,
+                               role: str = "仓库修复专员") -> str:
+    """评审 NPC 专用：获取召唤本仓库修复角色的自适应操作建议（默认优先仓库修复专员）。"""
+    return get_identity().get_review_operational_advice(target_slug, role)
 
 
 # ============================================================
