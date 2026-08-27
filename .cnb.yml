@@ -132,8 +132,12 @@ $:
                  - 直接调用 `get_review_operational_advice()` 会自动按当前被评审
                    仓库生成 `@组织/仓库(CodeBuddy)` 完整带壳格式并给出操作建议，
                    **将这段建议原样粘贴进评论末尾**，无需手写；
+                 - ⚠️ **关键：召唤格式行（`@org/repo(CodeBuddy)`）必须独立成行、裸 @，
+                   绝不能包在反引号/代码块里**——平台文档明确规定"代码块（code）中的
+                   @ 提及不触发 NPC 事件"。`get_review_operational_advice()` 输出里
+                   召唤行已保持裸 @ 独立行，**不要给召唤行加反引号**；
                  - 例如探测到 slug 为 `org/currentrepo`，生成结果即为
-                   `@org/currentrepo(CodeBuddy)`；
+                   `@org/currentrepo(CodeBuddy)`（该行不包反引号，直接可触发）；
                  - **禁止写死仓库路径**（如 `dongdongxiaozu/youxikaifaxilieagent`），
                    因为当前被评审的仓库可能不同；
                  - **不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓 CodeBuddy，
