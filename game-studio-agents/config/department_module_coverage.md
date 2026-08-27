@@ -33,3 +33,20 @@
 - 其余生态角色（communicator/mediator/gatekeeper/asset_manager/mass_player 等）：仅注册可派发，无 handler
 
 > ⚠️ 以上差距由 `tests/test_role_inventory.sh` 护栏持续暴露，作为后续实体化 backlog。
+
+## 四、P1 backlog：批量补充 `_alt` 变体（25 个，按同模式分批）
+
+> 已实体化样板：producer_alt / server_dev_alt / data_analyst_alt（AltVariantHandler 独立承接）
+> 剩余 25 个 `_alt` 变体待按同模式批量补充，按部门分组：
+
+| 部门 | 待补充变体 | 数量 |
+|---|---|---|
+| 策划线 | lead_designer_alt, system_designer_alt, balance_designer_alt, level_designer_alt, narrative_designer_alt, combat_designer_alt | 6 |
+| 程序线 | cto_alt, client_dev_alt, engine_dev_alt, ai_programmer_alt, tools_dev_alt | 5 |
+| 美术线 | art_director_alt, concept_artist_alt, modeler_alt, animator_alt, vfx_artist_alt, ui_ux_alt, tech_artist_alt, audio_designer_alt | 8 |
+| 测试线 | qa_engineer_alt, auto_qa_alt | 2 |
+| 项目管理 | project_manager_alt, release_manager_alt | 2 |
+| 运营线 | reference_learner_alt, game_operator_alt | 2 |
+
+> 补充方式：每个变体在 `alt_variants.py` 中新增独立行为 handler（风格差异化执行），
+> 并将 `role_inventory.yaml` 对应角色状态更新为 implemented。
