@@ -52,17 +52,17 @@ roles_inventory:
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: declared_only
-  impl_ref: ''
-  note: 在 roles.yaml 声明，未注册到部门 DEPARTMENTS 表
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 实体化并注册到部门 DEPARTMENTS 表
 - role_id: combat_designer
   name: 战斗策划（手感派）
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: declared_only
-  impl_ref: ''
-  note: 在 roles.yaml 声明，未注册到部门 DEPARTMENTS 表
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 实体化并注册到部门 DEPARTMENTS 表
 - role_id: producer_alt
   name: 制作人（进取型）
   department: 策划线

@@ -48,7 +48,7 @@ DEPT_KEY_BY_NAME = {
 # 优先从 config/roles.yaml 动态解析，解析失败时回退到本内置默认表，
 # 避免硬编码与 roles.yaml 架构约束偏离。
 DEPARTMENTS = {
-    "design":   {"name": "策划线",   "roles": ["lead_designer", "system_designer", "balance_designer", "level_designer"]},
+    "design":   {"name": "策划线",   "roles": ["lead_designer", "system_designer", "balance_designer", "level_designer", "narrative_designer", "combat_designer"]},
     "program":  {"name": "程序线",   "roles": ["cto", "client_dev", "server_dev", "engine_dev", "ai_programmer", "tools_dev"]},
     "art":      {"name": "美术线",   "roles": ["art_director", "concept_artist", "modeler", "animator", "vfx_artist", "ui_ux", "tech_artist", "audio_designer"]},
     "qa":       {"name": "测试线",   "roles": ["qa_engineer", "auto_qa"]},
