@@ -38,7 +38,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from message_bus import Message, MessageBus, build_task_assign, build_message
+from message_bus import Message, MessageBus
 from task_scheduler import Scheduler, Task, TaskState
 
 
@@ -164,19 +164,24 @@ class DispatchCapability:
         Returns:
             DispatchResult: 派发结果（含 message_id）
         """
-        task = Task(
-            id=task_id or f"task_{uuid.uuid4().hex[:8]}",
-            name=task_name,
-            owner=owner,
-            priority=priority,
-            depends_on=depends_on or [],
-            payload=payload or {},
-            ddl=ddl,
-        )
-        # 校验目标角色已注册（质量护栏）
-        if owner and owner not in self.bus.roles:
+        # 空 owner 校验（Info 4）
+        if not owner:
             result = DispatchResult(
-                task_id=task.id,
+                task_id=task_id or f"task_{uuid.uuid4().hex[:8]}",
+                owner="",
+                task_name=task_name,
+                priority=priority,
+                dispatched=False,
+                message_id=None,
+                reason="owner 为空，拒绝派发",
+            )
+            self.dispatch_log.append(result)
+            return result
+
+        # 校验目标角色已注册（质量护栏）
+        if owner not in self.bus.roles:
+            result = DispatchResult(
+                task_id=task_id or f"task_{uuid.uuid4().hex[:8]}",
                 owner=owner,
                 task_name=task_name,
                 priority=priority,
@@ -187,17 +192,20 @@ class DispatchCapability:
             self.dispatch_log.append(result)
             return result
 
+        task = Task(
+            id=task_id or f"task_{uuid.uuid4().hex[:8]}",
+            name=task_name,
+            owner=owner,
+            priority=priority,
+            depends_on=depends_on or [],
+            payload=payload or {},
+            ddl=ddl,
+        )
         self.scheduler.enqueue(task)
-        # 处理消息队列，让 TASK_ASSIGN 真正投递，从而捕获真实 message_id
-        self.bus.process_all()
-
-        # 查找本任务实际发布的 TASK_ASSIGN 消息
-        msg_id = None
-        for m in self.bus.delivered:
-            if (m.type == "TASK_ASSIGN" and m.to_role == owner
-                    and m.content.get("task_id") == task.id):
-                msg_id = m.id
-                break
+        # 从 scheduler 精确获取本次派发的 TASK_ASSIGN 消息（Critical 1 修复：
+        # 不再遍历 bus.delivered 全部历史，避免命中陈旧消息误判成功）
+        msg = self.scheduler.last_assign(task.id)
+        msg_id = msg.id if msg else None
 
         result = DispatchResult(
             task_id=task.id,
@@ -251,7 +259,41 @@ class DispatchCapability:
         依赖处理：
           - 先派发无依赖/依赖已满足的工作包；
           - 有依赖的工作包自动等待依赖完成。
+          - 检测循环依赖（A→B→A），发现则整体拒绝（Warning 3）。
         """
+        # 循环依赖检测（DFS 环检测）
+        wp_ids = {wp.get("id") for wp in work_packages if wp.get("id")}
+        def _has_cycle(start: str, visiting: set, visited: set) -> bool:
+            if start in visiting:
+                return True
+            if start in visited:
+                return False
+            visiting.add(start)
+            wp = next((w for w in work_packages if w.get("id") == start), None)
+            if wp:
+                for dep in wp.get("depends_on", []):
+                    if dep in wp_ids and _has_cycle(dep, visiting, visited):
+                        return True
+            visiting.remove(start)
+            visited.add(start)
+            return False
+
+        for wp in work_packages:
+            wp_id = wp.get("id")
+            if wp_id and wp_id in wp_ids and _has_cycle(wp_id, set(), set()):
+                results: List[DispatchResult] = []
+                for w in work_packages:
+                    results.append(DispatchResult(
+                        task_id=w.get("id", "?"),
+                        owner=w.get("owner", ""),
+                        task_name=w.get("label", w.get("id", "?")),
+                        priority=w.get("priority", "NORMAL"),
+                        dispatched=False,
+                        reason=f"检测到循环依赖，批量派发整体拒绝（{wp_id}）",
+                    ))
+                self.dispatch_log.extend(results)
+                return results
+
         results: List[DispatchResult] = []
         # 按依赖排序：无依赖的优先派发
         sorted_wps = sorted(work_packages,
@@ -265,15 +307,17 @@ class DispatchCapability:
     def on_complete(self, task_id: str, note: str = "") -> List[str]:
         """标记任务完成 → 自动解锁下游依赖并重新派发。
 
-        返回: 新解锁派发的下游任务 id 列表
+        返回: 新解锁派发的下游任务 id 列表（全部依赖满足才计入，Warning 2）
         """
         self.scheduler.on_complete(task_id, self.caller_role)
         # 处理消息队列，让解锁后的下游 TASK_ASSIGN 立即投递可见
         self.bus.process_all()
-        # 找出新解锁就绪的下游任务
+        # 找出新解锁就绪的下游任务（所有依赖均满足才报告为已解锁）
         unlocked = []
         for t in self.scheduler.queue.tasks.values():
-            if task_id in t.depends_on and t.state == TaskState.TODO.value:
+            if (task_id in t.depends_on
+                    and t.state == TaskState.TODO.value
+                    and self.scheduler.queue._is_ready(t)):
                 unlocked.append(t.id)
         return unlocked
 
@@ -283,7 +327,7 @@ class DispatchCapability:
 
     def block(self, task_id: str, reason: str = "") -> None:
         """阻塞一个任务（依赖未满足 / 返工等）。"""
-        self.scheduler.queue.block(task_id, reason)
+        self.scheduler.block(task_id, reason)
 
     # ---------- 查询 ----------
 

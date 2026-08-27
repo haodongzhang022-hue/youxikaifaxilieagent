@@ -166,13 +166,15 @@ class Scheduler:
         self.queue = queue or TaskQueue()
         self.bus = bus or MessageBus()
         self._dispatched: set = set()   # 已派发过的任务 id（避免重复派发）
+        self._last_assign_msgs: Dict[str, Message] = {}  # task_id -> 最近一次 TASK_ASSIGN 消息
 
     def enqueue(self, task: Task) -> Task:
         self.queue.add(task)
         self._dispatch_if_ready(task.id)
         return task
 
-    def _dispatch_if_ready(self, task_id: str):
+    def _dispatch_if_ready(self, task_id: str) -> Optional[Message]:
+        """若任务就绪则发布 TASK_ASSIGN 并返回该消息；否则返回 None。"""
         task = self.queue.tasks.get(task_id)
         # 仅当任务为 TODO 且有 owner、且依赖全部满足时才派发 TASK_ASSIGN
         if (task and task.state == TaskState.TODO.value and task.owner
@@ -184,10 +186,23 @@ class Scheduler:
                           priority=task.priority)
             self.bus.publish(msg)
             self._dispatched.add(task.id)
+            self._last_assign_msgs[task.id] = msg
+            return msg
+        return None
+
+    def last_assign(self, task_id: str) -> Optional[Message]:
+        """获取某任务最近一次 TASK_ASSIGN 消息（无则 None）。"""
+        return self._last_assign_msgs.get(task_id)
+
+    def clear_dispatched(self, task_id: str):
+        """清除某任务的派发记录，允许重新派发。"""
+        self._dispatched.discard(task_id)
+        self._last_assign_msgs.pop(task_id, None)
 
     def on_complete(self, task_id: str, from_role: str):
         """收到执行完成信号，更新队列并解锁下游"""
         self.queue.complete(task_id)
+        self.clear_dispatched(task_id)  # 任务完成后允许同 id 重新派发
         # 解锁的下游任务重新派发（_dispatch_if_ready 内部已用 _dispatched 防重复）
         for other in self.queue.tasks.values():
             if task_id in other.depends_on and other.state == TaskState.TODO.value:
@@ -200,10 +215,16 @@ class Scheduler:
 
     def on_fail(self, task_id: str, from_role: str, reason: str = ""):
         self.queue.fail(task_id)
+        self.clear_dispatched(task_id)  # 失败后允许同 task_id 重新派发（返工）
         self.bus.publish(Message(
             "NOTIFICATION", from_role, "*",
             {"event": "task_failed", "task_id": task_id, "reason": reason},
             mode="TOPIC", topic="task_events"))
+
+    def block(self, task_id: str, reason: str = ""):
+        """阻塞一个任务并清理其派发记录，允许后续重新派发。"""
+        self.queue.block(task_id, reason)
+        self.clear_dispatched(task_id)
 
 
 # ============================================================

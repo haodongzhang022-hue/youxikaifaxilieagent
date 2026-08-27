@@ -225,6 +225,78 @@ else
   echo "$reg"
 fi
 
+echo "== 6. 评审修复回归（Critical1 + Warning2 + Warning3 + Info4） =="
+reg2=$($PY << 'REGRESSION2_EOF'
+import sys
+sys.path.insert(0, '.')
+from dispatch_capability import DispatchCapability
+from message_bus import MessageBus
+res = {}
+
+# Critical 1: 返工重派发不假阳性
+bus = MessageBus()
+cap = DispatchCapability('producer', bus=bus)
+bus.register('tech_artist'); bus.on('tech_artist', lambda m: None)
+r1 = cap.dispatch('UI 制作', 'tech_artist', task_id='wp_ui')
+cap.on_fail('wp_ui')
+res['c1_cleanup'] = ('wp_ui' not in cap.scheduler._dispatched)
+r2 = cap.dispatch('UI 制作(返工)', 'tech_artist', task_id='wp_ui')
+res['c1_redispatch'] = (r2.dispatched and r2.message_id != r1.message_id)
+
+# Warning 2: on_complete 全部依赖满足才解锁
+bus2 = MessageBus()
+cap2 = DispatchCapability('producer', bus=bus2)
+for r in ['tech_artist','qa_engineer']:
+    bus2.register(r); bus2.on(r, lambda m: None)
+cap2.dispatch('B', 'tech_artist', task_id='wp_B')
+cap2.dispatch('C', 'tech_artist', task_id='wp_C')
+cap2.dispatch('D', 'qa_engineer', task_id='wp_D', depends_on=['wp_B','wp_C'])
+unlocked1 = cap2.on_complete('wp_B')
+res['w2_partial'] = ('wp_D' not in unlocked1)
+unlocked2 = cap2.on_complete('wp_C')
+res['w2_all'] = ('wp_D' in unlocked2)
+
+# Warning 3: 循环依赖检测
+bus3 = MessageBus()
+cap3 = DispatchCapability('producer', bus=bus3)
+for r in ['tech_artist','qa_engineer']:
+    bus3.register(r); bus3.on(r, lambda m: None)
+wps_cycle = [
+    {'id':'wp_A','label':'A','owner':'tech_artist','depends_on':['wp_B']},
+    {'id':'wp_B','label':'B','owner':'qa_engineer','depends_on':['wp_A']},
+]
+res['w3_cycle'] = all(not r.dispatched for r in cap3.dispatch_batch(wps_cycle))
+
+# Info 4: 空 owner 拒绝
+bus4 = MessageBus()
+cap4 = DispatchCapability('producer', bus=bus4)
+r_empty = cap4.dispatch('ghost_task', '')
+res['i4_empty_owner'] = (r_empty.dispatched is False)
+
+# 死 import 清理
+import inspect
+import dispatch_capability
+src = inspect.getsource(dispatch_capability)
+res['dead_import'] = ('build_task_assign' not in src.split('from message_bus')[1].split('\n')[0])
+# 实际上检查 import 行
+import_lines = [l for l in src.split('\n') if 'import' in l and 'message_bus' in l]
+res['dead_import'] = (not any('build_task_assign' in l or 'build_message' in l for l in import_lines))
+
+ok = all(res.values())
+for k, v in res.items():
+    print('  %s: %s' % (k, 'OK' if v else 'FAIL'))
+print('REGRESSION2_PASS' if ok else 'REGRESSION2_FAIL')
+REGRESSION2_EOF
+)
+
+if echo "$reg2" | grep -q "REGRESSION2_PASS"; then
+  report "评审修复回归（返工重派发/多依赖解锁/循环依赖/空owner/死import）" 0
+  echo "$reg2"
+else
+  report "评审修复回归（返工重派发/多依赖解锁/循环依赖/空owner/死import）" 1
+  echo "$reg2"
+fi
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"
