@@ -1,0 +1,602 @@
+# ============================================================
+# 角色-实现映射索引 (Role → Implementation Inventory)
+# 版本: v1.0
+# 说明: 对齐架构师 CP1 收口的角色-实现映射索引（WP-01）。
+#       事实源口径（对齐架构师 [LOW] 风险规避）：
+#         - ecosystem_roles.yaml 为生态角色事实源（21 个）
+#         - roles.yaml 为研发岗位事实源（58 个）
+#         - 本文件 role_inventory.yaml 仅为「映射索引」，不重复定义角色行为，
+#           只标注每个声明角色的实现状态与承接实现。
+#
+# 状态取值（status）：
+#   implemented     — 有真实可执行 handler / 实现类，能承接 TASK_ASSIGN 并真实 DONE
+#   registered_only — 已注册到 message_bus（可派发），但暂无真实承接 handler
+#   declared_only   — 仅在事实源声明，未注册、未实现
+#   preset_standby  — role_presets.yaml 预置待命，按需启用
+#
+# 强制对照：role_inventory.py 的 --list / --gap 会强制跑
+#   ecosystem_role_registry.summary() 与 WP-02 的 ecosystem_handlers 注册命名
+#   逐项比对，防止 WP-03 `_all_done` 空转。
+# ============================================================
+
+inventory:
+  version: "1.0.0"
+  fact_sources:
+    dev_roles:      "roles.yaml"            # 研发岗位事实源（58）
+    ecosystem_roles: "ecosystem_roles.yaml" # 生态角色事实源（21）
+    presets:        "role_presets.yaml"     # 预置变体（备用待命）
+
+# ============================================================
+# 一、研发岗位（roles.yaml 事实源，58）
+# ============================================================
+  dev_roles:
+
+    # ---- 策划线 ----
+    - role_id: "producer"
+      name: "制作人（稳健型）"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "implemented"
+      implementation: "game_producer_agent.GameProducerAgent（经理编排，融合制作人+项目经理）"
+
+    - role_id: "lead_designer"
+      name: "主策划"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "implemented"
+      implementation: "department_agents.DesignDeptAgent（策划线聚合承接）"
+
+    - role_id: "system_designer"
+      name: "系统策划"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "由 DesignDeptAgent 部门聚合承接"
+
+    - role_id: "balance_designer"
+      name: "数值策划"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "由 DesignDeptAgent 部门聚合承接（module=numeric_model）"
+
+    - role_id: "level_designer"
+      name: "关卡策划"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "由 DesignDeptAgent 部门聚合承接"
+
+    - role_id: "narrative_designer"
+      name: "剧情策划"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "由 DesignDeptAgent 部门聚合承接"
+
+    - role_id: "combat_designer"
+      name: "战斗策划"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "由 DesignDeptAgent 部门聚合承接"
+
+    # ---- 程序线 ----
+    - role_id: "cto"
+      name: "技术总监"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "implemented"
+      implementation: "department_agents.ProgramDeptAgent（程序线聚合承接）"
+
+    - role_id: "client_dev"
+      name: "客户端程序员"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "由 ProgramDeptAgent 部门聚合承接（module=client）"
+
+    - role_id: "server_dev"
+      name: "服务端程序员"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "由 ProgramDeptAgent 部门聚合承接（module=server）"
+
+    - role_id: "engine_dev"
+      name: "引擎程序员"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "由 ProgramDeptAgent 部门聚合承接（module=engine）"
+
+    - role_id: "ai_programmer"
+      name: "游戏AI程序员"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "由 ProgramDeptAgent 部门聚合承接（module=ai_logic）"
+
+    - role_id: "tools_dev"
+      name: "工具链程序员"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "由 ProgramDeptAgent 部门聚合承接"
+
+    # ---- 美术线 ----
+    - role_id: "art_director"
+      name: "主美"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "implemented"
+      implementation: "department_agents.ArtDeptAgent（美术线聚合承接）"
+
+    - role_id: "concept_artist"
+      name: "原画师"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "由 ArtDeptAgent 部门聚合承接"
+
+    - role_id: "modeler"
+      name: "3D建模师"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "由 ArtDeptAgent 部门聚合承接"
+
+    - role_id: "animator"
+      name: "动画师"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "由 ArtDeptAgent 部门聚合承接"
+
+    - role_id: "vfx_artist"
+      name: "特效师"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "由 ArtDeptAgent 部门聚合承接"
+
+    - role_id: "ui_ux"
+      name: "UI/UX设计师"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "由 ArtDeptAgent 部门聚合承接（module=ui_ux）"
+
+    - role_id: "tech_artist"
+      name: "技术美术(TA)"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "由 ArtDeptAgent 部门聚合承接（module=ui_ux/art_direction）"
+
+    - role_id: "audio_designer"
+      name: "音频设计师"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "由 ArtDeptAgent 部门聚合承接（module=audio）"
+
+    # ---- 测试线 ----
+    - role_id: "qa_engineer"
+      name: "测试工程师"
+      source: "roles.yaml"
+      department: "测试线"
+      status: "implemented"
+      implementation: "department_agents.QaDeptAgent（测试线聚合承接）"
+
+    - role_id: "auto_qa"
+      name: "自动化测试工程师"
+      source: "roles.yaml"
+      department: "测试线"
+      status: "declared_only"
+      implementation: "由 QaDeptAgent 部门聚合承接"
+
+    # ---- 项目管理 ----
+    - role_id: "project_manager"
+      name: "项目经理"
+      source: "roles.yaml"
+      department: "项目管理"
+      status: "implemented"
+      implementation: "department_agents.PmDeptAgent（项目管理聚合承接）"
+
+    - role_id: "release_manager"
+      name: "版本管理"
+      source: "roles.yaml"
+      department: "项目管理"
+      status: "declared_only"
+      implementation: "由 PmDeptAgent 部门聚合承接"
+
+    # ---- 运营线 ----
+    - role_id: "data_analyst"
+      name: "数据分析师"
+      source: "roles.yaml"
+      department: "运营线"
+      status: "implemented"
+      implementation: "department_agents.OpsDeptAgent（运营线聚合承接）"
+
+    - role_id: "reference_learner"
+      name: "参考学习Agent"
+      source: "roles.yaml"
+      department: "运营线"
+      status: "implemented"
+      implementation: "reference_learner_agent.ReferenceLearnerAgent"
+
+    - role_id: "reference_learner_alt"
+      name: "参考学习Agent（变体）"
+      source: "roles.yaml"
+      department: "运营线"
+      status: "declared_only"
+      implementation: "未单独实现，同 reference_learner"
+
+    - role_id: "game_operator"
+      name: "游戏运营"
+      source: "roles.yaml"
+      department: "运营线"
+      status: "declared_only"
+      implementation: "由 OpsDeptAgent 部门聚合承接"
+
+    # ---- 协作支持圈（roles.yaml 内嵌服务岗）----
+    - role_id: "progress_pusher"
+      name: "进度督导"
+      source: "roles.yaml"
+      department: "协作支持圈"
+      status: "implemented"
+      implementation: "progress_pusher.ProgressPusherAgent（+ progress_pusher_policy.yaml）"
+
+    - role_id: "merged_confirmer"
+      name: "合并确认员"
+      source: "roles.yaml"
+      department: "协作支持圈"
+      status: "implemented"
+      implementation: "merged_confirm_agent.MergedConfirmAgent（crontab-only）"
+
+    # ---- _alt 变体（roles.yaml 声明，WP-02b 实体化 3 样板）----
+    - role_id: "producer_alt"
+      name: "制作人（进取型）"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "implemented"
+      implementation: "ecosystem_handlers.AltEcosystemHandlers（producer_alt 样板）"
+
+    - role_id: "lead_designer_alt"
+      name: "主策划（创意型）"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "system_designer_alt"
+      name: "系统策划（简洁型）"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "balance_designer_alt"
+      name: "数值策划（爽点型）"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "level_designer_alt"
+      name: "关卡策划（硬核型）"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "narrative_designer_alt"
+      name: "剧情策划（直给型）"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "combat_designer_alt"
+      name: "战斗策划（策略型）"
+      source: "roles.yaml"
+      department: "策划线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "cto_alt"
+      name: "技术总监（前瞻型）"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "implemented"
+      implementation: "ecosystem_handlers.AltEcosystemHandlers（cto_alt 样板）"
+
+    - role_id: "client_dev_alt"
+      name: "客户端程序员（表现型）"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "server_dev_alt"
+      name: "服务端程序员（性能型）"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "implemented"
+      implementation: "ecosystem_handlers.AltEcosystemHandlers（server_dev_alt 样板）"
+
+    - role_id: "engine_dev_alt"
+      name: "引擎程序员（易用型）"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "ai_programmer_alt"
+      name: "游戏AI程序员（学习型）"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "tools_dev_alt"
+      name: "工具链程序员（极简型）"
+      source: "roles.yaml"
+      department: "程序线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "art_director_alt"
+      name: "主美（探索型）"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "concept_artist_alt"
+      name: "原画师（风格化型）"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "modeler_alt"
+      name: "3D建模师（优化型）"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "animator_alt"
+      name: "动画师（卡通型）"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "vfx_artist_alt"
+      name: "特效师（氛围型）"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "ui_ux_alt"
+      name: "UI/UX设计师（视觉型）"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "tech_artist_alt"
+      name: "技术美术(TA)（渲染型）"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "audio_designer_alt"
+      name: "音频设计师（功能型）"
+      source: "roles.yaml"
+      department: "美术线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "qa_engineer_alt"
+      name: "测试工程师（探索型）"
+      source: "roles.yaml"
+      department: "测试线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "auto_qa_alt"
+      name: "自动化测试工程师（脚本型）"
+      source: "roles.yaml"
+      department: "测试线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "project_manager_alt"
+      name: "项目经理（数据型）"
+      source: "roles.yaml"
+      department: "项目管理"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "release_manager_alt"
+      name: "版本管理（敏捷型）"
+      source: "roles.yaml"
+      department: "项目管理"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "data_analyst_alt"
+      name: "数据分析师（可视化型）"
+      source: "roles.yaml"
+      department: "运营线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+    - role_id: "game_operator_alt"
+      name: "游戏运营（增长型）"
+      source: "roles.yaml"
+      department: "运营线"
+      status: "declared_only"
+      implementation: "未单独实现（_alt 变体声明）"
+
+  # ============================================================
+  # 二、生态角色（ecosystem_roles.yaml 事实源，21）
+  # ============================================================
+  ecosystem_roles:
+
+    # ---- 协作支持圈 ----
+    - role_id: "communicator"
+      name: "通讯官"
+      source: "ecosystem_roles.yaml"
+      circle: "collab_support"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.CommunicatorHandler"
+
+    - role_id: "progress_pusher"
+      name: "进度督导"
+      source: "ecosystem_roles.yaml"
+      circle: "collab_support"
+      status: "implemented"
+      implementation: "progress_pusher.ProgressPusherAgent（与 roles.yaml 同 role_id，事实源重叠）"
+
+    - role_id: "asset_manager"
+      name: "资产管理/清道夫"
+      source: "ecosystem_roles.yaml"
+      circle: "collab_support"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.AssetManagerHandler"
+
+    - role_id: "mediator"
+      name: "调解员"
+      source: "ecosystem_roles.yaml"
+      circle: "collab_support"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.MediatorHandler"
+
+    - role_id: "gig_pool"
+      name: "零工/外包池"
+      source: "ecosystem_roles.yaml"
+      circle: "collab_support"
+      status: "implemented"
+      implementation: "ecosystem_handlers.GigPoolHandler（零工负载调度，真实 DONE）"
+
+    - role_id: "gatekeeper"
+      name: "门卫/守门人"
+      source: "ecosystem_roles.yaml"
+      circle: "collab_support"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.GatekeeperHandler"
+
+    # ---- 玩家圈 ----
+    - role_id: "mass_player"
+      name: "泛玩家"
+      source: "ecosystem_roles.yaml"
+      circle: "players"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.MassPlayerHandler"
+
+    - role_id: "core_player"
+      name: "核心玩家"
+      source: "ecosystem_roles.yaml"
+      circle: "players"
+      status: "implemented"
+      implementation: "ecosystem_handlers.CorePlayerHandler（玩家反馈回收，真实 DONE）"
+
+    - role_id: "payer"
+      name: "付费玩家"
+      source: "ecosystem_roles.yaml"
+      circle: "players"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.PayerHandler"
+
+    - role_id: "playtester"
+      name: "测试玩家/试玩员"
+      source: "ecosystem_roles.yaml"
+      circle: "players"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.PlaytesterHandler"
+
+    - role_id: "streamer"
+      name: "主播/KOL"
+      source: "ecosystem_roles.yaml"
+      circle: "players"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.StreamerHandler"
+
+    - role_id: "lurker"
+      name: "云玩家/观望者"
+      source: "ecosystem_roles.yaml"
+      circle: "players"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.LurkerHandler"
+
+    # ---- 外部市场圈 ----
+    - role_id: "publisher"
+      name: "宣发平台"
+      source: "ecosystem_roles.yaml"
+      circle: "market"
+      status: "implemented"
+      implementation: "ecosystem_handlers.PublisherHandler（市场预演派发，真实 DONE）"
+
+    - role_id: "mini_game_platform"
+      name: "第三方小游戏平台"
+      source: "ecosystem_roles.yaml"
+      circle: "market"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.MiniGamePlatformHandler"
+
+    - role_id: "advertiser"
+      name: "广告方/广告主"
+      source: "ecosystem_roles.yaml"
+      circle: "market"
+      status: "implemented"
+      implementation: "ecosystem_handlers.AdvertiserHandler（广告变现调优，真实 DONE）"
+
+    - role_id: "channel"
+      name: "渠道/支付商"
+      source: "ecosystem_roles.yaml"
+      circle: "market"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.ChannelHandler"
+
+    - role_id: "competitor"
+      name: "竞品"
+      source: "ecosystem_roles.yaml"
+      circle: "market"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.CompetitorHandler"
+
+    - role_id: "regulator"
+      name: "监管/合规"
+      source: "ecosystem_roles.yaml"
+      circle: "market"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.RegulatorHandler"
+
+    # ---- 美术圈（生态角色）----
+    - role_id: "eco_art_director"
+      name: "美术指导"
+      source: "ecosystem_roles.yaml"
+      circle: "art"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.EcoArtDirectorHandler"
+
+    - role_id: "eco_tech_artist"
+      name: "技术美术"
+      source: "ecosystem_roles.yaml"
+      circle: "art"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.EcoTechArtistHandler"
+
+    - role_id: "eco_audio_designer"
+      name: "音频设计师"
+      source: "ecosystem_roles.yaml"
+      circle: "art"
+      status: "implemented"
+      implementation: "ecosystem_role_registry 已注册可派发，承接见 ecosystem_handlers.EcoAudioDesignerHandler"
