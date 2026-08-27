@@ -423,10 +423,31 @@ class ArtDeptAgent(DepartmentAgent):
                 },
             }
         elif module == "ui_ux":
+            # wp_ui_ux：生态 UI/UX 与交互规范接入部门流水线，
+            # 让 UI 角色（tech_artist）成为可派发 Agent，产出可被 task_scheduler 消费。
             artifact = {
                 "module": "ui_ux", "label": label, "project": project,
                 "artifact_type": "ui_asset",
-                "content": {"ui_flow": "界面流程", "ux": "交互设计"},
+                "content": {
+                    "ui_flow": "界面流程",
+                    "ux": "交互设计",
+                    # 交互规范与视觉一致性（对齐 ecosystem_roles.yaml eco_tech_artist）
+                    "interaction_spec": {
+                        "navigation": "扁平导航",
+                        "feedback": "即时反馈",
+                        "accessibility": "无障碍支持",
+                    },
+                    "visual_consistency": {
+                        "style_guide": "统一风格",
+                        "palette": "配色方案",
+                        "type_scale": "字号体系",
+                    },
+                    "render_pipeline": "客户端渲染管线",
+                    "ui_binding": "UI 绑定",
+                },
+                # 交付物可被下游消费：派发 owner 为美术线 UI/UX 角色
+                "dispatchable_owner": "tech_artist",
+                "dispatchable_eco_owner": "eco_tech_artist",
             }
         elif module == "audio":
             artifact = {

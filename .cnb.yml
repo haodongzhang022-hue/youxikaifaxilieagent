@@ -74,11 +74,14 @@ $:
             bash game-studio-agents/tests/test_market_input_bridge.sh
             bash game-studio-agents/tests/test_ecosystem_roles.sh
             bash game-studio-agents/tests/test_art_direction.sh
+            bash game-studio-agents/tests/test_ui_ux.sh
             bash game-studio-agents/tests/test_data_ops_diagnosis.sh
             bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
             bash game-studio-agents/tests/test_release_gate.sh
             bash game-studio-agents/tests/test_merged_confirm_agent.sh
             bash game-studio-agents/tests/test_agent_identity_resolver.sh
+            bash game-studio-agents/tests/test_role_collaboration.sh
+            bash game-studio-agents/tests/test_agent_identity.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
         - name: 自动分配评审人
@@ -106,23 +109,19 @@ $:
               3. 是否存在 Bug、安全漏洞或资源泄漏；
               4. 给出"通过 / 需修改"结论及具体修改点。
               在 PR 评论中输出审查结论。
-              【CodeBuddy 触发机制·评审后闭环（通用身份自适应）】
-              5. 若评审结论为"需修改/需改进"：在评论末尾**必须**用
-                 「仓库路径(CodeBuddy)」完整格式点名**对应仓库的 CodeBuddy**，
-                 说明已完成的评审结论与需要修复的具体点，触发
-                 `pull_request.comment@npc` 让对应仓库 CodeBuddy 接手修复闭环。
-                 不要写死仓库/组织名——**用通用身份解析模块自动定位**：
-                 - 在评论中用「`@<工作仓库slug>(CodeBuddy)`」定位。工作仓库
-                   = 本次 PR/Issue 真正所在的仓库（从 `CNB_EVENT_URL` 识别），
-                   而不是本 NPC 注册仓库；
-                 - 跨仓库调用时（本仓库角色在他仓被触发）：必须 @ **工作仓库**
-                   绑定的 CodeBuddy（只有它才具备那里的推送权限），不能写死本仓库。
-                 - 运行期可用命令确认：
-                   `python3 game-studio-agents/config/agent_identity_resolver.py --mention CodeBuddy`
+              【CodeBuddy 触发机制·评审后闭环】
+              5. 若评审结论为"需修改/需改进"：在评论末尾**必须**用完整格式
+                 召唤**本仓库的 CodeBuddy**。具体做法：
+                 - **先运行** `python3 config/agent_identity.py`（或引用
+                   AgentIdentity 模块）从环境变量 `CNB_REPO_SLUG` 自适应探测
+                   当前仓库 slug（格式为 `owner/repo`，不写死仓库名）；
+                 - 然后用 `@<探测到的slug>(CodeBuddy)` 完整格式点名
+                   本仓库 CodeBuddy。例如探测到 slug 为 `org/currentrepo`，
+                   则召唤 `@org/currentrepo(CodeBuddy)`；
+                 - **禁止写死仓库路径**，因为当前被评审的仓库可能不同；
                  - **不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓 CodeBuddy，
                    权限不对无法推送）；
-                 - 完整格式定位可确保调取到对应仓库专属 CodeBuddy（具备推送权限），
-                   避免 push 403 导致闭环在"推送"一步静默中断。
+                 - 完整格式定位可确保调取到当前仓库专属 CodeBuddy（具备推送权限），
         - name: CodeBuddy 闭环修复（评审→修复→重推，钩子没 bug 就停）
           type: npc:go
           options:
@@ -170,12 +169,11 @@ $:
                    CodeBuddy（其职责只是读和审，本就不具备推送权限）。这是调取错误被
                    护栏拦住了，属于护栏正常生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
-                   用「`@<工作仓库slug>(CodeBuddy)`」完整格式（仓库路径 + 角色名）
-                   定位到**工作仓库的 CodeBuddy**，触发 `pull_request.comment@npc`
-                   让对应仓库 CodeBuddy 接手执行本次推送。工作仓库 = 本次 PR/Issue
-                   真正所在仓库（从 `CNB_EVENT_URL` 识别）；**不要写死仓库/组织名**，
-                   跨仓库调用时用通用身份解析模块自动定位：
-                   `python3 game-studio-agents/config/agent_identity_resolver.py --mention CodeBuddy`
+                   **先运行** `python3 config/agent_identity.py`（AgentIdentity 模块）
+                   从环境变量 `CNB_REPO_SLUG` 探测当前仓库 slug（不写死），
+                   然后用 `@<探测到的slug>(CodeBuddy)` 完整格式
+                   （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
+                   `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
                    - 说明文本需写明：已完成的修复点、本次 push 因执行身份不是本仓库
                      CodeBuddy 被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支
                      完成推送并核对触发新一轮评审；
@@ -378,12 +376,11 @@ $:
                    只是读和审，本就不具备推送权限）。这是调取错误被护栏拦住，属于护栏正常
                    生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
-                   用「`@<工作仓库slug>(CodeBuddy)`」完整格式（仓库路径 + 角色名）
-                   定位到**工作仓库的 CodeBuddy**，触发 `pull_request.comment@npc`
-                   让对应仓库 CodeBuddy 接手执行本次推送。工作仓库 = 本次 PR/Issue
-                   真正所在仓库（从 `CNB_EVENT_URL` 识别）；**不要写死仓库/组织名**，
-                   跨仓库调用时用通用身份解析模块自动定位：
-                   `python3 game-studio-agents/config/agent_identity_resolver.py --mention CodeBuddy`
+                   **先运行** `python3 config/agent_identity.py`（AgentIdentity 模块）
+                   从环境变量 `CNB_REPO_SLUG` 探测当前仓库 slug（不写死），
+                   然后用 `@<探测到的slug>(CodeBuddy)` 完整格式
+                   （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
+                   `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
                    说明文本需写明已修复点、本次 push 因执行身份不是本仓库 CodeBuddy
                    被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支完成推送并核对
                    触发新一轮评审；**不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓
