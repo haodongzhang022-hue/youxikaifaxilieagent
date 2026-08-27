@@ -196,6 +196,151 @@ else
   report "经理已接入协作工作台 collab" 1
 fi
 
+
+echo "== 8. 评审修复回归：无 A->A 自环 / REJECT owner / 连续回退 / 弹链 =="
+out=$($PY - <<'PYEOF'
+from role_collaboration import CollaborationWorkbench
+wb = CollaborationWorkbench()
+r = wb.handoff("r1", "任务", "A", "B")
+chain = r["record"].transfer_chain
+print("NO_SELF_LOOP=" + str(not any(l.split("->")[0] == l.split("->")[1] for l in chain)))
+wb2 = CollaborationWorkbench()
+wb2.handoff("r2", "任务2", "A", "B")
+r2 = wb2.acknowledge("r2", "B", "REJECT", reason="忙")
+print("REJECT_OWNER=" + r2["record"].owner)
+wb3 = CollaborationWorkbench()
+wb3.handoff("r3", "任务3", "A", "B")
+wb3.acknowledge("r3", "B", "ACCEPT")
+wb3.acknowledge("r3", "B", "REHANDOFF", reassign_to="C")
+r3 = wb3.acknowledge("r3", "C", "RETURN", reason="回退")
+r3b = wb3.acknowledge("r3", "B", "RETURN", reason="再回退")
+print("CONTINUOUS_RETURN_OWNER=" + r3b["record"].owner)
+print("POP_TAIL_CHAIN=" + ";".join(wb3.audit("r3")["transfer_chain"]))
+r4 = wb3.acknowledge("nope", "X", "ACCEPT")
+print("FAIL_HAS_RECORD=" + str("record" in r4))
+r5 = wb3.acknowledge("r3", "B", "BAD_ACTION")
+print("UNKNOWN_HAS_RECORD=" + str("record" in r5))
+PYEOF
+)
+if echo "$out" | grep -q "NO_SELF_LOOP=True"; then
+  report "转交链无 A->A 虚假自环" 0
+else
+  report "转交链无 A->A 虚假自环" 1
+fi
+if echo "$out" | grep -q "REJECT_OWNER=A"; then
+  report "REJECT 后 owner 重置为发起者" 0
+else
+  report "REJECT 后 owner 重置为发起者" 1
+fi
+if echo "$out" | grep -q "CONTINUOUS_RETURN_OWNER=A"; then
+  report "RETURN 连续回退不死锁" 0
+else
+  report "RETURN 连续回退不死锁" 1
+fi
+if echo "$out" | grep -q "POP_TAIL_CHAIN=$"; then
+  report "RETURN 弹出转交链末节点" 0
+else
+  report "RETURN 弹出转交链末节点" 1
+fi
+if echo "$out" | grep -q "FAIL_HAS_RECORD=True" && echo "$out" | grep -q "UNKNOWN_HAS_RECORD=True"; then
+  report "失败/未知动作统一返回含 record 键" 0
+else
+  report "失败/未知动作统一返回含 record 键" 1
+fi
+
+echo "== 9. 消息类型三处登记 =="
+out=$($PY - <<'PYEOF'
+from message_bus import MESSAGE_TYPES as MB
+from agent_behavior import MESSAGE_TYPES as AB
+import yaml
+with open("roles.yaml") as f:
+    doc = yaml.safe_load(f)
+def find_mt(node):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k == "message_types" and isinstance(v, list):
+                return v
+            r = find_mt(v)
+            if r:
+                return r
+    elif isinstance(node, list):
+        for x in node:
+            r = find_mt(x)
+            if r:
+                return r
+    return None
+mt = find_mt(doc) or []
+ok_mb = all(t in MB for t in ("HANDOFF", "DELEGATE", "COLLAB_REQ", "ACK", "COLLAB_NOTIFY"))
+ok_ab = all(t in AB for t in ("HANDOFF", "DELEGATE", "COLLAB_REQ", "ACK", "COLLAB_NOTIFY"))
+ok_yaml = all(t in mt for t in ("HANDOFF", "DELEGATE", "COLLAB_REQ", "ACK", "COLLAB_NOTIFY"))
+print("MB_OK=" + str(ok_mb))
+print("AB_OK=" + str(ok_ab))
+print("YAML_OK=" + str(ok_yaml))
+PYEOF
+)
+if echo "$out" | grep -q "MB_OK=True"; then
+  report "message_bus 登记 5 种协作消息类型" 0
+else
+  report "message_bus 登记 5 种协作消息类型" 1
+fi
+if echo "$out" | grep -q "AB_OK=True"; then
+  report "agent_behavior 登记 5 种协作消息类型" 0
+else
+  report "agent_behavior 登记 5 种协作消息类型" 1
+fi
+if echo "$out" | grep -q "YAML_OK=True"; then
+  report "roles.yaml 登记 5 种协作消息类型" 0
+else
+  report "roles.yaml 登记 5 种协作消息类型" 1
+fi
+
+echo "== 10. 任意角色接入协作路由 + 幂等守卫 =="
+out=$($PY - <<'PYEOF'
+from department_agents import DesignDeptAgent
+from game_producer_agent import GameProducerAgent
+from message_bus import MessageBus, Message
+
+bus = MessageBus()
+dept = DesignDeptAgent(bus)
+dept.boot()
+bus.publish(Message("HANDOFF", "producer", "lead_designer",
+                    {"task_id": "wp_x", "title": "设计", "note": ""}))
+bus.process_all()
+dept_ok = dept.collab.get("wp_x") is not None
+print("DEPT_ROUTE=" + str(dept_ok))
+
+bus2 = MessageBus()
+m = GameProducerAgent(bus=bus2)
+m.boot()
+m.handoff_wp("wp_y", "system_designer", "client_dev", title="界面")
+bus2.process_all()
+rec = m.collab.get("wp_y")
+print("HANDOFF_NO_DUP=" + str(rec is not None and len(rec.events) == 1))
+
+bus3 = MessageBus()
+m2 = GameProducerAgent(bus=bus3)
+m2.boot()
+bus3.publish(Message("HANDOFF", m2.role_id, m2.role_id, {"task_id": "wp_z", "title": "x"}))
+bus3.process_all()
+print("IDEMPOTENT=" + str(m2.collab.get("wp_z") is None))
+PYEOF
+)
+if echo "$out" | grep -q "DEPT_ROUTE=True"; then
+  report "任意角色（部门Agent）接入协作事件路由" 0
+else
+  report "任意角色（部门Agent）接入协作事件路由" 1
+fi
+if echo "$out" | grep -q "HANDOFF_NO_DUP=True"; then
+  report "便捷方法单一数据源，无二次处理" 0
+else
+  report "便捷方法单一数据源，无二次处理" 1
+fi
+if echo "$out" | grep -q "IDEMPOTENT=True"; then
+  report "自发起协作消息幂等守卫生效" 0
+else
+  report "自发起协作消息幂等守卫生效" 1
+fi
+
 echo ""
 echo "测试信号灯结果: $pass 通过 / $fail 失败"
 if [ "$fail" = "0" ]; then

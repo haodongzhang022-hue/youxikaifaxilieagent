@@ -14,6 +14,8 @@
 # ============================================================
 from __future__ import annotations
 
+import functools
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -40,7 +42,7 @@ STATUS_FLOW = {
     "ACCEPTED":  ["IN_PROGRESS", "RETURNED", "DONE"],
     "IN_PROGRESS": ["DONE", "RETURNED", "BLOCKED"],
     "DECLINED":  ["OFFERED", "CANCELLED"],     # 拒绝后可被再转交给他人
-    "RETURNED":  ["OFFERED", "DONE", "CANCELLED"],
+    "RETURNED":  ["OFFERED", "RETURNED", "DONE", "CANCELLED"],  # 允许连续回退
     "BLOCKED":   ["IN_PROGRESS", "RETURNED", "ESCALATE"],
     "DONE":      [],
     "CANCELLED": [],
@@ -74,7 +76,8 @@ class Collaboration:
     updated_at: float = field(default_factory=time.time)
 
     def __post_init__(self):
-        if self.origin and self.owner:
+        # 仅在 origin != owner 时登记首链，避免转交初始状态产生 A->A 虚假自环
+        if self.origin and self.owner and self.origin != self.owner:
             self.transfer_chain.append(f"{self.origin}->{self.owner}")
 
 
@@ -91,6 +94,15 @@ class SubTask:
 # ============================================================
 # 二、协作工作台（多角色互相@ 的能力入口）
 # ============================================================
+
+def _synchronized(fn):
+    """线程安全装饰器：以协作工作台的 RLock 保护并发访问 records/_events。"""
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return fn(self, *args, **kwargs)
+    return wrapper
+
 
 class CollaborationWorkbench:
     """
@@ -110,6 +122,7 @@ class CollaborationWorkbench:
     def __init__(self):
         self.records: Dict[str, Collaboration] = {}   # task_id -> 协作记录
         self._events: List[CollabEvent] = []          # 全局事件流水（审计）
+        self._lock = threading.RLock()                # 并发安全：保护 records/_events
 
     # ---------- 查询 ----------
     def get(self, task_id: str) -> Optional[Collaboration]:
@@ -139,6 +152,7 @@ class CollaborationWorkbench:
         return True
 
     # ---------- A. @转交（HANDOFF） ----------
+    @_synchronized
     def handoff(self, task_id: str, title: str, from_role: str,
                 to_role: str, note: str = "") -> dict:
         """角色 from_role @转交任务 task_id 给 to_role。返回 {ok, record}"""
@@ -152,6 +166,7 @@ class CollaborationWorkbench:
         return {"ok": True, "record": rec, "transfer_chain": list(rec.transfer_chain)}
 
     # ---------- B. @分工（DELEGATE） ----------
+    @_synchronized
     def delegate(self, task_id: str, title: str, from_role: str,
                  assignments: List[Dict[str, str]],
                  note: str = "") -> dict:
@@ -176,13 +191,13 @@ class CollaborationWorkbench:
         return {"ok": True, "record": rec, "sub_tasks": list(rec.sub_tasks.keys())}
 
     # ---------- C. @协作请求（COLLAB_REQ） ----------
+    @_synchronized
     def request_collab(self, task_id: str, title: str, from_role: str,
                        to_role: str, need: str = "") -> dict:
         """角色 from_role @请求 to_role 协助任务 task_id。"""
         rec = self._collab(task_id, title, origin=from_role, owner=from_role)
-        # 协作请求不改变持有者，仅登记协助请求
-        rec.events.append(CollabEvent(COLLAB_REQ, from_role, to_role, task_id,
-                                      action="ASSIST", detail={"need": need}))
+        # 协作请求不改变持有者，仅登记协助请求（_emit 已追加到 rec.events，
+        # 此处不再手动 append，避免双重记录）
         self._emit(CollabEvent(COLLAB_REQ, from_role, to_role, task_id,
                                action="ASSIST", detail={"need": need}))
         return {"ok": True, "record": rec, "assist_requested_to": to_role}
@@ -191,54 +206,64 @@ class CollaborationWorkbench:
     def acknowledge(self, task_id: str, from_role: str,
                     action: str, reason: str = "",
                     reassign_to: Optional[str] = None) -> dict:
-        """承接方处理 @：ACCEPT / REJECT / RETURN / COMPLETE / REHANDOFF"""
-        rec = self.records.get(task_id)
-        if not rec:
-            return {"ok": False, "error": f"协作记录 {task_id} 不存在"}
-        ack = action.upper()
-        if ack == "ACCEPT":
-            ok = self._change_status(rec, "ACCEPTED")
-            if ok:
-                rec.owner = from_role
-                self._emit(CollabEvent(ACK, from_role, rec.owner, task_id,
-                                       action="ACCEPT"))
-        elif ack == "REJECT":
-            ok = self._change_status(rec, "DECLINED")
-            if ok:
-                self._emit(CollabEvent(ACK, from_role, rec.origin, task_id,
-                                       action="REJECT", detail={"reason": reason}))
-        elif ack == "RETURN":
-            # 退回：回到转交链上一持有者
-            prev = self._previous_owner(rec)
-            ok = self._change_status(rec, "RETURNED")
-            if ok and prev:
-                rec.owner = prev
-                self._emit(CollabEvent(ACK, from_role, prev, task_id,
-                                       action="RETURN", detail={"reason": reason}))
-        elif ack == "COMPLETE":
-            ok = self._change_status(rec, "DONE")
-            if ok:
-                self._emit(CollabEvent(ACK, from_role, rec.origin, task_id,
-                                       action="COMPLETE"))
-        elif ack == "REHANDOFF":
-            # 再转交：承接方把任务再 @ 给第三位角色（转交不受状态机约束，总是允许）
-            if not reassign_to:
-                return {"ok": False, "error": "REHANDOFF 需指定 reassign_to"}
-            rec.status = "OFFERED"
-            rec.owner = reassign_to
-            rec.transfer_chain.append(f"{from_role}->{reassign_to}")
-            self._emit(CollabEvent(HANDOFF, from_role, reassign_to, task_id,
-                                   action="REHANDOFF", detail={"reason": reason}))
-            return {"ok": True, "record": rec}
-        else:
-            return {"ok": False, "error": f"未知回执动作: {action}"}
+        """承接方处理 @：ACCEPT / REJECT / RETURN / COMPLETE / REHANDOFF
 
-        if not ok:
-            return {"ok": False, "error": f"状态 {rec.status} 不允许动作 {ack}",
-                    "allowed": STATUS_FLOW.get(rec.status, [])}
-        return {"ok": True, "record": rec}
+        返回统一含 `record` 键（成功为协作记录，失败为 None），避免调用方 KeyError。
+        """
+        with self._lock:
+            rec = self.records.get(task_id)
+            if not rec:
+                return {"ok": False, "error": f"协作记录 {task_id} 不存在",
+                        "record": None}
+            ack = action.upper()
+            if ack == "ACCEPT":
+                ok = self._change_status(rec, "ACCEPTED")
+                if ok:
+                    rec.owner = from_role
+                    self._emit(CollabEvent(ACK, from_role, rec.owner, task_id,
+                                           action="ACCEPT"))
+            elif ack == "REJECT":
+                ok = self._change_status(rec, "DECLINED")
+                if ok:
+                    # 拒绝后持有者回到发起者，避免「拒绝者仍被记录为持有者」
+                    rec.owner = rec.origin
+                    self._emit(CollabEvent(ACK, from_role, rec.origin, task_id,
+                                           action="REJECT", detail={"reason": reason}))
+            elif ack == "RETURN":
+                # 退回：回到转交链上一持有者，并弹出转交链末节点以支持连续回退
+                prev = self._previous_owner(rec)
+                ok = self._change_status(rec, "RETURNED")
+                if ok and prev:
+                    rec.owner = prev
+                    self._pop_transfer_tail(rec)
+                    self._emit(CollabEvent(ACK, from_role, prev, task_id,
+                                           action="RETURN", detail={"reason": reason}))
+            elif ack == "COMPLETE":
+                ok = self._change_status(rec, "DONE")
+                if ok:
+                    self._emit(CollabEvent(ACK, from_role, rec.origin, task_id,
+                                           action="COMPLETE"))
+            elif ack == "REHANDOFF":
+                # 再转交：承接方把任务再 @ 给第三位角色（转交不受状态机约束，总是允许）
+                if not reassign_to:
+                    return {"ok": False, "error": "REHANDOFF 需指定 reassign_to",
+                            "record": None}
+                rec.status = "OFFERED"
+                rec.owner = reassign_to
+                rec.transfer_chain.append(f"{from_role}->{reassign_to}")
+                self._emit(CollabEvent(HANDOFF, from_role, reassign_to, task_id,
+                                       action="REHANDOFF", detail={"reason": reason}))
+                return {"ok": True, "record": rec}
+            else:
+                return {"ok": False, "error": f"未知回执动作: {action}", "record": None}
+
+            if not ok:
+                return {"ok": False, "error": f"状态 {rec.status} 不允许动作 {ack}",
+                        "allowed": STATUS_FLOW.get(rec.status, []), "record": None}
+            return {"ok": True, "record": rec}
 
     # ---------- 子任务回执（@分工 的承接方汇报） ----------
+    @_synchronized
     def sub_ack(self, task_id: str, sub_id: str, from_role: str,
                 action: str, note: str = "") -> dict:
         """分工子任务承接方回执：ACCEPT / COMPLETE / BLOCK"""
@@ -261,6 +286,7 @@ class CollaborationWorkbench:
                                detail={"sub_id": sub_id, "note": note}))
         return {"ok": True, "sub_status": sub.status}
 
+    @_synchronized
     def sub_progress(self, task_id: str) -> Dict[str, Any]:
         """汇总 @分工 各子任务承接进度"""
         rec = self.records.get(task_id)
@@ -278,6 +304,7 @@ class CollaborationWorkbench:
         }
 
     # ---------- 审计 ----------
+    @_synchronized
     def audit(self, task_id: str) -> Dict[str, Any]:
         """审计某协作记录：转交链 + 全事件流水"""
         rec = self.records.get(task_id)
@@ -297,13 +324,19 @@ class CollaborationWorkbench:
         }
 
     def _previous_owner(self, rec: Collaboration) -> Optional[str]:
-        """转交链上倒数第二个持有者（用于退回）"""
+        """转交链上当前持有者的上一手（即末节点 "X->Y" 的 X；用于退回）"""
         if len(rec.transfer_chain) < 2:
             return rec.origin
         last_link = rec.transfer_chain[-1]   # "A->B"
         if "->" in last_link:
             return last_link.split("->")[0]
         return rec.origin
+
+    def _pop_transfer_tail(self, rec: Collaboration) -> Optional[str]:
+        """弹出转交链末节点（RETURN 退回后使链与真实持有者一致，支持连续回退）"""
+        if rec.transfer_chain:
+            return rec.transfer_chain.pop()
+        return None
 
 
 # ============================================================

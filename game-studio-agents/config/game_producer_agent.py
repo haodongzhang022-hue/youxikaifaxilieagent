@@ -270,71 +270,39 @@ class GameProducerAgent(BaseAgent):
         elif msg.type == "NOTIFICATION":
             self._log("notification", str(msg.content))
 
-        elif msg.type in ("HANDOFF", "DELEGATE", "COLLAB_REQ", "ACK", "COLLAB_NOTIFY"):
-            self._on_collab_event(msg)
-
-    # ---------- 多角色互相@ 协作（任务转交 + 分工协作） ----------
-    def _on_collab_event(self, msg: Message):
-        """路由角色间互相@ 的协作事件。"""
-        c = msg.content or {}
-        task_id = c.get("task_id", "")
-        if not task_id:
-            self._log("collab", f"协作事件缺少 task_id: {msg.type}")
-            return
-        try:
-            if msg.type == "HANDOFF":
-                # 经理/角色把工作包转交给另一位角色
-                res = self.collab.handoff(task_id, c.get("title", ""),
-                                          msg.from_role, msg.to_role,
-                                          note=c.get("note", ""))
-                self._log("collab_handoff", f"{msg.from_role}@转交 {task_id} -> {msg.to_role}")
-            elif msg.type == "DELEGATE":
-                # 经理/角色把一个工作包拆分为多子任务分发给多角色并行
-                res = self.collab.delegate(task_id, c.get("title", ""),
-                                           msg.from_role,
-                                           c.get("assignments", []),
-                                           note=c.get("note", ""))
-                self._log("collab_delegate",
-                          f"{msg.from_role}@分工 {task_id} -> {c.get('assignments', [])}")
-                # 汇总分工进度并发回发起者
-                self.bus.publish(build_message(
-                    "COLLAB_NOTIFY", self.role_id, msg.from_role,
-                    {"task_id": task_id, "sub_tasks": res.get("sub_tasks", []),
-                     "event": "DELEGATE_OFFERED"}))
-            elif msg.type == "COLLAB_REQ":
-                res = self.collab.request_collab(task_id, c.get("title", ""),
-                                                 msg.from_role, msg.to_role,
-                                                 need=c.get("need", ""))
-                self._log("collab_request", f"{msg.from_role}@请求 {msg.to_role} 协助 {task_id}")
-            elif msg.type == "ACK":
-                res = self.collab.acknowledge(task_id, msg.from_role,
-                                              c.get("action", ""),
-                                              reason=c.get("reason", ""),
-                                              reassign_to=c.get("reassign_to"))
-                self._log("collab_ack", f"{msg.from_role} 对 {task_id} 执行 {c.get('action')}")
-            elif msg.type == "COLLAB_NOTIFY":
-                self._log("collab_notify", f"协作进度通知: {task_id} {str(c)}")
-        except Exception as e:  # pragma: no cover
-            self._log("collab_error", f"{task_id}: {e}")
+    # 说明：角色间互相@ 的协作消息（HANDOFF/DELEGATE/COLLAB_REQ/ACK/COLLAB_NOTIFY）
+    # 已由通用内核 BaseAgent._handle_by_type 统一路由到 _on_collab_event，
+    # 本类不再重复覆写，避免双写与重复落库。
 
     def handoff_wp(self, wp_id: str, from_role: str, to_role: str,
                    title: str = "", note: str = "") -> dict:
-        """便捷：经理把工作包转交给指定角色。"""
+        """便捷：经理把工作包转交给指定角色。
+
+        单一数据源：直接写入本 Agent 的 collab 工作台（立即生效并返回），
+        再以 NOTIFICATION（已有接收方，不会触发 HANDOFF 协作路由二次处理）
+        向目标角色广播协作已发生，避免便捷方法与总线重复落库。
+        """
         res = self.collab.handoff(wp_id, title or wp_id, from_role, to_role, note=note)
         self.bus.publish(build_message(
-            "HANDOFF", from_role, to_role,
-            {"task_id": wp_id, "title": title or wp_id, "note": note}))
+            "NOTIFICATION", from_role, to_role,
+            {"notice": f"协作@转交：{from_role} 把任务 {wp_id} 转交给 {to_role}",
+             "collab_event": "HANDOFF", "task_id": wp_id, "note": note}))
         return res
 
     def delegate_wp(self, wp_id: str, from_role: str,
                     assignments: List[Dict[str, str]],
                     title: str = "") -> dict:
-        """便捷：经理把工作包拆分为多子任务分发给多角色并行协作。"""
+        """便捷：经理把工作包拆分为多子任务分发给多角色并行协作。
+
+        单一数据源：直接写入本 Agent 的 collab 工作台，再以 NOTIFICATION
+        向各承接角色广播分工信息，避免重复走 DELEGATE 协作路由二次重置。
+        """
         res = self.collab.delegate(wp_id, title or wp_id, from_role, assignments)
         for a in assignments:
             self.bus.publish(build_message(
-                "DELEGATE", from_role, a["role"],
-                {"task_id": wp_id, "title": title or wp_id,
+                "NOTIFICATION", from_role, a["role"],
+                {"notice": f"协作@分工：{from_role} 拆分任务 {wp_id}，{a['role']} 承接子任务",
+                 "collab_event": "DELEGATE", "task_id": wp_id,
                  "assignments": assignments, "note": a.get("desc", "")}))
         return res
 
