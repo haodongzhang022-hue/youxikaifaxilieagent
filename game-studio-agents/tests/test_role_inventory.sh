@@ -64,9 +64,17 @@ else
   report "role_inventory.py --gap 输出实现状态汇总" 1
 fi
 
-# 4. declared_only 差距数不劣化（当前 27，允许回落上限放宽到 40 防误报）
-declared_count=$(echo "$gap_out" | grep -oP 'declared_only\s+\K[0-9]+' | head -1)
-if [ -n "$declared_count" ] && [ "$declared_count" -le 40 ]; then
+# 4. declared_only 差距数不劣化（当前 0，护栏上限 40）
+# 注意：当 declared_only=0 时，状态汇总中可能不输出该行（by_status 无此键）。
+# 统一从 GAP-1 标题解析：`declared_only（N 个` 或 `declared_only N`。
+declared_count=$(echo "$gap_out" | grep -oP 'declared_only（\K[0-9]+' | head -1)
+if [ -z "$declared_count" ]; then
+  declared_count=$(echo "$gap_out" | grep -oP 'declared_only\s+\K[0-9]+' | head -1)
+fi
+if [ -z "$declared_count" ]; then
+  declared_count=0
+fi
+if [ "$declared_count" -le 40 ]; then
   report "declared_only 差距数在护栏内（$declared_count ≤ 40）" 0
 else
   report "declared_only 差距数在护栏内（当前 $declared_count，需 ≤ 40）" 1
