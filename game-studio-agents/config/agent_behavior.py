@@ -198,6 +198,27 @@ MESSAGE_TYPES = {
     "NOTIFICATION": {
         "description": "通知消息",
         "required_fields": ["notification_id", "type", "content"]
+    },
+    # 角色间互相@ 协作消息类型（多角色转交/分工/协作请求）
+    "HANDOFF": {
+        "description": "角色间@转交任务",
+        "required_fields": ["task_id", "to_role", "note"]
+    },
+    "DELEGATE": {
+        "description": "角色间@分工并行协作",
+        "required_fields": ["task_id", "assignments"]
+    },
+    "COLLAB_REQ": {
+        "description": "角色间@协作请求",
+        "required_fields": ["task_id", "to_role", "need"]
+    },
+    "ACK": {
+        "description": "角色间@回执（接受/拒绝/退回/完成）",
+        "required_fields": ["task_id", "action"]
+    },
+    "COLLAB_NOTIFY": {
+        "description": "角色间协作进度通知",
+        "required_fields": ["task_id"]
     }
 }
 

@@ -1,8 +1,11 @@
 # ============================================================
 # 市场预演与纳什均衡引擎
-# 版本: v0.2
+# 版本: v0.3
 # 说明: 在"发布"前模拟整个市场生态，让各圈层角色互相博弈，
 #       直到收敛到纳什均衡，输出发布建议与生态位诊断。
+#       v0.3 新增美术品质维度（art_quality）——把美术风格/品质基准接入
+#       生态角色体系，让玩家圈角色（对美术品质的偏好）进入市场预演博弈
+#       （wp_art_direction 美术线·art_director 落地产出）。
 # 语言: Python (面向架构与原型，可逐步落地)
 # ============================================================
 
@@ -70,6 +73,11 @@ class MarketSimulator:
 
         # ---- 研发产物品质（决定上限）----
         quality = c.get("base_quality", 60.0)
+        # ---- 美术品质维度（wp_art_direction）----
+        # 美术风格/品质基准（0~100），作为玩家圈对美术品质偏好的响应输入。
+        # 默认以整体品质为锚点；若数值模型显式给出 art_quality 则覆盖。
+        art_quality = c.get("art_quality", quality)
+
         # ---- 商业化结构：IAP(内购) 与 IAA(广告) 的取舍 ----
         iap = strategies["payer"].params.get("iap_depth", 0.5)
         iaa = strategies["advertiser"].params.get("ad_density", 0.2)
@@ -82,9 +90,18 @@ class MarketSimulator:
         complexity = strategies["mass_player"].params.get("complexity", 0.3)
         acquisition_rate = 1.0 - min(1.0, complexity) * 0.6
 
-        # 留存受"广告体验损伤"影响
-        d1_retention = 0.4 * (1 - ad_experience_penalty)
-        d30_retention = 0.12 * (1 - ad_experience_penalty) * (quality / 60.0)
+        # ---- 美术品质偏好（wp_art_direction）----
+        # 各玩家角色对美术品质有不同的敏感度（偏好档案），美术品质进入留存/口碑博弈。
+        # 泛玩家(mass_player)美术敏感度低但会抬升传播；核心玩家(core_player)与
+        # 付费玩家(payer)对美术品质敏感，美术劣化会拉低留存/付费意愿。
+        mass_art_sens = strategies["mass_player"].params.get("art_sens", 0.2)
+        # 美术品质相对基准(60)的折损/增益系数，映射到留存与口碑
+        art_factor = 1.0 + (art_quality - 60.0) / 60.0 * 0.5
+        art_penalty = max(0.0, 1.0 - (art_quality / 100.0) * (1.0 - mass_art_sens))
+
+        # 留存受"广告体验损伤 + 美术品质偏好"影响
+        d1_retention = 0.4 * (1 - ad_experience_penalty) * (0.85 + 0.15 * art_factor)
+        d30_retention = 0.12 * (1 - ad_experience_penalty) * (quality / 60.0) * (0.85 + 0.15 * art_factor)
 
         dau = mass * acquisition_rate * d1_retention * 0.5
         maus = dau * 15
@@ -101,8 +118,20 @@ class MarketSimulator:
         competition_pressure = c.get("competition_pressure", 0.5)
         reachable_revenue = total_revenue * (1 - channel_cut) * (1 - 0.5 * competition_pressure)
 
-        # ---- 口碑 ----
-        reputation = 5.0 - (iaa * 5) + (quality / 60.0) * 2 - ad_experience_penalty
+        # ---- 口碑（美术品质偏好也影响口碑）----
+        reputation = 5.0 - (iaa * 5) + (quality / 60.0) * 2 - ad_experience_penalty + (art_quality - 60.0) / 60.0 * 1.5
+
+        # ---- 美术满意度（wp_art_direction 验收指标）----
+        # 玩家圈对美术品质的综合满意度（0~10），作为美术品质进入市场预演博弈的可见信号。
+        # 修复（评审点1）：读取 core_player 的 art_preference 策略，用「美术品质与
+        # 核心玩家偏好」的匹配度调制满意度，使美术宽松/基准/挑剔三策略收益差异化，
+        # 纳什均衡不再退化为平凡解（art_preference 之前从未被读取）。
+        core_pref = strategies["core_player"].params.get("art_preference", 0.5)
+        quality_norm = art_quality / 100.0                  # 美术品质归一化 0~1
+        pref_match = 1.0 - abs(core_pref - quality_norm)     # 品质与偏好契合度
+        art_satisfaction = (4.0 + 6.0 * pref_match * (1.0 - art_penalty))
+        # 修复（评审点3）：满意度收敛到 0~10 区间，避免越界。
+        art_satisfaction = max(0.0, min(10.0, art_satisfaction))
 
         # ---- 汇总 ----
         metrics = {
@@ -113,6 +142,8 @@ class MarketSimulator:
             "total_revenue": reachable_revenue,
             "reputation": reputation,
             "roi": reachable_revenue / max(c.get("marketing_budget", 50000), 1),
+            "art_quality": art_quality,
+            "art_satisfaction": art_satisfaction,
         }
         return Outcome(metrics=metrics)
 
@@ -270,6 +301,7 @@ def pareto_frontier(simulator, roles, strategies_candidates: List[Dict[str, Stra
 def demo():
     context = {
         "base_quality": 65.0,
+        "art_quality": 72.0,           # wp_art_direction：美术品质基准进入市场预演
         "mass_player_base": 200000,
         "arpu_base": 2.5,
         "ecpm_base": 6.0,
@@ -285,8 +317,14 @@ def demo():
         Role("mass_player", "泛玩家", "players",
              payoff_fn=lambda ctx, mine, others: ctx["last_outcome"].metrics["reputation"] * ctx["last_outcome"].metrics["dau"],
              strategy_space=[
-                 Strategy("低门槛", {"complexity": 0.2}),
-                 Strategy("中门槛", {"complexity": 0.5}),
+                 Strategy("低门槛", {"complexity": 0.2, "art_sens": 0.15}),
+                 Strategy("中门槛", {"complexity": 0.5, "art_sens": 0.25}),
+             ]),
+        Role("core_player", "核心玩家", "players",
+             payoff_fn=lambda ctx, mine, others: ctx["last_outcome"].metrics["art_satisfaction"] * ctx["last_outcome"].metrics["d30_retention"],
+             strategy_space=[
+                 Strategy("美术宽松", {"art_preference": 0.3}),
+                 Strategy("美术挑剔", {"art_preference": 0.8}),
              ]),
         Role("payer", "付费玩家", "players",
              payoff_fn=lambda ctx, mine, others: ctx["last_outcome"].metrics["iap_revenue"] - max(0, others["advertiser"].params["ad_density"] - 0.4) * 100000,
@@ -314,9 +352,10 @@ def demo():
     # 初始策略
     initial = {
         "mass_player": roles[0].strategy_space[0],
-        "payer": roles[1].strategy_space[0],
-        "advertiser": roles[2].strategy_space[0],
-        "publisher": roles[3].strategy_space[0],
+        "core_player": roles[1].strategy_space[0],
+        "payer": roles[2].strategy_space[0],
+        "advertiser": roles[3].strategy_space[0],
+        "publisher": roles[4].strategy_space[0],
     }
 
     print("=" * 60)
@@ -339,6 +378,7 @@ def demo():
     print("\n[生态位诊断]")
     print(f"  口碑: {final_outcome.metrics['reputation']:.2f}/10")
     print(f"  30日留存: {final_outcome.metrics['d30_retention']*100:.1f}%")
+    print(f"  美术品质: {final_outcome.metrics['art_quality']:.0f}  美术满意度: {final_outcome.metrics['art_satisfaction']:.2f}/10")
     print(f"  IAP营收: {final_outcome.metrics['iap_revenue']:.0f}  广告营收: {final_outcome.metrics['ad_revenue']:.0f}")
     print('  提示: 纳什均衡下的组合是“各角色不再单方面改动”的稳定态。')
     print("        若希望某方更好，需看帕累托改进空间与敏感性分析。")

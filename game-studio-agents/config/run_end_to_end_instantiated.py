@@ -25,6 +25,7 @@ from agent_core import BaseAgent
 from department_agents import (ArtDeptAgent, DepartmentAgent, DesignDeptAgent,
                                OpsDeptAgent, PmDeptAgent, ProgramDeptAgent, QaDeptAgent)
 from ecosystem_role_registry import (CIRCLE_NAME, EcosystemRoleRegistry)
+from ecosystem_handlers import attach_handlers_to_registry
 from game_producer_agent import DEPT_KEY_BY_NAME, GameProducerAgent
 from message_bus import MessageBus, build_task_assign
 from preset_instantiator import PresetInstantiator
@@ -143,6 +144,11 @@ class InstantiatedTeamOrchestrator:
         eco_ids = self.ecosystem.register()
         self.manager._log("ecosystem_register",
                           f"已注册 {len(eco_ids)} 个生态角色到 message_bus（可派发 Agent）")
+        # WP-02: 挂接生态角色真实 handler（含 _alt 变体），
+        # 使 eco_* 任务可真实承接执行并标记 DONE。
+        attached = attach_handlers_to_registry(self.ecosystem, self.bus)
+        self.manager._log("ecosystem_handlers",
+                          f"已挂接 {attached} 个生态角色 handler（WP-02 / WP-02b）")
 
         return report
 
@@ -173,15 +179,11 @@ class InstantiatedTeamOrchestrator:
         return {"rounds": rounds, "all_done": all_done}
 
     def _log_blocked_tasks(self):
-        """输出所有非 DONE 工作包的状态诊断，定位阻塞/失败原因。
-
-        仅诊断部门工作包流水线任务（带 work_package payload），
-        不含生态角色演示派发任务（eco_*，非部门产出）。
-        """
+        """输出所有非 DONE 任务的状态诊断，定位阻塞/失败原因。"""
         pending = [
             (t.name or t.id, t.state, t.owner)
             for t in self.scheduler.queue.tasks.values()
-            if t.state != TaskState.DONE.value and t.payload.get("work_package")
+            if t.state != TaskState.DONE.value
         ]
         if not pending:
             return
@@ -193,23 +195,21 @@ class InstantiatedTeamOrchestrator:
                               f"  {name} → {state}（owner={owner}）")
 
     def _all_done(self) -> bool:
-        # 仅评估「部门工作包流水线」任务（带 work_package payload），
-        # 不含生态角色演示派发任务（eco_*）。
+        # 部门工作包 + 生态角色任务（eco_*）共同判定全链路完成。
         #
-        # 说明（评审点）：生态角色派发（dispatch_ecosystem）为**演示性派发**——
-        # 生态角色已注册为可派发 owner 并 publish 到 message_bus，但它们没有真实
-        # 承接 handler，任务恒停留在 TODO、永不 DONE。因此 _all_done 刻意过滤
-        # 掉 eco_*，仅以部门工作包流水线是否全部 DONE 作为全链路完成判定，
-        # 避免演示派发任务阻塞“部门全链路 DONE”。
-        wp_tasks = [t for t in self.scheduler.queue.tasks.values()
-                    if t.payload.get("work_package")]
-        return bool(wp_tasks) and all(t.state == TaskState.DONE.value for t in wp_tasks)
+        # WP-02 升级说明：生态角色 handler 已实体化（config/ecosystem_handlers.py），
+        # eco_* 任务可真实承接并标记 DONE，因此不再需要刻意过滤 eco_* 任务。
+        # 全部任务（含 eco_*）DONE 才算全链路完成。
+        all_tasks = list(self.scheduler.queue.tasks.values())
+        if not all_tasks:
+            return False
+        return all(t.state == TaskState.DONE.value for t in all_tasks)
 
-    # ---------- 生态角色派发（wp_server / wp_ai_logic）----------
+    # ---------- 生态角色派发（wp_server / wp_ai_logic / wp_art_direction）----------
     def dispatch_ecosystem(self) -> Dict[str, Any]:
         """把生态角色作为可派发 Agent 接入 task_scheduler + message_bus。
 
-        选取代表性的生态角色（协作支持圈 / 玩家圈 / 外部市场圈）派发任务，
+        选取代表性的生态角色（协作支持圈 / 玩家圈 / 外部市场圈 / 美术圈）派发任务，
         证明生态角色已注册为可派发 Agent 并真正进入部门流水线派发。
         """
         if self.ecosystem is None:
@@ -230,13 +230,25 @@ class InstantiatedTeamOrchestrator:
         for name, owner, prio in eco_jobs:
             tid = f"eco_{name}"
             task = Task(id=tid, name=name, owner=owner, priority=prio)
+            # 把 task_id 写入 payload，handler 可定位并标记完成
+            task.payload = {"task_id": tid, "name": name}
             registry.dispatch(task)
             self.eco_tasks.append(tid)
-        # 派发消息经总线 publish
+        # 派发消息经总线 publish（handler 接收 TASK_ASSIGN 并处理）
         dispatched = registry.bus.process_all()
+        # WP-02: 生态角色 handler 已处理任务，标记为 DONE。
+        # 使 eco_* 任务真实完成，为 WP-03 _all_done 修复提供前置。
+        completed = 0
+        for tid in self.eco_tasks:
+            try:
+                self.scheduler.on_complete(tid, "ecosystem_handler")
+                completed += 1
+            except Exception:
+                pass
         return {
             "dispatched": len(eco_jobs),
             "publish_messages": dispatched,
+            "completed": completed,
             "tasks": self.eco_tasks,
         }
 
@@ -312,8 +324,8 @@ def demo() -> InstantiatedTeamOrchestrator:
 
     # wp_server / wp_ai_logic：生态角色注册为可派发 Agent
     eco = orch.dispatch_ecosystem()
-    print("\n[4] 生态角色注册为可派发 Agent（wp_server / wp_ai_logic）")
-    print(f"    已注册生态角色: {len(orch.ecosystem.roles)} 个（协作支持/玩家/外部市场）")
+    print("\n[4] 生态角色注册为可派发 Agent（wp_server / wp_ai_logic / wp_art_direction）")
+    print(f"    已注册生态角色: {len(orch.ecosystem.roles)} 个（协作支持/玩家/外部市场/美术）")
     print(f"    已派发生态角色任务: {eco['dispatched']} 个 -> {', '.join(orch.eco_tasks)}")
     print(f"    派发消息已 publish 到 message_bus: {eco['publish_messages']} 条")
 

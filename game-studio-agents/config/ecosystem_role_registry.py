@@ -2,13 +2,13 @@
 # 生态角色注册与派发桥梁 (Ecosystem Role Registry)
 # 版本: v1.0
 # 说明: wp_server / wp_ai_logic（程序线·cto / ai_programmer）的落地产出。
-#       把生态角色（玩家圈 / 外部市场圈 / 协作支持圈）从 ecosystem_roles.yaml
+#       把生态角色（玩家圈 / 外部市场圈 / 协作支持圈 / 美术圈）从 ecosystem_roles.yaml
 #       注册进 `message_bus` + `task_scheduler`，使它们成为**可派发 Agent**，
 #       真正进入部门流水线，而非仅停留在定义文件 / 独立原型。
 #
 # 三项能力（对照 Issue 验收标准「生态角色注册为可派发 Agent，接入
 # task_scheduler 派发并 publish 到 message_bus」）：
-#   1. load：从 ecosystem_roles.yaml 解析三大生态圈角色；
+#   1. load：从 ecosystem_roles.yaml 解析生态圈角色（协作支持/玩家/市场/美术）；
 #   2. register：把生态角色注册进 message_bus（可收发消息的可寻址角色）；
 #   3. dispatch：经 task_scheduler 把工作包/任务派发给生态角色，publish 到总线。
 #
@@ -39,6 +39,7 @@ CIRCLE_SECTION = {
     "collab_support": "collab_support_roles",
     "players":        "player_roles",
     "market":         "market_roles",
+    "art":            "art_roles",          # wp_art_direction：美术生态角色
 }
 
 # 生态圈中文名（用于可读日志 / 报告）
@@ -46,11 +47,12 @@ CIRCLE_NAME = {
     "collab_support": "协作支持圈",
     "players":        "玩家圈",
     "market":         "外部市场圈",
+    "art":            "美术圈",
 }
 
 
 def load_ecosystem_roles(path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """从 ecosystem_roles.yaml 解析三大生态圈角色，返回角色定义列表。
+    """从 ecosystem_roles.yaml 解析生态圈角色（协作支持/玩家/市场/美术），返回角色定义列表。
 
     每个角色附带其所属圈层（circle）与类型（simulation_agent / 服务岗等），
     供后续注册 / 装配 / 派发使用。
@@ -159,8 +161,8 @@ class EcosystemRoleRegistry:
 
 def demo():
     print("=" * 70)
-    print("生态角色注册与派发桥梁（wp_server / wp_ai_logic）")
-    print("  把玩家圈 / 外部市场圈 / 协作支持圈注册进 task_scheduler + message_bus")
+    print("生态角色注册与派发桥梁（wp_server / wp_ai_logic / wp_art_direction）")
+    print("  把玩家圈 / 外部市场圈 / 协作支持圈 / 美术圈注册进 task_scheduler + message_bus")
     print("=" * 70)
 
     registry = EcosystemRoleRegistry().load()
@@ -172,7 +174,7 @@ def demo():
         print(f"    {cname:<8}: {', '.join(rids)}")
 
     print("\n[2] 接入 task_scheduler 派发（生态角色作为可派发 owner）")
-    # 派发几个生态角色任务：市场预演 / 进度督导 / 玩家反馈
+    # 派发几个生态角色任务：市场预演 / 进度督导 / 玩家反馈 / 美术品质
     from task_scheduler import Scheduler
     scheduler = Scheduler(bus=registry.bus)
     registry.register_scheduler(scheduler)
@@ -183,6 +185,8 @@ def demo():
                            priority="NORMAL"))
     registry.dispatch(Task(id="eco_player", name="玩家反馈", owner="core_player",
                            priority="NORMAL"))
+    registry.dispatch(Task(id="eco_art", name="美术品质把控", owner="eco_art_director",
+                           priority="HIGH"))
 
     print("    已派发生态角色任务:")
     for tid, t in scheduler.queue.tasks.items():
@@ -199,7 +203,7 @@ def demo():
     for k, v in registry.summary().items():
         print(f"    {k}: {v}")
 
-    ok = (len(registered) >= 10 and len(assigns) >= 3)
+    ok = (len(registered) >= 10 and len(assigns) >= 4)
     print(f"\n结果: {'🟢 通过' if ok else '🔴 未通过'}")
     return 0 if ok else 1
 

@@ -25,6 +25,7 @@ game-studio-agents/
 │   ├── agent_core.py            # ⭐ 通用 Agent 内核基类（生命周期/状态机/决策，v0.3，可运行）
 │   ├── message_bus.py           # ⭐ 通用消息总线（事件驱动通信，v0.3，可运行）
 │   ├── task_scheduler.py        # ⭐ 任务队列与事件驱动调度器（优先级/依赖，v0.3，可运行）
+│   ├── agent_identity.py        # ⭐ 通用 Agent 身份自适应模块（仓库探测/@召唤格式生成，v1.0）
 │   ├── game_producer_agent.py   # ⭐ 游戏向经理 Agent（架构拆解→部门分工→机制驱动派发，v0.1，可运行）
 │   ├── department_agents.py     # ⭐ 六大部门 Agent（策划/程序/美术/测试/项目管理/运营，v0.1，可运行）
 │   ├── run_end_to_end.py        # ⭐ 多部门 Agent 端到端联动（策划→程序→美术→测试→发版→运营，v0.1，可运行）
@@ -147,6 +148,18 @@ bash tests/test_release_gate.sh
 > - **驳回必然触发 push**：无法就地解决时转交其他 issue/PR 并关闭，或 push 文档性「放弃此部分迭代」对齐进度。
 >
 > 完整运行规范见 [docs/评审修复闭环护栏.md](./docs/评审修复闭环护栏.md)。
+
+## ✅ 合并确认机制（类似审查机制，确认已合并标签 Issue）
+
+> 针对已打上「已合并」标签但仍 open 的 Issue，由**合并确认员**（独立于 CodeBuddy）
+> 定时确认是否还有内容需要推进：
+> - **已合并且无后续任务** → 关闭 Issue；
+> - **已合并有后续（未派发）** → 新建 Issue 承接 + 关闭原 Issue；
+> - **有阻塞/待复核/依赖未收尾** → 保留 Issue。
+> - 类似审查机制：探查合并标签 Issue 个数，数量 > 0 即触发确认。
+>
+> 核心实现 [config/merged_confirm_agent.py](./config/merged_confirm_agent.py)，
+> 文档见 [docs/merged-confirm-mechanism.md](./docs/merged-confirm-mechanism.md)。
 
 ## 🌐 信息接口层（接口层与人工可视层分离）
 

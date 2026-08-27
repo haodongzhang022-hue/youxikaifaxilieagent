@@ -18,7 +18,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from message_bus import Message, MessageBus
+from message_bus import Message, MessageBus, build_message
+from role_collaboration import CollaborationWorkbench
+
+# 统一派发工作能力（所有 Agent 共享的高频复用模块）
+# 延迟 import 以避免循环依赖（dispatch_capability 只依赖 message_bus / task_scheduler）
 
 
 # ============================================================
@@ -221,12 +225,68 @@ class BaseAgent(ABC):
         self.decision = DecisionEngine(self)
         self.bus = bus or MessageBus()
         self.status = "BOOT"
+        # 角色间协作工作台：支持多角色互相@（转交/分工/协作请求）
+        self.collab = CollaborationWorkbench()
         self.log: List[Dict[str, Any]] = []
         self._running = False
 
         # 注册到消息总线
         self.bus.register(role_id)
         self.bus.on(role_id, self._receive)
+
+        # 统一派发工作能力（所有 Agent 共享）
+        # 通过 DispatchCapability 让每个 Agent 都能：
+        #   - dispatch(): 派发任务/工作包给其他角色
+        #   - dispatch_work_package(): 派发标准工作包
+        #   - dispatch_batch(): 批量派发（含依赖）
+        #   - on_complete(): 完成 → 自动解锁下游并派发
+        #   - on_fail(): 标记失败
+        #   - track(): 查询任务状态
+        # 用法见 config/dispatch_capability.py 的 DISPATCH_GUIDE
+        self._dispatch_cap = None  # 惰性初始化
+
+    def dispatch_capability(self):
+        """获取本 Agent 的统一派发能力（懒加载）。
+
+        返回 DispatchCapability 实例，即可使用 dispatch / dispatch_batch /
+        on_complete / on_fail / track 等能力。
+        """
+        if self._dispatch_cap is None:
+            # 延迟 import，避免循环依赖
+            from dispatch_capability import DispatchCapability
+            self._dispatch_cap = DispatchCapability(
+                caller_role=self.role_id, bus=self.bus)
+        return self._dispatch_cap
+
+    # ---------- 统一派发能力快捷方法 ----------
+
+    def dispatch(self, task_name: str, owner: str, priority: str = "NORMAL",
+                 depends_on: list = None, payload: dict = None, ddl: float = None,
+                 task_id: str = None):
+        """派发一个任务给指定角色。"""
+        return self.dispatch_capability().dispatch(
+            task_name=task_name, owner=owner, priority=priority,
+            depends_on=depends_on, payload=payload, ddl=ddl, task_id=task_id)
+
+    def dispatch_work_package(self, work_package: dict):
+        """派发一个标准工作包。"""
+        return self.dispatch_capability().dispatch_work_package(work_package)
+
+    def dispatch_batch(self, work_packages: list):
+        """批量派发多个工作包（含依赖）。"""
+        return self.dispatch_capability().dispatch_batch(work_packages)
+
+    def dispatch_complete(self, task_id: str, note: str = ""):
+        """标记任务完成 → 自动解锁下游并派发。"""
+        return self.dispatch_capability().on_complete(task_id, note)
+
+    def dispatch_fail(self, task_id: str, reason: str = ""):
+        """标记任务失败。"""
+        return self.dispatch_capability().on_fail(task_id, reason)
+
+    def dispatch_track(self, task_id: str):
+        """查询任务状态。"""
+        return self.dispatch_capability().track(task_id)
 
     # ---------- 生命周期 ----------
     def boot(self) -> "BaseAgent":
@@ -282,10 +342,68 @@ class BaseAgent(ABC):
         self._handle_by_type(msg)
 
     def _handle_by_type(self, msg: Message):
-        """按消息类型分发"""
+        """按消息类型分发。
+
+        角色间互相@ 的协作消息（HANDOFF/DELEGATE/COLLAB_REQ/ACK/COLLAB_NOTIFY）
+        由通用 `_on_collab_event` 统一路由，不进入子类的 handle_task，
+        避免各角色 Agent 各自重复实现/重复落库。
+        """
         self._transition("ANALYZING")
-        self.handle_task(msg)
+        if msg.type in ("HANDOFF", "DELEGATE", "COLLAB_REQ", "ACK", "COLLAB_NOTIFY"):
+            self._on_collab_event(msg)
+        else:
+            self.handle_task(msg)
         self._transition("IDLE")
+
+    def _on_collab_event(self, msg: Message):
+        """通用角色间协作事件路由（任意角色 Agent 均可消费）。
+
+        幂等守卫：对自发起消息（from_role == 本角色）跳过，避免便捷方法
+        直接落库后，经总线回流再被二次处理（如 DELEGATE 二次重置 sub_tasks）。
+        """
+        if msg.from_role == self.role_id:
+            self._log("collab_idempotent", f"自发起协作消息 {msg.type} 跳过，已直接落库")
+            return
+        c = msg.content or {}
+        task_id = c.get("task_id", "")
+        if not task_id:
+            self._log("collab", f"协作事件缺少 task_id: {msg.type}")
+            return
+        try:
+            if msg.type == "HANDOFF":
+                self.collab.handoff(task_id, c.get("title", ""),
+                                    msg.from_role, msg.to_role,
+                                    note=c.get("note", ""))
+                self._log("collab_handoff", f"{msg.from_role}@转交 {task_id} -> {msg.to_role}")
+            elif msg.type == "DELEGATE":
+                self.collab.delegate(task_id, c.get("title", ""),
+                                     msg.from_role,
+                                     c.get("assignments", []),
+                                     note=c.get("note", ""))
+                self._log("collab_delegate",
+                          f"{msg.from_role}@分工 {task_id} -> {c.get('assignments', [])}")
+                # 汇总分工进度并发回发起者
+                self.bus.publish(build_message(
+                    "COLLAB_NOTIFY", self.role_id, msg.from_role,
+                    {"task_id": task_id, "sub_tasks": list(
+                        self.collab.records.get(task_id).sub_tasks.keys())
+                     if task_id in self.collab.records else [],
+                     "event": "DELEGATE_OFFERED"}))
+            elif msg.type == "COLLAB_REQ":
+                self.collab.request_collab(task_id, c.get("title", ""),
+                                           msg.from_role, msg.to_role,
+                                           need=c.get("need", ""))
+                self._log("collab_request", f"{msg.from_role}@请求 {msg.to_role} 协助 {task_id}")
+            elif msg.type == "ACK":
+                self.collab.acknowledge(task_id, msg.from_role,
+                                        c.get("action", ""),
+                                        reason=c.get("reason", ""),
+                                        reassign_to=c.get("reassign_to"))
+                self._log("collab_ack", f"{msg.from_role} 对 {task_id} 执行 {c.get('action')}")
+            elif msg.type == "COLLAB_NOTIFY":
+                self._log("collab_notify", f"协作进度通知: {task_id} {str(c)}")
+        except Exception as e:  # pragma: no cover
+            self._log("collab_error", f"{task_id}: {e}")
 
     @abstractmethod
     def handle_task(self, msg: Message):

@@ -200,9 +200,12 @@ class SharedMemory:
 
     # ---------------- 序列化 / 落盘 ----------------
     def to_json(self) -> str:
+        # _seq 键为 (space, kind) 元组，JSON 不支持元组键；
+        # 序列化时用 "|" 连接（与 from_json 的 split("|") 对称）。
+        seq_str = {f"{k[0]}|{k[1]}": v for k, v in self._seq.items()}
         return json.dumps(
             {"records": [r.to_dict() for r in self._records.values()],
-             "acl": self._acl, "seq": self._seq},
+             "acl": self._acl, "seq": seq_str},
             ensure_ascii=False, indent=2,
         )
 
