@@ -78,6 +78,7 @@ class InstantiatedTeamOrchestrator:
         self.team_agents: Dict[str, BaseAgent] = {}   # 实例化 role_id -> Agent
         self.ecosystem: Optional[EcosystemRoleRegistry] = None  # wp_server/wp_ai_logic
         self.eco_tasks: List[str] = []                # 已派发的生态角色任务 id
+        self.ecosystem_handlers = None                # WP-03: 生态 handler 实体（接入则计入 eco_* DONE）
 
     # ---------- 1. 实例化 + 2. 注册 + 3. 装配 ----------
     def assemble_team(self,
@@ -193,17 +194,26 @@ class InstantiatedTeamOrchestrator:
                               f"  {name} → {state}（owner={owner}）")
 
     def _all_done(self) -> bool:
-        # 仅评估「部门工作包流水线」任务（带 work_package payload），
-        # 不含生态角色演示派发任务（eco_*）。
+        # 部门工作包流水线任务（带 work_package payload）必须全部 DONE。
         #
-        # 说明（评审点）：生态角色派发（dispatch_ecosystem）为**演示性派发**——
-        # 生态角色已注册为可派发 owner 并 publish 到 message_bus，但它们没有真实
-        # 承接 handler，任务恒停留在 TODO、永不 DONE。因此 _all_done 刻意过滤
-        # 掉 eco_*，仅以部门工作包流水线是否全部 DONE 作为全链路完成判定，
-        # 避免演示派发任务阻塞“部门全链路 DONE”。
+        # 生态角色任务（eco_*）处理策略（WP-03 实体化改造，Issue #55）：
+        #   - 若生态 handler 已接入（self.ecosystem_handlers 非空），则已由 handler
+        #     真实承接并 DONE 的 eco_* 计入全链路判定，不再刻意过滤；
+        #   - 对仍未承接的 eco_*（无 handler、恒停 TODO）仍过滤，避免阻塞部门流水线，
+        #     同时由 role_inventory --gap 护栏持续暴露，作为后续实体化 backlog。
         wp_tasks = [t for t in self.scheduler.queue.tasks.values()
                     if t.payload.get("work_package")]
-        return bool(wp_tasks) and all(t.state == TaskState.DONE.value for t in wp_tasks)
+        base_done = bool(wp_tasks) and all(
+            t.state == TaskState.DONE.value for t in wp_tasks)
+        if not base_done:
+            return False
+        # 生态 handler 未接入：不评估 eco_*，保持既有行为
+        if getattr(self, "ecosystem_handlers", None) is None:
+            return True
+        # 生态 handler 已接入：eco_* 应真实 DONE，若有未承接的 eco_* 则不算全链路完成
+        eco_tasks = [t for t in self.scheduler.queue.tasks.values()
+                     if t.id.startswith("eco_") or (not t.payload.get("work_package"))]
+        return all(t.state == TaskState.DONE.value for t in eco_tasks)
 
     # ---------- 生态角色派发（wp_server / wp_ai_logic / wp_art_direction）----------
     def dispatch_ecosystem(self) -> Dict[str, Any]:
@@ -216,6 +226,11 @@ class InstantiatedTeamOrchestrator:
             return {"dispatched": 0, "error": "ecosystem 未初始化，先调用 assemble_team"}
         registry = self.ecosystem
         registry.register_scheduler(self.scheduler)
+
+        # WP-03: 接入生态角色承接 handler，让 eco_* 任务真实 DONE（解除"演示性派发"）
+        if self.ecosystem_handlers is None:
+            from ecosystem_handlers import EcosystemHandler
+            self.ecosystem_handlers = EcosystemHandler(self.bus, self.scheduler)
 
         # 派发三圈代表性生态角色任务
         eco_jobs = [
