@@ -54,15 +54,41 @@
 | 美术圈 | eco_tech_artist | `EcoTechArtistHandler` | 生态技术美术 |
 | 美术圈 | eco_audio_designer | `EcoAudioDesignerHandler` | 生态音频 |
 
-## 四、_alt 变体实体化样板（WP-02b）
+## 四、_alt 变体 handler 实体化（WP-02b 全量 28 个）
+
+> 全部 28 个 `_alt` 变体已通过 `ecosystem_handlers.py` 批量实体化，按部门分组：
+> 策划线 7 / 程序线 5 / 美术线 8 / 测试线 2 / 项目管理 2 / 运营线 3 / 制作人 1。
 
 | 变体 | 对应基础角色 | handler 类 | 风格 | 行为 |
 |---|---|---|---|---|
 | producer_alt | producer | `ProducerAltHandler` | 进取型 | 制作人进取规划 |
+| lead_designer_alt | lead_designer | `LeadDesignerAltHandler` | 创意型 | 原创玩法构思 |
+| system_designer_alt | system_designer | `SystemDesignerAltHandler` | 简洁型 | 系统精简重构 |
+| balance_designer_alt | balance_designer | `BalanceDesignerAltHandler` | 爽点型 | 奖励节奏设计 |
+| level_designer_alt | level_designer | `LevelDesignerAltHandler` | 硬核型 | 硬核挑战设计 |
+| narrative_designer_alt | narrative_designer | `NarrativeDesignerAltHandler` | 直给型 | 轻剧情设计 |
+| combat_designer_alt | combat_designer | `CombatDesignerAltHandler` | 策略型 | 克制关系设计 |
 | cto_alt | cto | `CtoAltHandler` | 前瞻型 | 技术前瞻规划 |
+| client_dev_alt | client_dev | `ClientDevAltHandler` | 表现型 | 表现层开发 |
 | server_dev_alt | server_dev | `ServerDevAltHandler` | 性能型 | 服务端性能优化 |
-
-> 剩余 25 个 `_alt` 变体按此样板批量补充，按部门分组：策划线 6 / 程序线 5 / 美术线 8 / 测试线 2 / 项目管理 2 / 运营线 2。
+| engine_dev_alt | engine_dev | `EngineDevAltHandler` | 易用型 | API 易用性 |
+| ai_programmer_alt | ai_programmer | `AiProgrammerAltHandler` | 学习型 | ML 驱动 AI |
+| tools_dev_alt | tools_dev | `ToolsDevAltHandler` | 极简型 | 一键自动化 |
+| art_director_alt | art_director | `ArtDirectorAltHandler` | 探索型 | 先锋风格探索 |
+| concept_artist_alt | concept_artist | `ConceptArtistAltHandler` | 风格化型 | 风格化角色 |
+| modeler_alt | modeler | `ModelerAltHandler` | 优化型 | 低面数建模 |
+| animator_alt | animator | `AnimatorAltHandler` | 卡通型 | 夸张动作 |
+| vfx_artist_alt | vfx_artist | `VfxArtistAltHandler` | 氛围型 | 写实光效 |
+| ui_ux_alt | ui_ux | `UiUxAltHandler` | 视觉型 | 高质感 UI |
+| tech_artist_alt | tech_artist | `TechArtistAltHandler` | 渲染型 | Shader 管线 |
+| audio_designer_alt | audio_designer | `AudioDesignerAltHandler` | 功能型 | 操作反馈音 |
+| qa_engineer_alt | qa_engineer | `QaEngineerAltHandler` | 探索型 | 探索式测试 |
+| auto_qa_alt | auto_qa | `AutoQaAltHandler` | 脚本型 | 快速自动化 |
+| project_manager_alt | project_manager | `ProjectManagerAltHandler` | 数据型 | 量化管理 |
+| release_manager_alt | release_manager | `ReleaseManagerAltHandler` | 敏捷型 | 快速发版 |
+| data_analyst_alt | data_analyst | `DataAnalystAltHandler` | 可视化型 | 数据看板 |
+| game_operator_alt | game_operator | `GameOperatorAltHandler` | 增长型 | 拉新促活 |
+| reference_learner_alt | reference_learner | `ReferenceLearnerAltHandler` | 灵感雷达型 | 前沿扫描 |
 
 ## 五、注册/装配口径
 

@@ -1,768 +1,628 @@
-# ============================================================
-# 角色-实现映射索引 (Role-Implementation Mapping Inventory)
-# 版本: v1.0
-# 说明: 覆盖全部声明角色（roles.yaml 58 个 + ecosystem_roles.yaml 21 个 = 79 个），
-#       标注每个角色的实现状态：
-#         - implemented:     有真实可执行的 Agent/handler 承接
-#         - registered_only: 仅注册到 message_bus，无真实执行逻辑
-#         - declared_only:   仅在 YAML 定义文件声明，未注册也未实现
-#         - preset_standby:  仅存在于角色预设体系，可经实例化装配
-#
-#   事实源口径（对齐架构师 [LOW] 风险规避）:
-#       - roles.yaml:              研发核心圈角色事实源
-#       - ecosystem_roles.yaml:    生态角色事实源
-#       - role_inventory.yaml:     映射索引（非事实源，仅汇总状态）
-#
-#   用途: role_inventory.py --list / --gap 提供差距索引 CLI，
-#         供架构师 / 经理 / 审查员快速俯瞰角色实现覆盖度。
-# ============================================================
 project:
-  name: "Game Studio Agents"
-  version: "1.0.0"
-  description: "角色-实现映射索引，覆盖 roles.yaml(58) + ecosystem_roles.yaml(21)"
-
-# ============================================================
-# 事实源配置
-# ============================================================
+  name: Game Studio Agents
+  version: 1.0.0
+  description: 角色-实现映射索引，覆盖 roles.yaml(58) + ecosystem_roles.yaml(21)
 fact_sources:
-  roles_yaml: "roles.yaml"
-  ecosystem_roles_yaml: "ecosystem_roles.yaml"
-  role_inventory: "role_inventory.yaml"
-
-# ============================================================
-# 一、研发核心圈（roles.yaml 58 个角色）
-# 来源: roles.yaml
-# ============================================================
+  roles_yaml: roles.yaml
+  ecosystem_roles_yaml: ecosystem_roles.yaml
+  role_inventory: role_inventory.yaml
 roles_inventory:
-
-  # ---------- 策划线（14 个） ----------
-  # 6 基础角色
-  - role_id: "producer"
-    name: "制作人（稳健型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/game_producer_agent.py::GameProducerAgent"
-    note: "游戏向经理融合岗位，真实 Agent 实现"
-
-  - role_id: "lead_designer"
-    name: "主策划（结构型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/department_agents.py::DesignDeptAgent"
-    note: "策划线部门 Agent 主责"
-
-  - role_id: "system_designer"
-    name: "系统策划（细节控）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::DesignDeptAgent"
-    note: "经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接"
-
-  - role_id: "balance_designer"
-    name: "数值策划（理性派）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::DesignDeptAgent"
-    note: "经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接"
-
-  - role_id: "level_designer"
-    name: "关卡策划（体验派）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::DesignDeptAgent"
-    note: "经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接"
-
-  - role_id: "narrative_designer"
-    name: "剧情策划（文艺派）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "declared_only"
-    impl_ref: ""
-    note: "在 roles.yaml 声明，未注册到部门 DEPARTMENTS 表"
-
-  - role_id: "combat_designer"
-    name: "战斗策划（手感派）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "declared_only"
-    impl_ref: ""
-    note: "在 roles.yaml 声明，未注册到部门 DEPARTMENTS 表"
-
-  # 7 个 _alt 变体（策划线）
-  - role_id: "producer_alt"
-    name: "制作人（进取型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02b handler 实体化完成"
-
-  - role_id: "lead_designer_alt"
-    name: "主策划（创意型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "system_designer_alt"
-    name: "系统策划（简洁型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "balance_designer_alt"
-    name: "数值策划（爽点型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "level_designer_alt"
-    name: "关卡策划（硬核型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "narrative_designer_alt"
-    name: "剧情策划（直给型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "combat_designer_alt"
-    name: "战斗策划（策略型）"
-    department: "策划线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  # ---------- 程序线（12 个） ----------
-  # 6 基础角色
-  - role_id: "cto"
-    name: "技术总监（稳健型）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/department_agents.py::ProgramDeptAgent"
-    note: "程序线部门 Agent 主责"
-
-  - role_id: "client_dev"
-    name: "客户端程序员（标准流）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ProgramDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接"
-
-  - role_id: "server_dev"
-    name: "服务端程序员（安全向）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ProgramDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接"
-
-  - role_id: "engine_dev"
-    name: "引擎程序员（性能向）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ProgramDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接"
-
-  - role_id: "ai_programmer"
-    name: "游戏AI程序员（行为树向）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ProgramDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接"
-
-  - role_id: "tools_dev"
-    name: "工具链程序员（效率向）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ProgramDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接"
-
-  # 6 个 _alt 变体（程序线）
-  - role_id: "cto_alt"
-    name: "技术总监（前瞻型）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02b handler 实体化完成"
-
-  - role_id: "client_dev_alt"
-    name: "客户端程序员（表现型）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "server_dev_alt"
-    name: "服务端程序员（性能型）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02b handler 实体化完成"
-
-  - role_id: "engine_dev_alt"
-    name: "引擎程序员（易用型）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "ai_programmer_alt"
-    name: "游戏AI程序员（学习型）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "tools_dev_alt"
-    name: "工具链程序员（极简型）"
-    department: "程序线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  # ---------- 美术线（16 个） ----------
-  # 8 基础角色
-  - role_id: "art_director"
-    name: "主美（品质向）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/department_agents.py::ArtDeptAgent"
-    note: "美术线部门 Agent 主责"
-
-  - role_id: "concept_artist"
-    name: "原画师（写实向）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ArtDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接"
-
-  - role_id: "modeler"
-    name: "3D建模师（精细向）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ArtDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接"
-
-  - role_id: "animator"
-    name: "动画师（写实向）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ArtDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接"
-
-  - role_id: "vfx_artist"
-    name: "特效师（冲击向）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ArtDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接"
-
-  - role_id: "ui_ux"
-    name: "UI/UX设计师（体验向）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ArtDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接"
-
-  - role_id: "tech_artist"
-    name: "技术美术(TA)（管线向）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ArtDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接"
-
-  - role_id: "audio_designer"
-    name: "音频设计师（氛围向）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::ArtDeptAgent"
-    note: "经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接"
-
-  # 8 个 _alt 变体（美术线）
-  - role_id: "art_director_alt"
-    name: "主美（探索型）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "concept_artist_alt"
-    name: "原画师（风格化型）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "modeler_alt"
-    name: "3D建模师（优化型）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "animator_alt"
-    name: "动画师（卡通型）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "vfx_artist_alt"
-    name: "特效师（氛围型）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "ui_ux_alt"
-    name: "UI/UX设计师（视觉型）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "tech_artist_alt"
-    name: "技术美术(TA)（渲染型）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "audio_designer_alt"
-    name: "音频设计师（功能型）"
-    department: "美术线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  # ---------- 测试线（4 个） ----------
-  - role_id: "qa_engineer"
-    name: "测试工程师（功能向）"
-    department: "测试线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/department_agents.py::QaDeptAgent"
-    note: "测试线部门 Agent 主责"
-
-  - role_id: "auto_qa"
-    name: "自动化测试工程师（框架向）"
-    department: "测试线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::QaDeptAgent"
-    note: "经部门 Agent 注册到总线，由 QaDeptAgent 聚合承接"
-
-  - role_id: "qa_engineer_alt"
-    name: "测试工程师（探索型）"
-    department: "测试线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "auto_qa_alt"
-    name: "自动化测试工程师（脚本型）"
-    department: "测试线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  # ---------- 项目管理（4 个） ----------
-  - role_id: "project_manager"
-    name: "项目经理（协调型）"
-    department: "项目管理"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/department_agents.py::PmDeptAgent"
-    note: "项目管理部门 Agent 主责"
-
-  - role_id: "release_manager"
-    name: "版本管理（严格门禁）"
-    department: "项目管理"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::PmDeptAgent"
-    note: "经部门 Agent 注册到总线，由 PmDeptAgent 聚合承接"
-
-  - role_id: "project_manager_alt"
-    name: "项目经理（数据型）"
-    department: "项目管理"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "release_manager_alt"
-    name: "版本管理（敏捷型）"
-    department: "项目管理"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  # ---------- 运营线（6 个） ----------
-  - role_id: "data_analyst"
-    name: "数据分析师（策略向）"
-    department: "运营线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/department_agents.py::OpsDeptAgent"
-    note: "运营线部门 Agent 主责"
-
-  - role_id: "reference_learner"
-    name: "游戏借鉴学习Agent"
-    department: "运营线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/reference_learner_agent.py::ReferenceLearnerAgent"
-    note: "参考学习 Agent 独立实现"
-
-  - role_id: "reference_learner_alt"
-    name: "游戏借鉴学习Agent（灵感雷达型）"
-    department: "运营线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "game_operator"
-    name: "游戏运营（用户向）"
-    department: "运营线"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "registered_only"
-    impl_ref: "config/department_agents.py::OpsDeptAgent"
-    note: "经部门 Agent 注册到总线，由 OpsDeptAgent 聚合承接"
-
-  - role_id: "data_analyst_alt"
-    name: "数据分析师（可视化型）"
-    department: "运营线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  - role_id: "game_operator_alt"
-    name: "游戏运营（增长型）"
-    department: "运营线"
-    source: "roles.yaml"
-    variant: "alt"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "alt 变体已实体化，经部门统一头派发到对应部门 NPC"
-
-  # ---------- 协作支持圈（2 个，在 roles.yaml 中声明） ----------
-  - role_id: "progress_pusher"
-    name: "进度督导"
-    department: "协作支持圈"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/progress_pusher.py::ProgressPusherAgent"
-    note: "独立 Agent 实现，同时注册为生态角色"
-
-  - role_id: "merged_confirmer"
-    name: "合并确认员"
-    department: "协作支持圈"
-    source: "roles.yaml"
-    variant: "base"
-    impl_status: "implemented"
-    impl_ref: "config/merged_confirm_agent.py::MergedConfirmAgent"
-    note: "独立 Agent 实现"
-
-# ============================================================
-# 二、生态角色（ecosystem_roles.yaml 21 个）
-# 来源: ecosystem_roles.yaml（生态角色事实源）
-# ============================================================
+- role_id: producer
+  name: 制作人（稳健型）
+  department: 策划线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/game_producer_agent.py::GameProducerAgent
+  note: 游戏向经理融合岗位，真实 Agent 实现
+- role_id: lead_designer
+  name: 主策划（结构型）
+  department: 策划线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/department_agents.py::DesignDeptAgent
+  note: 策划线部门 Agent 主责
+- role_id: system_designer
+  name: 系统策划（细节控）
+  department: 策划线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::DesignDeptAgent
+  note: 经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接
+- role_id: balance_designer
+  name: 数值策划（理性派）
+  department: 策划线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::DesignDeptAgent
+  note: 经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接
+- role_id: level_designer
+  name: 关卡策划（体验派）
+  department: 策划线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::DesignDeptAgent
+  note: 经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接
+- role_id: narrative_designer
+  name: 剧情策划（文艺派）
+  department: 策划线
+  source: roles.yaml
+  variant: base
+  impl_status: declared_only
+  impl_ref: ''
+  note: 在 roles.yaml 声明，未注册到部门 DEPARTMENTS 表
+- role_id: combat_designer
+  name: 战斗策划（手感派）
+  department: 策划线
+  source: roles.yaml
+  variant: base
+  impl_status: declared_only
+  impl_ref: ''
+  note: 在 roles.yaml 声明，未注册到部门 DEPARTMENTS 表
+- role_id: producer_alt
+  name: 制作人（进取型）
+  department: 策划线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02b handler 实体化完成
+- role_id: lead_designer_alt
+  name: 主策划（创意型）
+  department: 策划线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: system_designer_alt
+  name: 系统策划（简洁型）
+  department: 策划线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: balance_designer_alt
+  name: 数值策划（爽点型）
+  department: 策划线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: level_designer_alt
+  name: 关卡策划（硬核型）
+  department: 策划线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: narrative_designer_alt
+  name: 剧情策划（直给型）
+  department: 策划线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: combat_designer_alt
+  name: 战斗策划（策略型）
+  department: 策划线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: cto
+  name: 技术总监（稳健型）
+  department: 程序线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/department_agents.py::ProgramDeptAgent
+  note: 程序线部门 Agent 主责
+- role_id: client_dev
+  name: 客户端程序员（标准流）
+  department: 程序线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ProgramDeptAgent
+  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+- role_id: server_dev
+  name: 服务端程序员（安全向）
+  department: 程序线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ProgramDeptAgent
+  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+- role_id: engine_dev
+  name: 引擎程序员（性能向）
+  department: 程序线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ProgramDeptAgent
+  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+- role_id: ai_programmer
+  name: 游戏AI程序员（行为树向）
+  department: 程序线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ProgramDeptAgent
+  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+- role_id: tools_dev
+  name: 工具链程序员（效率向）
+  department: 程序线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ProgramDeptAgent
+  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+- role_id: cto_alt
+  name: 技术总监（前瞻型）
+  department: 程序线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02b handler 实体化完成
+- role_id: client_dev_alt
+  name: 客户端程序员（表现型）
+  department: 程序线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: server_dev_alt
+  name: 服务端程序员（性能型）
+  department: 程序线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02b handler 实体化完成
+- role_id: engine_dev_alt
+  name: 引擎程序员（易用型）
+  department: 程序线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: ai_programmer_alt
+  name: 游戏AI程序员（学习型）
+  department: 程序线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: tools_dev_alt
+  name: 工具链程序员（极简型）
+  department: 程序线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: art_director
+  name: 主美（品质向）
+  department: 美术线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/department_agents.py::ArtDeptAgent
+  note: 美术线部门 Agent 主责
+- role_id: concept_artist
+  name: 原画师（写实向）
+  department: 美术线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ArtDeptAgent
+  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+- role_id: modeler
+  name: 3D建模师（精细向）
+  department: 美术线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ArtDeptAgent
+  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+- role_id: animator
+  name: 动画师（写实向）
+  department: 美术线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ArtDeptAgent
+  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+- role_id: vfx_artist
+  name: 特效师（冲击向）
+  department: 美术线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ArtDeptAgent
+  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+- role_id: ui_ux
+  name: UI/UX设计师（体验向）
+  department: 美术线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ArtDeptAgent
+  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+- role_id: tech_artist
+  name: 技术美术(TA)（管线向）
+  department: 美术线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ArtDeptAgent
+  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+- role_id: audio_designer
+  name: 音频设计师（氛围向）
+  department: 美术线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::ArtDeptAgent
+  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+- role_id: art_director_alt
+  name: 主美（探索型）
+  department: 美术线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: concept_artist_alt
+  name: 原画师（风格化型）
+  department: 美术线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: modeler_alt
+  name: 3D建模师（优化型）
+  department: 美术线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: animator_alt
+  name: 动画师（卡通型）
+  department: 美术线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: vfx_artist_alt
+  name: 特效师（氛围型）
+  department: 美术线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: ui_ux_alt
+  name: UI/UX设计师（视觉型）
+  department: 美术线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: tech_artist_alt
+  name: 技术美术(TA)（渲染型）
+  department: 美术线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: audio_designer_alt
+  name: 音频设计师（功能型）
+  department: 美术线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: qa_engineer
+  name: 测试工程师（功能向）
+  department: 测试线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/department_agents.py::QaDeptAgent
+  note: 测试线部门 Agent 主责
+- role_id: auto_qa
+  name: 自动化测试工程师（框架向）
+  department: 测试线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::QaDeptAgent
+  note: 经部门 Agent 注册到总线，由 QaDeptAgent 聚合承接
+- role_id: qa_engineer_alt
+  name: 测试工程师（探索型）
+  department: 测试线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: auto_qa_alt
+  name: 自动化测试工程师（脚本型）
+  department: 测试线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: project_manager
+  name: 项目经理（协调型）
+  department: 项目管理
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/department_agents.py::PmDeptAgent
+  note: 项目管理部门 Agent 主责
+- role_id: release_manager
+  name: 版本管理（严格门禁）
+  department: 项目管理
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::PmDeptAgent
+  note: 经部门 Agent 注册到总线，由 PmDeptAgent 聚合承接
+- role_id: project_manager_alt
+  name: 项目经理（数据型）
+  department: 项目管理
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: release_manager_alt
+  name: 版本管理（敏捷型）
+  department: 项目管理
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: data_analyst
+  name: 数据分析师（策略向）
+  department: 运营线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/department_agents.py::OpsDeptAgent
+  note: 运营线部门 Agent 主责
+- role_id: reference_learner
+  name: 游戏借鉴学习Agent
+  department: 运营线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/reference_learner_agent.py::ReferenceLearnerAgent
+  note: 参考学习 Agent 独立实现
+- role_id: reference_learner_alt
+  name: 游戏借鉴学习Agent（灵感雷达型）
+  department: 运营线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: game_operator
+  name: 游戏运营（用户向）
+  department: 运营线
+  source: roles.yaml
+  variant: base
+  impl_status: registered_only
+  impl_ref: config/department_agents.py::OpsDeptAgent
+  note: 经部门 Agent 注册到总线，由 OpsDeptAgent 聚合承接
+- role_id: data_analyst_alt
+  name: 数据分析师（可视化型）
+  department: 运营线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: game_operator_alt
+  name: 游戏运营（增长型）
+  department: 运营线
+  source: roles.yaml
+  variant: alt
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: 已通过 ecosystem_handlers.py 批量实体化
+- role_id: progress_pusher
+  name: 进度督导
+  department: 协作支持圈
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/progress_pusher.py::ProgressPusherAgent
+  note: 独立 Agent 实现，同时注册为生态角色
+- role_id: merged_confirmer
+  name: 合并确认员
+  department: 协作支持圈
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/merged_confirm_agent.py::MergedConfirmAgent
+  note: 独立 Agent 实现
 ecosystem_roles_inventory:
-
-  # ---------- 协作支持圈（6 个） ----------
-  - role_id: "communicator"
-    name: "通讯官"
-    circle: "collab_support"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py::CommunicatorHandler"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "progress_pusher"
-    name: "进度督导"
-    circle: "collab_support"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/progress_pusher.py::ProgressPusherAgent"
-    note: "roles.yaml 与 ecosystem_roles.yaml 双声明，已有独立实现"
-
-  - role_id: "asset_manager"
-    name: "资产管理/清道夫"
-    circle: "collab_support"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "mediator"
-    name: "调解员"
-    circle: "collab_support"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "gig_pool"
-    name: "零工/外包池"
-    circle: "collab_support"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "gatekeeper"
-    name: "门卫/守门人"
-    circle: "collab_support"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  # ---------- 玩家圈（6 个） ----------
-  - role_id: "mass_player"
-    name: "泛玩家"
-    circle: "players"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "core_player"
-    name: "核心玩家"
-    circle: "players"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "payer"
-    name: "付费玩家"
-    circle: "players"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "playtester"
-    name: "测试玩家/试玩员"
-    circle: "players"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "streamer"
-    name: "主播/KOL"
-    circle: "players"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "lurker"
-    name: "云玩家/观望者"
-    circle: "players"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  # ---------- 外部市场圈（6 个） ----------
-  - role_id: "publisher"
-    name: "宣发平台"
-    circle: "market"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "mini_game_platform"
-    name: "第三方小游戏平台"
-    circle: "market"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "advertiser"
-    name: "广告方/广告主"
-    circle: "market"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "channel"
-    name: "渠道/支付商"
-    circle: "market"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "competitor"
-    name: "竞品"
-    circle: "market"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "regulator"
-    name: "监管/合规"
-    circle: "market"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  # ---------- 美术圈（3 个） ----------
-  - role_id: "eco_art_director"
-    name: "美术指导"
-    circle: "art"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "eco_tech_artist"
-    name: "技术美术"
-    circle: "art"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-  - role_id: "eco_audio_designer"
-    name: "音频设计师"
-    circle: "art"
-    source: "ecosystem_roles.yaml"
-    impl_status: "implemented"
-    impl_ref: "config/ecosystem_handlers.py"
-    note: "WP-02 handler 实体化完成"
-
-# ============================================================
-# 三、预设实例化角色（preset_standby）
-# 说明: 这些角色在 role_presets.yaml / project_type_presets.yaml 中定义，
-#       可经 preset_instantiator.py 实例化后装配为正式角色。
-#       经实例化后，role_id 追加后缀（如 client_dev_unity_1），
-#       经 run_end_to_end_instantiated.py 装配为可执行 Agent。
-# ============================================================
+- role_id: communicator
+  name: 通讯官
+  circle: collab_support
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py::CommunicatorHandler
+  note: WP-02 handler 实体化完成
+- role_id: progress_pusher
+  name: 进度督导
+  circle: collab_support
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/progress_pusher.py::ProgressPusherAgent
+  note: roles.yaml 与 ecosystem_roles.yaml 双声明，已有独立实现
+- role_id: asset_manager
+  name: 资产管理/清道夫
+  circle: collab_support
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: mediator
+  name: 调解员
+  circle: collab_support
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: gig_pool
+  name: 零工/外包池
+  circle: collab_support
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: gatekeeper
+  name: 门卫/守门人
+  circle: collab_support
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: mass_player
+  name: 泛玩家
+  circle: players
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: core_player
+  name: 核心玩家
+  circle: players
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: payer
+  name: 付费玩家
+  circle: players
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: playtester
+  name: 测试玩家/试玩员
+  circle: players
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: streamer
+  name: 主播/KOL
+  circle: players
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: lurker
+  name: 云玩家/观望者
+  circle: players
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: publisher
+  name: 宣发平台
+  circle: market
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: mini_game_platform
+  name: 第三方小游戏平台
+  circle: market
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: advertiser
+  name: 广告方/广告主
+  circle: market
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: channel
+  name: 渠道/支付商
+  circle: market
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: competitor
+  name: 竞品
+  circle: market
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: regulator
+  name: 监管/合规
+  circle: market
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: eco_art_director
+  name: 美术指导
+  circle: art
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: eco_tech_artist
+  name: 技术美术
+  circle: art
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
+- role_id: eco_audio_designer
+  name: 音频设计师
+  circle: art
+  source: ecosystem_roles.yaml
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py
+  note: WP-02 handler 实体化完成
 preset_standby_roles:
-  description: "预设实例化角色经 PresetInstantiator 装配后成为 implemented"
-  instantiator_ref: "config/preset_instantiator.py::PresetInstantiator"
-  assembly_ref: "config/run_end_to_end_instantiated.py::InstantiatedTeamOrchestrator"
-
-# ============================================================
-# 四、统计
-# ============================================================
+  description: 预设实例化角色经 PresetInstantiator 装配后成为 implemented
+  instantiator_ref: config/preset_instantiator.py::PresetInstantiator
+  assembly_ref: config/run_end_to_end_instantiated.py::InstantiatedTeamOrchestrator
 statistics:
   roles_yaml_count: 58
   ecosystem_roles_yaml_count: 21
@@ -771,5 +631,6 @@ statistics:
   registered_only: 18
   declared_only: 27
   unique_roles: 78
-  note: "WP-02/WP-02b 后：生态角色 20 个 + _alt 样板 3 个从 registered_only/declared_only 升级为 implemented"
-  version: "WP-02/WP-02b 落地后快照"
+  note: WP-02/WP-02b 后：生态角色 20 个 + _alt 样板 3 个从 registered_only/declared_only 升级为
+    implemented
+  version: WP-02/WP-02b 落地后快照
