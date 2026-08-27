@@ -81,11 +81,19 @@ else
   report "ecosystem_handlers.py 演示通过（handler 注册 + 任务 DONE）" 1
 fi
 
-# 7. 生态角色 handler 数量（21 生态 + 3 _alt = 24）
-if echo "$out" | grep -q "handler_count: 24"; then
-  report "生态角色 handler 实体化（24 个：21 生态 + 3 _alt）" 0
+# 7. handler 数量（21 生态 + 28 _alt + 20 部门基角色 = 69）
+if echo "$out" | grep -q "handler_count: 69"; then
+  report "handler 实体化（69 个：21 生态 + 28 _alt + 20 部门基角色）" 0
 else
-  report "生态角色 handler 实体化（24 个：21 生态 + 3 _alt）" 1
+  report "handler 实体化（69 个，全部部门 base 角色已补齐）" 1
+fi
+
+# 7b. handler 全部挂接到总线（attached == 69，含全部 20 个部门 base 角色）
+#     防止 handler_count: 69 掩盖部门 base 角色 handler 未挂接。
+if echo "$out" | grep -q "生态角色 handler 挂接: 69 个"; then
+  report "全部 handler 挂接到总线（69 个，含全部 20 个部门 base 角色）" 0
+else
+  report "全部 handler 挂接到总线（69 个，含全部 20 个部门 base 角色）" 1
 fi
 
 # 8. inventory / registry 对齐
@@ -107,13 +115,14 @@ fi
 
 echo "== 3. WP-02b: _alt 样板变体 =="
 
-# 10. 三个样板 _alt handler 已实现
+# 10. 全部 28 个 _alt handler 已实现
 if echo "$out" | grep -q "alt_handlers:.*producer_alt" \
-   && echo "$out" | grep -q "alt_handlers:.*cto_alt" \
-   && echo "$out" | grep -q "alt_handlers:.*server_dev_alt"; then
-  report "producer_alt / cto_alt / server_dev_alt 三个样板 handler 已实现" 0
+   && echo "$out" | grep -q "alt_handlers:.*qa_engineer_alt" \
+   && echo "$out" | grep -q "alt_handlers:.*game_operator_alt" \
+   && echo "$out" | grep -q "alt_handler_count: 28"; then
+  report "28 个 _alt handler 已批量实体化" 0
 else
-  report "producer_alt / cto_alt / server_dev_alt 三个样板 handler 已实现" 1
+  report "28 个 _alt handler 已批量实体化" 1
 fi
 
 # 11. _alt 任务真实 DONE

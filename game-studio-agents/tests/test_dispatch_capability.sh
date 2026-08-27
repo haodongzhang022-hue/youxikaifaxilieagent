@@ -297,6 +297,44 @@ else
   echo "$reg2"
 fi
 
+echo "== 部门统一头派发（dispatch_to_department）=="
+out=$($PY - <<'PYBLK'
+from message_bus import MessageBus
+from department_agents import DesignDeptAgent
+from dispatch_capability import DispatchCapability
+bus = MessageBus()
+d = DesignDeptAgent(bus); d.boot()
+cap = DispatchCapability("producer", bus=bus)
+r = cap.dispatch_to_department(
+    "策划线", {"id": "wp_dd", "label": "联调", "module": "gameplay"},
+    internal_assignments=[{"role": "system_designer", "desc": "系统"}],
+    peer_collabs=[{"peer": "程序线", "need": "评审"}])
+print("DD_OK=" + str(r.dispatched))
+print("DD_OWNER=" + r.owner)
+bus.process_all()
+print("DD_INTERNAL=" + str("system_designer" in d.internal_subtasks.get("wp_dd", [])))
+bus2 = MessageBus()
+cap2 = DispatchCapability("producer", bus=bus2)
+r2 = cap2.dispatch_to_department("不存在部门", {"id": "wp_no"})
+print("DD_UNREG_REJECT=" + str(r2.dispatched is False))
+PYBLK
+)
+if echo "$out" | grep -q "DD_OK=True" && echo "$out" | grep -q "DD_OWNER=策划线"; then
+  report "派发到部门统一头成功（@部门名）" 0
+else
+  report "派发到部门统一头成功（@部门名）" 1
+fi
+if echo "$out" | grep -q "DD_INTERNAL=True"; then
+  report "部门头消费派单后触发组内协作" 0
+else
+  report "部门头消费派单后触发组内协作" 1
+fi
+if echo "$out" | grep -q "DD_UNREG_REJECT=True"; then
+  report "未注册部门名被拒绝派发（护栏）" 0
+else
+  report "未注册部门名被拒绝派发（护栏）" 1
+fi
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"

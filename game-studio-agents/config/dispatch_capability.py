@@ -57,6 +57,8 @@ DISPATCH_GUIDE = """【统一派发工作能力 · 用法规则】
 
 2. **派发给谁**（寻址方式）：
    - 按 `role_id` 直投：task_scheduler 会把 TASK_ASSIGN 发给 owner；
+   - 按**部门名**派发：`dispatch_to_department("策划线", wp, internal_assignments, peer_collabs)`
+     —— @ 部门名 = 一次 @ 部门内多个角色，部门头组内协作拆派 + 跨部门协作；
    - 按 `topic` 广播：通知全团队或某主题订阅方；
    - 依赖解锁：`on_complete` 自动把下游就绪任务重新派发。
 
@@ -252,6 +254,50 @@ class DispatchCapability:
             payload={"work_package": wp},
             task_id=wp.get("id"),
         )
+
+    def dispatch_to_department(self, department: str, work_package: Dict[str, Any],
+                               internal_assignments: Optional[List[Dict[str, str]]] = None,
+                               peer_collabs: Optional[List[Dict[str, str]]] = None) -> DispatchResult:
+        """派发工作包给「部门统一头（小组）」→ 组内协作 + 跨部门协作。
+
+        部门名（如"策划线"）本身是一个已注册的总线索引，@ 部门名 = 一次 @
+        部门内多个角色。派发给部门名后：
+          - 组内协作：work_package['internal_assignments'] 携带部门内子任务，
+            部门头经协作工作台 @分工 拆给部门内各角色执行；
+          - 跨部门协作：work_package['peer_collabs'] 携带对其他部门的 @协作请求，
+            部门头在处理时登记跨部门协作。
+
+        Args:
+            department: 部门名（策划线/程序线/美术线/测试线/项目管理/运营线）
+            work_package: 标准工作包（owner 可缺省，用部门名兜底）
+            internal_assignments: 组内子任务 [{"role": "system_designer", "desc": "..."}]
+            peer_collabs: 跨部门协作 [{"peer": "程序线", "need": "..."}]
+
+        Returns:
+            DispatchResult
+        """
+        if not department:
+            return DispatchResult(task_id=work_package.get("id", "?"),
+                                  owner="", task_name=work_package.get("label", "?"),
+                                  priority=work_package.get("priority", "NORMAL"),
+                                  dispatched=False, reason="部门名为空，拒绝派发")
+        # 部门名必须已注册为总线索引（由 DepartmentAgent 注册）
+        if department not in self.bus.roles:
+            return DispatchResult(task_id=work_package.get("id", "?"),
+                                  owner=department,
+                                  task_name=work_package.get("label", "?"),
+                                  priority=work_package.get("priority", "NORMAL"),
+                                  dispatched=False,
+                                  reason=f"部门 {department} 未注册到 message_bus，拒绝派发")
+        # 把组内/跨部门协作计划注入工作包，供部门头执行时消费
+        wp = dict(work_package)
+        wp.setdefault("owner", department)
+        wp.setdefault("department", department)
+        if internal_assignments:
+            wp["internal_assignments"] = internal_assignments
+        if peer_collabs:
+            wp["peer_collabs"] = peer_collabs
+        return self.dispatch_work_package(wp)
 
     def dispatch_batch(self, work_packages: List[Dict[str, Any]]) -> List[DispatchResult]:
         """批量派发多个工作包（含依赖关系自动处理）。
