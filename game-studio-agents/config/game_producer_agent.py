@@ -141,6 +141,7 @@ class GameProducerAgent(BaseAgent):
             "gameplay": "balance_designer", "numeric_model": "balance_designer",
             "ui_ux": "tech_artist", "testing": "qa_engineer",
             "release": "project_manager", "data_ops": "game_operator",
+            "narrative": "narrative_designer", "combat": "combat_designer",
         }
         # 实例化角色 base_role → 实例化 role_id 列表（供精确指派主责）
         self.instantiated_by_base: Dict[str, List[str]] = {}

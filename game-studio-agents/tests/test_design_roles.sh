@@ -57,6 +57,8 @@ print("BUS_COMBAT=" + str("combat_designer" in bus.roles))
 # 架构模块映射
 print("MOD_NARRATIVE=" + str(ARCHITECTURE_MODULES.get("narrative", {}).get("role") == "narrative_designer"))
 print("MOD_COMBAT=" + str(ARCHITECTURE_MODULES.get("combat", {}).get("role") == "combat_designer"))
+print("MBR_NARRATIVE=" + str(mg.MODULE_BASE_ROLE.get("narrative") == "narrative_designer"))
+print("MBR_COMBAT=" + str(mg.MODULE_BASE_ROLE.get("combat") == "combat_designer"))
 PYEOF
 )
 if echo "$out" | grep -q "ROLE_NARRATIVE=True" && echo "$out" | grep -q "ROLE_COMBAT=True"; then
@@ -73,6 +75,11 @@ if echo "$out" | grep -q "MOD_NARRATIVE=True" && echo "$out" | grep -q "MOD_COMB
   report "ARCHITECTURE_MODULES 已映射 narrative / combat 模块到对应角色" 0
 else
   report "ARCHITECTURE_MODULES 已映射 narrative / combat 模块到对应角色" 1
+fi
+if echo "$out" | grep -q "MBR_NARRATIVE=True" && echo "$out" | grep -q "MBR_COMBAT=True"; then
+  report "MODULE_BASE_ROLE 已映射 narrative / combat 到实例化 base_role" 0
+else
+  report "MODULE_BASE_ROLE 已映射 narrative / combat 到实例化 base_role" 1
 fi
 
 echo "== 3. DesignDeptAgent 承接 narrative / combat 模块产出 =="
