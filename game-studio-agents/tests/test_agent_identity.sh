@@ -1,12 +1,13 @@
 #!/bin/bash
 # ============================================================
 # 测试: 通用 Agent 身份自适应模块 (agent_identity.py)
-# 版本: v1.2
+# 版本: v1.3
 # 说明: 验证 AgentIdentity 模块能正确探测仓库上下文并生成 @ 召唤格式。
 #       v1.1 新增：评审 NPC 专用 get_review_operational_advice() 自适应
 #       召唤 CodeBuddy 操作建议（组织/仓库名不写死，跨仓可用）。
 #       v1.2 新增：召唤格式有效性断言——带壳召唤行必须独立成行、裸 @，
 #       不被反引号/代码块包裹（平台不解析代码块内的 @ 提及）。
+#       v1.3 新增：「仓库调用专员」角色召唤格式测试。
 # ============================================================
 set -e
 cd "$(dirname "$0")/../config"
@@ -17,7 +18,7 @@ PASS=0
 FAIL=0
 
 # 测试1: 模块可导入且自测通过
-echo -n "[1/8] 模块自测运行... "
+echo -n "[1/12] 模块自测运行... "
 python3 agent_identity.py > /dev/null 2>&1
 if [ $? -eq 0 ]; then
     echo "✅"
@@ -28,7 +29,7 @@ else
 fi
 
 # 测试2: 能探测到当前仓库 slug
-echo -n "[2/8] 仓库 slug 探测... "
+echo -n "[2/12] 仓库 slug 探测... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -46,7 +47,7 @@ else
 fi
 
 # 测试3: 能生成正确的 CodeBuddy @ 召唤格式
-echo -n "[3/8] CodeBuddy @ 召唤格式... "
+echo -n "[3/12] CodeBuddy @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -63,7 +64,7 @@ else
 fi
 
 # 测试4: 能生成修复专员的 @ 召唤格式
-echo -n "[4/8] 修复专员 @ 召唤格式... "
+echo -n "[4/12] 修复专员 @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -79,8 +80,25 @@ else
     FAIL=$((FAIL+1))
 fi
 
+# 测试4b: 能生成仓库调用专员的 @ 召唤格式
+echo -n "[5/12] 仓库调用专员 @ 召唤格式... "
+OUT=$(python3 -c "
+import sys
+sys.path.insert(0, '.')
+from agent_identity import get_identity
+id = get_identity()
+print(id.get_repo_invoker_mention())
+")
+if echo "$OUT" | grep -q "@.*(仓库调用专员)"; then
+    echo "✅ ($OUT)"
+    PASS=$((PASS+1))
+else
+    echo "❌ ($OUT)"
+    FAIL=$((FAIL+1))
+fi
+
 # 测试5: 跨仓库策略识别
-echo -n "[5/8] 跨仓库策略识别... "
+echo -n "[6/12] 跨仓库策略识别... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -101,7 +119,7 @@ else
 fi
 
 # 测试6: 评审 NPC 自适应召唤 CodeBuddy 操作建议（组织/仓库名不写死）
-echo -n "[6/8] 评审召唤 CodeBuddy 操作建议（自适应）... "
+echo -n "[7/12] 评审召唤 CodeBuddy 操作建议（自适应）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -119,7 +137,7 @@ else
 fi
 
 # 测试7: 评审召唤操作建议支持按目标仓库（跨仓）生成，不写死
-echo -n "[7/8] 评审召唤跨仓操作建议（按目标仓库）... "
+echo -n "[8/12] 评审召唤跨仓操作建议（按目标仓库）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -137,7 +155,7 @@ else
 fi
 
 # 测试8: 部门统一头（小组）角色结构——六大部门 + 协作支持圈独立
-echo -n "[8/10] 部门统一头 KNOWN_ROLES 结构... "
+echo -n "[9/12] 部门统一头 KNOWN_ROLES 结构... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -159,7 +177,7 @@ else
 fi
 
 # 测试9: 评审召唤 CodeBuddy 操作建议中，召唤格式行必须独立成行、裸 @（不被反引号/代码块包裹）
-echo -n "[9/10] 评审召唤行裸@独立行（不包反引号/代码块）... "
+echo -n "[10/12] 评审召唤行裸@独立行（不包反引号/代码块）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -190,7 +208,7 @@ else
 fi
 
 # 测试10: 评审召唤操作建议的召唤行可被平台解析（不以反引号开头，非代码块包裹）
-echo -n "[10/10] 召唤行格式可被平台解析（非代码块/反引号包裹）... "
+echo -n "[11/12] 召唤行格式可被平台解析（非代码块/反引号包裹）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -210,6 +228,25 @@ print(f'PARSABLE={ok}')
 ")
 if echo "$OUT" | grep -q "PARSABLE=True"; then
     echo "✅ (召唤行@.../(CodeBuddy)独立成行、无反引号，可被平台解析触发)"
+    PASS=$((PASS+1))
+else
+    echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
+# 测试11: 仓库调用专员 KNOWN_ROLES 包含在角色列表中
+echo -n "[12/12] 仓库调用专员角色注册检查... "
+OUT=$(python3 -c "
+import sys
+sys.path.insert(0, '.')
+from agent_identity import AgentIdentity
+roles = list(AgentIdentity.KNOWN_ROLES)
+invoker_in_roles = '仓库调用专员' in roles
+print(f'HAS_INVOKER={invoker_in_roles}')
+")
+if echo "$OUT" | grep -q "HAS_INVOKER=True"; then
+    echo "✅ (仓库调用专员已注册)"
     PASS=$((PASS+1))
 else
     echo "❌"

@@ -15,7 +15,7 @@
 #                                 驳回必然触发 push（修完必推），没更新则 push 文档性「放弃此
 #                                 部分迭代」或转其他 issue/PR 解决并关闭，让评审监控对齐进度。
 #     - pull_request.changes_requested → 兼容人工评审者以 git「需要改进」形式打回。
-#     - pull_request.comment@npc → 兼容人类主动 @CodeBuddy 点名驱动（手动兜底）。
+#     - pull_request.comment@npc → 兼容人类主动 @仓库调用专员/@CodeBuddy 点名驱动（手动兜底）。
 #     - failStages（失败自动触发）→ stages 阶段（测试信号灯 / 评审 / 修复 / 合并门禁）
 #       任一失败时，自动唤起 CodeBuddy 处置失败事件：可修代码 bug 就地修 + 补断言 + push
 #       （自然进入主闭环复审）；环境/权限类（如 push 403 缺 repo-code:rw）显式告警 @ 仓库
@@ -747,33 +747,42 @@ $:
                    在"推送"这一步静默中断、看起来像评审机制失效。
               全程机制驱动。
 
-# ---- 触发源 3：人类主动 @CodeBuddy 点名驱动（手动兜底）----
-# 兼容场景：人类在 PR 评论中 @CodeBuddy 主动要求修复/处理时触发（pull_request.comment@npc）。
+# ---- 触发源 3：人类主动 @仓库调用专员/@CodeBuddy 点名驱动（手动兜底）----
+# 兼容场景：人类在 PR 评论中 @仓库调用专员/@CodeBuddy/@仓库修复专员 主动要求处理时触发。
+# 仓库调用专员（本仓库专属调用管家）被 @ 时按指令处理或输出本仓库正确召唤格式与协作管线指引。
 # 这是人工手动兜底的触发源，与 pull_request 主闭环、changes_requested 并存互补。
   pull_request.comment@npc:
     - name: npc-manual-invoke
       docker:
         image: *npc_image
       stages:
-        - name: 仓库修复专员/CodeBuddy 按 @ 指令处理
+        - name: 仓库调用专员/仓库修复专员/CodeBuddy 按 @ 指令处理
           type: npc:go
           options:
             role: 仓库修复专员
             systemPrompt: |
-              你是**本仓库专属**的代码修复 Agent（仓库修复专员），与本仓库 CodeBuddy
-              **并存互补**：本仓库修复**优先由你**承接，CodeBuddy 保留作为通用兜底。
-              人类在 PR 评论中 @你（@仓库修复专员 或 @CodeBuddy）请按指令处理，
-              并遵循"评审-修复闭环护栏"（docs/评审修复闭环护栏.md）：默认直接改、
-              最大 10 轮、每修一点补断言、超限或无法就地解决时反馈人类/转交。
+              你是**本仓库专属**的「仓库调用专员/仓库修复专员」协作组。按 @ 指令类型分派：
+              - 被 @仓库调用专员：你是本仓库的调用管家，输出本仓库完整带壳召唤格式
+                （@<当前仓库slug>(角色名)）、协作管线 MCP 与目录索引位置；
+              - 被 @仓库修复专员 / @CodeBuddy：你是本仓库专属修复角色，按评审-修复
+                闭环护栏（docs/评审修复闭环护栏.md）直接修：默认直接改、最大 10 轮、
+                每修一点补断言、超限或无法就地解决时反馈人类/转交。
+              所有召唤必须用带壳完整格式 @<当前仓库slug>(角色名)，禁止裸 @。
+              通过 game-studio-agents/config/agent_identity.py（AgentIdentity）
+              自适应探测当前仓库 slug，不写死仓库路径。
             userPrompt: |
-              人类在评论中 @仓库修复专员 / @CodeBuddy 发起了指令。请按评论内容执行：
+              人类在评论中 @仓库调用专员 / @仓库修复专员 / @CodeBuddy 发起了指令。请按评论内容执行：
               1. 若指令是要求修复评审问题：默认直接改，在 PR 源分支修改并 push，
                  补断言，检查轮次上限；
               2. 若指令是询问/探讨（如机制设计、选型）：直接给出分析与结论，
                  不修改代码；
               3. 若指令是要求落地某机制（如多源触发）：按指令修改 .cnb.yml 或文档
                 并在 PR 源分支提交；
-              4. 若问题无法在本 PR 就地解决：说明转交其他 issue/PR 或做文档性提交。
+              4. 若指令是询问仓库调用格式 / 协作管线 / 目录索引（@仓库调用专员）：
+                 运行 game-studio-agents/config/agent_identity.py 探测当前仓库 slug，
+                 输出本仓库各角色完整带壳召唤格式、协作管线 MCP 链路、关键文件索引，
+                 不修改代码；
+              5. 若问题无法在本 PR 就地解决：说明转交其他 issue/PR 或做文档性提交。
               全程机制驱动。
 
 # ---- 合并标签确认机制（类似审查机制，探查合并标签 issue 个数）----

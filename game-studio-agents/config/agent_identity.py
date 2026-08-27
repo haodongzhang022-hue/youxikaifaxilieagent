@@ -1,7 +1,7 @@
 # ============================================================
 # 通用 Agent 身份自适应模块 (Agent Identity)
 # 版本: v1.1
-# 说明: 让任意 Agent（CodeBuddy / 仓库修复专员 / 代码审查员 / 游戏向经理等）
+# 说明: 让任意 Agent（CodeBuddy / 仓库调用专员 / 仓库修复专员 / 代码审查员 / 游戏向经理等）
 #       能**自动识别当前所在的仓库上下文**，并据此生成正确的 @ 召唤格式，
 #       不再硬编码 `dongdongxiaozu/youxikaifaxilieagent`。
 #
@@ -171,6 +171,7 @@ class AgentIdentity:
     KNOWN_ROLES = [
         # 核心编排角色
         "CodeBuddy",
+        "仓库调用专员",
         "仓库修复专员",
         "代码审查员",
         "游戏向经理",
@@ -272,6 +273,10 @@ class AgentIdentity:
         """获取本仓库代码审查员的完整 @ 召唤格式。"""
         return self.build_mention("代码审查员")
 
+    def get_repo_invoker_mention(self) -> str:
+        """获取本仓库「仓库调用专员」的完整 @ 召唤格式。"""
+        return self.build_mention("仓库调用专员")
+
     # ---------- 智能策略判断 ----------
     def decide_mention_strategy(self,
                                 target_slug: Optional[str] = None) -> Dict[str, Any]:
@@ -343,12 +348,15 @@ class AgentIdentity:
 
         cb_mention = self.get_codebuddy_mention()
         fixer_mention = self.get_fixer_mention()
+        invoker_mention = self.get_repo_invoker_mention()
 
         return (
             f"【仓库自适应识别】当前仓库: `{self.repo_slug}`"
             f"（识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）\n"
             f"- 召唤本仓库 CodeBuddy:\n"
             f"  {cb_mention}\n"
+            f"- 召唤本仓库仓库调用专员:\n"
+            f"  {invoker_mention}\n"
             f"- 召唤本仓库修复专员:\n"
             f"  {fixer_mention}\n"
             f"- 同仓库调用: 可裸 @ 角色名，但建议用完整格式消除歧义\n"
@@ -436,6 +444,11 @@ def fixer_mention() -> str:
     return get_identity().get_fixer_mention()
 
 
+def repo_invoker_mention() -> str:
+    """快速获取本仓库「仓库调用专员」的 @ 召唤格式。"""
+    return get_identity().get_repo_invoker_mention()
+
+
 def review_operational_advice(target_slug: Optional[str] = None) -> str:
     """评审 NPC 专用：获取召唤本仓库 CodeBuddy 的自适应操作建议。"""
     return get_identity().get_review_operational_advice(target_slug)
@@ -458,6 +471,7 @@ if __name__ == "__main__":
 
     print(f"\n[2] 本仓库 CodeBuddy 召唤格式: {identity.get_codebuddy_mention()}")
     print(f"    本仓库修复专员召唤格式: {identity.get_fixer_mention()}")
+    print(f"    本仓库仓库调用专员召唤格式: {identity.get_repo_invoker_mention()}")
 
     # 同仓库策略
     print(f"\n[3] 同仓库策略: {identity.repo_slug}")
