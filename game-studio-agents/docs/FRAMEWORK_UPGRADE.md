@@ -194,7 +194,7 @@ loc://memory.framework_upgrade.skill.<seq>   升级经验沉淀
 
 ## 八、落地接线状态
 
-> 本节记录框架自升级闭环的落地接线进度（wp_server 程序线·cto）。
+> 本节记录框架自升级闭环的落地接线进度（wp_server 程序线·cto + wp_data_ops 运营线·data_analyst）。
 
 ### ✅ 已完成（v0.6.4）
 
@@ -208,8 +208,17 @@ loc://memory.framework_upgrade.skill.<seq>   升级经验沉淀
 4. **只增不改只追加**：复用 SharedMemory 的不可变 + 版本链机制，
    升级记录写入后不可删改，修订通过追加新版本实现。
 
+### ✅ 已完成（v0.6.4 · wp_data_ops 运营线）
+
+5. **升级记录沉淀**：`framework_upgrade_ops.py` 按新政策把 UPG-001
+   沉淀进共享记忆（`content` + `task` + `skill` 三类记录），
+   幂等执行不产生重复记录；
+6. **升级记录复盘审计**：`audit_upgrade_records()` 对共享记忆中的升级记录
+   做完整性/闭环性/不可变性/状态一致性审计，验证满足政策要求；
+7. **测试信号灯**：`test_framework_upgrade_ops.sh` 12 项断言全部通过
+   （沉淀、闭环完整率、版本清晰率、不可变性、幂等性）。
+
 ### 🔜 待推进（v0.7）
 
-1. 运营线按新政策沉淀 UPG-001 及后续升级记录（wp_data_ops）；
-2. 测试线对触发/评估/决策/留痕四环节做验收测试（wp_testing）；
-3. 人类 CP 对本次升级做最终拍板确认。
+1. 测试线对触发/评估/决策/留痕四环节做验收测试（wp_testing）；
+2. 人类 CP 对本次升级做最终拍板确认。
