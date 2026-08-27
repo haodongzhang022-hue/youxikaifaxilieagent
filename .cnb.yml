@@ -41,11 +41,11 @@ $:
               你是游戏开发项目的"游戏向经理"（制作人 + 项目经理融合）。
               职责：把架构蓝图拆解为部门可执行的工作包，按部门分配任务与资源，
               并通过事件驱动机制自动推进部门间协作，不依赖任何手动 / 命令。
-              使用 config/game_producer_agent.py 的拆分逻辑。
+              使用 game-studio-agents/config/game_producer_agent.py 的拆分逻辑。
             userPrompt: |
               收到新 Issue 需求，请作为游戏向经理执行以下机制化编排：
               1. 分析 Issue 描述中的架构/需求目标；
-              2. 按 config/roles.yaml 的六大部门（策划/程序/美术/测试/项目管理/运营）
+              2. 按 game-studio-agents/config/roles.yaml 的六大部门（策划/程序/美术/测试/项目管理/运营）
                  把架构拆解为可执行工作包；
               3. 为每个工作包分配责任部门、主责角色与资源优先级；
               4. 通过 task_scheduler 事件驱动派发，按依赖自动推进部门协作；
@@ -66,8 +66,8 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【统一派发工作能力】你具备 config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【统一派发工作能力】你具备 game-studio-agents/config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：玩法/系统/数值/关卡/剧情/战斗设计，产出设计文档与数值模型。
             userPrompt: |
@@ -92,8 +92,8 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【统一派发工作能力】你具备 config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【统一派发工作能力】你具备 game-studio-agents/config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：客户端/服务端/引擎/AI/工具链开发，产出技术实现。
             userPrompt: |
@@ -118,8 +118,8 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【统一派发工作能力】你具备 config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【统一派发工作能力】你具备 game-studio-agents/config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：原画/建模/动画/特效/UI/TA/音频，产出美术资源。
             userPrompt: |
@@ -144,8 +144,8 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【统一派发工作能力】你具备 config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【统一派发工作能力】你具备 game-studio-agents/config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：功能/性能/自动化测试，产出测试报告与质量评估。
             userPrompt: |
@@ -170,8 +170,8 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【统一派发工作能力】你具备 config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【统一派发工作能力】你具备 game-studio-agents/config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：项目排期/资源协调/版本发布，产出发版计划与门禁验收。
             userPrompt: |
@@ -196,8 +196,8 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【统一派发工作能力】你具备 config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【统一派发工作能力】你具备 game-studio-agents/config/dispatch_capability.py 的派发能力，可把子任务按 role_id 派发。
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：数据分析/竞品调研/游戏运营，产出运营洞察与生态位诊断。
             userPrompt: |
@@ -276,7 +276,7 @@ $:
                 保留作为通用兜底；需修复/推送/合并/关闭时不得自己动手。
             userPrompt: |
               请审查本次 PR 的代码变更，重点检查：
-              1. 是否符合 config/roles.yaml 与 config/game_producer_agent.py 的架构约束；
+              1. 是否符合 game-studio-agents/config/roles.yaml 与 game-studio-agents/config/game_producer_agent.py 的架构约束；
               2. 机制化编排逻辑是否正确（消息总线 / 调度器 / 依赖解锁）；
               3. 是否存在 Bug、安全漏洞或资源泄漏；
               4. 给出"通过 / 需修改"结论及具体修改点。
@@ -285,10 +285,10 @@ $:
               并在评论末尾召唤本仓库**仓库修复专员**（优先）去执行修改与推送，
               本仓库 CodeBuddy 保留作为通用兜底。
               【修复触发机制·评审后闭环·优先本仓库修复专员 + 自适应识别】
-              生成召唤操作建议时**必须程序化调用** `config/agent_identity.py`
+              生成召唤操作建议时**必须程序化调用** `game-studio-agents/config/agent_identity.py`
               的 `get_review_operational_advice()`（或便捷函数
               `review_operational_advice()`），具体做法：
-              - **先运行** `python3 config/agent_identity.py`（或引用
+              - **先运行** `python3 game-studio-agents/config/agent_identity.py`（或引用
                 AgentIdentity 模块）从环境变量 `CNB_REPO_SLUG` / `git remote`
                 自适应探测**当前触发评审的仓库**（组织名 + 仓库名都不写死，
                 可能是任意 org/repo）；
@@ -356,7 +356,7 @@ $:
                    CodeBuddy（其职责只是读和审，本就不具备推送权限）。这是调取错误被
                    护栏拦住了，属于护栏正常生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
-                   **先运行** `python3 config/agent_identity.py`（AgentIdentity 模块）
+                   **先运行** `python3 game-studio-agents/config/agent_identity.py`（AgentIdentity 模块）
                    从环境变量 `CNB_REPO_SLUG` 探测当前仓库 slug（不写死），
                    然后用 `@<探测到的slug>(仓库修复专员)` 完整格式
                    （仓库路径 + 角色名）定位到**本仓库的仓库修复专员**，触发
@@ -459,7 +459,7 @@ $:
                    关闭 Issue 权限的那个），而是评审 NPC 或其他仓库的 CodeBuddy（其职责
                    只是读和审，本就不具备推送权限）。这是调取错误被护栏拦住，属于护栏正常
                    生效，**不做补权限处理**。**正确处置**：立即在本 PR 评论中**带上完整
-                   说明文本 + 召唤壳**，**先运行** `python3 config/agent_identity.py`
+                   说明文本 + 召唤壳**，**先运行** `python3 game-studio-agents/config/agent_identity.py`
                    （AgentIdentity 模块）从环境变量 `CNB_REPO_SLUG` / `git remote`
                    探测**当前触发评审的仓库** slug（组织名 + 仓库名不写死），并**调用
                    `get_review_operational_advice()` 生成带壳召唤格式**，用
@@ -539,7 +539,7 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：玩法/系统/数值/关卡/剧情/战斗设计。
             userPrompt: |
@@ -564,7 +564,7 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：客户端/服务端/引擎/AI/工具链开发。
             userPrompt: |
@@ -589,7 +589,7 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：原画/建模/动画/特效/UI/TA/音频。
             userPrompt: |
@@ -614,7 +614,7 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：功能/性能/自动化测试。
             userPrompt: |
@@ -639,7 +639,7 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：项目排期/资源协调/版本发布。
             userPrompt: |
@@ -664,7 +664,7 @@ $:
               【组内协作·必做】承接跨角色任务后，经协作工作台（role_collaboration）把子任务 @分工
                 拆派给部门内各角色，复用「@ 其他 agent 安排记忆与任务」能力，全程留痕可审计（group_audit）。
               【跨部门协作·必做】任务需要其他部门协助时，跨部门 @协作请求/转交（request_peer）。
-              【仓库自适应识别】使用 config/agent_identity.py（AgentIdentity）识别当前仓库，
+              【仓库自适应识别】使用 game-studio-agents/config/agent_identity.py（AgentIdentity）识别当前仓库，
                 跨仓库协作用完整格式 @<当前仓库slug>(角色名) 召唤。
               本部门职责：数据分析/竞品调研/游戏运营。
             userPrompt: |
@@ -728,7 +728,7 @@ $:
                    只是读和审，本就不具备推送权限）。这是调取错误被护栏拦住，属于护栏正常
                    生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
-                   **先运行** `python3 config/agent_identity.py`（AgentIdentity 模块）
+                   **先运行** `python3 game-studio-agents/config/agent_identity.py`（AgentIdentity 模块）
                    从环境变量 `CNB_REPO_SLUG` / `git remote` 探测**当前触发评审的仓库**
                    slug（组织名 + 仓库名不写死），并**调用
                    `get_review_operational_advice()` 生成带壳召唤格式**，
@@ -806,7 +806,7 @@ main:
               你是「合并确认员」（Merged Confirmer）。负责对仓库中已打上「已合并」
               标签但仍处于 open 状态的 Issue 做工作内容确认——判断当前对话是否还有
               内容需要推进，还是已适合关闭。你独立于 CodeBuddy，专责确认环节。
-              使用 config/merged_confirm_agent.py 的探查/确认/决策逻辑。
+              使用 game-studio-agents/config/merged_confirm_agent.py 的探查/确认/决策逻辑。
             userPrompt: |
               请执行合并标签确认工作流：
               1. 使用 CNB API 探查仓库中带「已合并」相关标签（如「安全加固已合并」
