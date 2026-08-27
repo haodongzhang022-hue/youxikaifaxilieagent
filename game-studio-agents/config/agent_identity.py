@@ -169,11 +169,20 @@ class AgentIdentity:
 
     # 本仓库已注册的 NPC 角色名（对应 .cnb/settings.yml）
     KNOWN_ROLES = [
+        # 核心编排角色
         "CodeBuddy",
         "仓库修复专员",
         "代码审查员",
         "游戏向经理",
         "合并确认员",
+        # 六大部门 NPC（按流水线顺序）
+        "策划线",
+        "协作支持圈",
+        "程序线",
+        "美术线",
+        "测试线",
+        "项目管理",
+        "运营线",
     ]
 
     def __init__(self) -> None:
