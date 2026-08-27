@@ -46,6 +46,12 @@ MESSAGE_TYPES = {
     "APPROVAL_RESULT":    "审批结果",
     "STATUS_REPORT":      "状态汇报",
     "NOTIFICATION":       "通知消息",
+    # 角色间互相@ 协作消息类型（多角色转交/分工/协作请求）
+    "HANDOFF":            "角色间@转交任务",
+    "DELEGATE":           "角色间@分工并行协作",
+    "COLLAB_REQ":         "角色间@协作请求",
+    "ACK":                "角色间@回执（接受/拒绝/退回/完成）",
+    "COLLAB_NOTIFY":      "角色间协作进度通知",
 }
 
 # 优先级权重（数值越大越先处理）
