@@ -5,6 +5,7 @@
 #   - WP-01: role_inventory.yaml + role_inventory.py --list / --gap
 #   - WP-02: ecosystem_handlers.py 生态角色 handler 实体化
 #   - WP-02b: producer_alt / cto_alt / server_dev_alt 样板变体
+#   - backlog: 剩余 25 个 _alt 变体批量实体化（现 28 个全部实体化）
 # 退出码: 0 = 🟢 通过，1 = 🔴 阻塞
 # ============================================================
 set -euo pipefail
@@ -81,11 +82,12 @@ else
   report "ecosystem_handlers.py 演示通过（handler 注册 + 任务 DONE）" 1
 fi
 
-# 7. 生态角色 handler 数量（21 生态 + 3 _alt = 24）
-if echo "$out" | grep -q "handler_count: 24"; then
-  report "生态角色 handler 实体化（24 个：21 生态 + 3 _alt）" 0
+# 7. 生态角色 handler 数量（21 生态 + 28 _alt = 49）
+#    含 backlog 批量实体化的 25 个 _alt 变体（策划6/程序4/美术8/测试2/PM2/运营3）
+if echo "$out" | grep -q "handler_count: 49"; then
+  report "生态角色 handler 实体化（49 个：21 生态 + 28 _alt，全部变体已实体化）" 0
 else
-  report "生态角色 handler 实体化（24 个：21 生态 + 3 _alt）" 1
+  report "生态角色 handler 实体化（49 个：21 生态 + 28 _alt，全部变体已实体化）" 1
 fi
 
 # 8. inventory / registry 对齐

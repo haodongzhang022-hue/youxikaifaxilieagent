@@ -8,10 +8,11 @@
 #         eco_* 任务可真实 DONE，为 WP-03 的 _all_done 过滤修复提供前置。
 #
 # WP-02b: 3 个高价值 _alt 样板变体 handler 实体化：
-#         - producer_alt（进取型）
-#         - cto_alt（前瞻型）
-#         - server_dev_alt（性能型）
+#         - producer_alt（进取型）/ cto_alt（前瞻型）/ server_dev_alt（性能型）
 #         与现有 department 流水线直接衔接。
+#
+# backlog: 剩余 25 个 _alt 变体批量实体化（策划6/程序4/美术8/测试2/PM2/运营3），
+#          每个 handler 经部门统一头派发到对应部门 NPC，接入六大部门 @ 召唤体系。
 #
 # 与 role_inventory.yaml 逐项对齐（验收附加项）：
 #   - handler 注册命名与 role_inventory.yaml 中生态角色 role_id 一致；
@@ -547,6 +548,640 @@ class ServerDevAltHandler(EcosystemHandler):
 
 
 # ============================================================
+# 三-b、_alt 变体批量实体化（backlog · 剩余 25 个）
+# ============================================================
+# 承接 WP-02b 样板（producer_alt/cto_alt/server_dev_alt），
+# 将 roles.yaml 中剩余 25 个 _alt 变体全部实体化。
+# 每个 handler 的 mapped_to_dept_pipeline 指向新注册的部门 NPC
+# （部门统一头），与六大部门 @ 召唤体系直接衔接。
+
+
+class LeadDesignerAltHandler(EcosystemHandler):
+    """主策划（创意型） handler：创意型风格承接。
+
+    与部门 NPC 体系衔接：承接 lead_designer_alt 角色任务，
+    产出创意型风格的方案，经 策划线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("lead_designer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "creative_gameplay",
+            "style": "创意型",
+            "output": {
+                "design_brief": "主策划（创意型） · 灵感驱动：追求玩法颠覆与新奇感，思维跳跃大胆，擅长从跨界获取设计灵感。",
+                "personality": "创意型风格",
+                "mapped_to_dept_pipeline": "通过 lead_designer 的 DesignDeptAgent 派发到策划线",
+            },
+        }
+
+
+class SystemDesignerAltHandler(EcosystemHandler):
+    """系统策划（简洁型） handler：简洁型风格承接。
+
+    与部门 NPC 体系衔接：承接 system_designer_alt 角色任务，
+    产出简洁型风格的方案，经 策划线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("system_designer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "lean_system_design",
+            "style": "简洁型",
+            "output": {
+                "design_brief": "系统策划（简洁型） · 极简主义：信奉少即是多，追求系统轻量与易上手，擅长砍掉冗余、降低学习成本。",
+                "personality": "简洁型风格",
+                "mapped_to_dept_pipeline": "通过 system_designer 的 DesignDeptAgent 派发到策划线",
+            },
+        }
+
+
+class BalanceDesignerAltHandler(EcosystemHandler):
+    """数值策划（爽点型） handler：爽点型风格承接。
+
+    与部门 NPC 体系衔接：承接 balance_designer_alt 角色任务，
+    产出爽点型风格的方案，经 策划线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("balance_designer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "reward_curve_design",
+            "style": "爽点型",
+            "output": {
+                "design_brief": "数值策划（爽点型） · 爽感优先：善于制造成长快感与爆点奖励，敢于放大收益波动制造惊喜。",
+                "personality": "爽点型风格",
+                "mapped_to_dept_pipeline": "通过 balance_designer 的 DesignDeptAgent 派发到策划线",
+            },
+        }
+
+
+class LevelDesignerAltHandler(EcosystemHandler):
+    """关卡策划（硬核型） handler：硬核型风格承接。
+
+    与部门 NPC 体系衔接：承接 level_designer_alt 角色任务，
+    产出硬核型风格的方案，经 策划线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("level_designer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "hardcore_level_design",
+            "style": "硬核型",
+            "output": {
+                "design_brief": "关卡策划（硬核型） · 硬核挑战：推崇高难度与精妙解谜，追求通关后的成就感，愿为硬核玩家设计深度挑战。",
+                "personality": "硬核型风格",
+                "mapped_to_dept_pipeline": "通过 level_designer 的 DesignDeptAgent 派发到策划线",
+            },
+        }
+
+
+class NarrativeDesignerAltHandler(EcosystemHandler):
+    """剧情策划（直给型） handler：直给型风格承接。
+
+    与部门 NPC 体系衔接：承接 narrative_designer_alt 角色任务，
+    产出直给型风格的方案，经 策划线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("narrative_designer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "punchy_narrative",
+            "style": "直给型",
+            "output": {
+                "design_brief": "剧情策划（直给型） · 干练直给：偏好轻剧情快节奏叙事，擅长用少量对白直击玩家情绪。",
+                "personality": "直给型风格",
+                "mapped_to_dept_pipeline": "通过 narrative_designer 的 DesignDeptAgent 派发到策划线",
+            },
+        }
+
+
+class CombatDesignerAltHandler(EcosystemHandler):
+    """战斗策划（策略型） handler：策略型风格承接。
+
+    与部门 NPC 体系衔接：承接 combat_designer_alt 角色任务，
+    产出策略型风格的方案，经 策划线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("combat_designer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "tactical_combat",
+            "style": "策略型",
+            "output": {
+                "design_brief": "战斗策划（策略型） · 策略博弈：追求战斗深度决策与克制关系，擅长设计需要预判与规划的战术博弈。",
+                "personality": "策略型风格",
+                "mapped_to_dept_pipeline": "通过 combat_designer 的 DesignDeptAgent 派发到策划线",
+            },
+        }
+
+
+class ClientDevAltHandler(EcosystemHandler):
+    """客户端程序员（表现型） handler：表现型风格承接。
+
+    与部门 NPC 体系衔接：承接 client_dev_alt 角色任务，
+    产出表现型风格的方案，经 程序线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("client_dev_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "client_presentation",
+            "style": "表现型",
+            "output": {
+                "design_brief": "客户端程序员（表现型） · 表现至上：追求画面表现力与流畅手感，注重细节打磨与视觉惊艳。",
+                "personality": "表现型风格",
+                "mapped_to_dept_pipeline": "通过 client_dev 的 ProgramDeptAgent 派发到程序线",
+            },
+        }
+
+
+class EngineDevAltHandler(EcosystemHandler):
+    """引擎程序员（易用型） handler：易用型风格承接。
+
+    与部门 NPC 体系衔接：承接 engine_dev_alt 角色任务，
+    产出易用型风格的方案，经 程序线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("engine_dev_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "engine_usability",
+            "style": "易用型",
+            "output": {
+                "design_brief": "引擎程序员（易用型） · 开发者体验：以降低团队使用门槛为己任，追求清晰易用的引擎API与工具链。",
+                "personality": "易用型风格",
+                "mapped_to_dept_pipeline": "通过 engine_dev 的 ProgramDeptAgent 派发到程序线",
+            },
+        }
+
+
+class AiProgrammerAltHandler(EcosystemHandler):
+    """游戏AI程序员（学习型） handler：学习型风格承接。
+
+    与部门 NPC 体系衔接：承接 ai_programmer_alt 角色任务，
+    产出学习型风格的方案，经 程序线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("ai_programmer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "adaptive_ai",
+            "style": "学习型",
+            "output": {
+                "design_brief": "游戏AI程序员（学习型） · 学习导向：热衷用机器学习与自适应技术打造更聪明AI，让AI从玩家行为中自我进化。",
+                "personality": "学习型风格",
+                "mapped_to_dept_pipeline": "通过 ai_programmer 的 ProgramDeptAgent 派发到程序线",
+            },
+        }
+
+
+class ToolsDevAltHandler(EcosystemHandler):
+    """工具链程序员（极简型） handler：极简型风格承接。
+
+    与部门 NPC 体系衔接：承接 tools_dev_alt 角色任务，
+    产出极简型风格的方案，经 程序线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("tools_dev_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "minimal_tools",
+            "style": "极简型",
+            "output": {
+                "design_brief": "工具链程序员（极简型） · 极简好用：信奉工具应开箱即用，追求极简交互与低学习成本，用最简单方案解决复杂问题。",
+                "personality": "极简型风格",
+                "mapped_to_dept_pipeline": "通过 tools_dev 的 ProgramDeptAgent 派发到程序线",
+            },
+        }
+
+
+class ArtDirectorAltHandler(EcosystemHandler):
+    """主美（探索型） handler：探索型风格承接。
+
+    与部门 NPC 体系衔接：承接 art_director_alt 角色任务，
+    产出探索型风格的方案，经 美术线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("art_director_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "avant_garde_style",
+            "style": "探索型",
+            "output": {
+                "design_brief": "主美（探索型） · 先锋探索：乐于尝试先锋风格与大胆实验，追求视觉辨识度与话题性。",
+                "personality": "探索型风格",
+                "mapped_to_dept_pipeline": "通过 art_director 的 ArtDeptAgent 派发到美术线",
+            },
+        }
+
+
+class ConceptArtistAltHandler(EcosystemHandler):
+    """原画师（风格化型） handler：风格化型风格承接。
+
+    与部门 NPC 体系衔接：承接 concept_artist_alt 角色任务，
+    产出风格化型风格的方案，经 美术线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("concept_artist_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "stylized_concept",
+            "style": "风格化型",
+            "output": {
+                "design_brief": "原画师（风格化型） · 风格化表现：偏爱夸张造型与鲜明风格，擅长用风格化语言强化角色记忆点。",
+                "personality": "风格化型风格",
+                "mapped_to_dept_pipeline": "通过 concept_artist 的 ArtDeptAgent 派发到美术线",
+            },
+        }
+
+
+class ModelerAltHandler(EcosystemHandler):
+    """3D建模师（优化型） handler：优化型风格承接。
+
+    与部门 NPC 体系衔接：承接 modeler_alt 角色任务，
+    产出优化型风格的方案，经 美术线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("modeler_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "optimized_modeling",
+            "style": "优化型",
+            "output": {
+                "design_brief": "3D建模师（优化型） · 性能优化：以低面数与高性能表现为导向，追求资源效率与画面效果平衡。",
+                "personality": "优化型风格",
+                "mapped_to_dept_pipeline": "通过 modeler 的 ArtDeptAgent 派发到美术线",
+            },
+        }
+
+
+class AnimatorAltHandler(EcosystemHandler):
+    """动画师（卡通型） handler：卡通型风格承接。
+
+    与部门 NPC 体系衔接：承接 animator_alt 角色任务，
+    产出卡通型风格的方案，经 美术线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("animator_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "cartoon_animation",
+            "style": "卡通型",
+            "output": {
+                "design_brief": "动画师（卡通型） · 夸张卡通：偏爱夸张变形与戏剧化动作，追求灵动鲜活的卡通表现力。",
+                "personality": "卡通型风格",
+                "mapped_to_dept_pipeline": "通过 animator 的 ArtDeptAgent 派发到美术线",
+            },
+        }
+
+
+class VfxArtistAltHandler(EcosystemHandler):
+    """特效师（氛围型） handler：氛围型风格承接。
+
+    与部门 NPC 体系衔接：承接 vfx_artist_alt 角色任务，
+    产出氛围型风格的方案，经 美术线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("vfx_artist_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "ambient_vfx",
+            "style": "氛围型",
+            "output": {
+                "design_brief": "特效师（氛围型） · 氛围细腻：偏爱写实细腻光效与氛围营造，擅长用微妙光效烘托情绪。",
+                "personality": "氛围型风格",
+                "mapped_to_dept_pipeline": "通过 vfx_artist 的 ArtDeptAgent 派发到美术线",
+            },
+        }
+
+
+class UiUxAltHandler(EcosystemHandler):
+    """UI/UX设计师（视觉型） handler：视觉型风格承接。
+
+    与部门 NPC 体系衔接：承接 ui_ux_alt 角色任务，
+    产出视觉型风格的方案，经 美术线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("ui_ux_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "visual_ui",
+            "style": "视觉型",
+            "output": {
+                "design_brief": "UI/UX设计师（视觉型） · 视觉美感：以界面视觉精致与品牌调性为核心，追求高质感视觉表现与美学统一。",
+                "personality": "视觉型风格",
+                "mapped_to_dept_pipeline": "通过 ui_ux 的 ArtDeptAgent 派发到美术线",
+            },
+        }
+
+
+class TechArtistAltHandler(EcosystemHandler):
+    """技术美术(TA)（渲染型） handler：渲染型风格承接。
+
+    与部门 NPC 体系衔接：承接 tech_artist_alt 角色任务，
+    产出渲染型风格的方案，经 美术线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("tech_artist_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "rendering_art",
+            "style": "渲染型",
+            "output": {
+                "design_brief": "技术美术(TA)（渲染型） · 渲染艺术家：痴迷画面质感与渲染细节，追求极致视觉真实与风格化渲染。",
+                "personality": "渲染型风格",
+                "mapped_to_dept_pipeline": "通过 tech_artist 的 ArtDeptAgent 派发到美术线",
+            },
+        }
+
+
+class AudioDesignerAltHandler(EcosystemHandler):
+    """音频设计师（功能型） handler：功能型风格承接。
+
+    与部门 NPC 体系衔接：承接 audio_designer_alt 角色任务，
+    产出功能型风格的方案，经 美术线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("audio_designer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "functional_audio",
+            "style": "功能型",
+            "output": {
+                "design_brief": "音频设计师（功能型） · 功能导向：以声音功能性与清晰反馈为核心，注重操作反馈与信息传达准确性。",
+                "personality": "功能型风格",
+                "mapped_to_dept_pipeline": "通过 audio_designer 的 ArtDeptAgent 派发到美术线",
+            },
+        }
+
+
+class QaEngineerAltHandler(EcosystemHandler):
+    """测试工程师（探索型） handler：探索型风格承接。
+
+    与部门 NPC 体系衔接：承接 qa_engineer_alt 角色任务，
+    产出探索型风格的方案，经 测试线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("qa_engineer_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "exploratory_testing",
+            "style": "探索型",
+            "output": {
+                "design_brief": "测试工程师（探索型） · 探索好奇：以玩家视角进行无脚本探索测试，善于发现设计与体验层面问题。",
+                "personality": "探索型风格",
+                "mapped_to_dept_pipeline": "通过 qa_engineer 的 QaDeptAgent 派发到测试线",
+            },
+        }
+
+
+class AutoQaAltHandler(EcosystemHandler):
+    """自动化测试工程师（脚本型） handler：脚本型风格承接。
+
+    与部门 NPC 体系衔接：承接 auto_qa_alt 角色任务，
+    产出脚本型风格的方案，经 测试线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("auto_qa_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "scripted_automation",
+            "style": "脚本型",
+            "output": {
+                "design_brief": "自动化测试工程师（脚本型） · 脚本快手：以快速生成高覆盖测试脚本为追求，擅长用AI辅助生成用例快速落地。",
+                "personality": "脚本型风格",
+                "mapped_to_dept_pipeline": "通过 auto_qa 的 QaDeptAgent 派发到测试线",
+            },
+        }
+
+
+class ProjectManagerAltHandler(EcosystemHandler):
+    """项目经理（数据型） handler：数据型风格承接。
+
+    与部门 NPC 体系衔接：承接 project_manager_alt 角色任务，
+    产出数据型风格的方案，经 项目管理 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("project_manager_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "data_driven_mgmt",
+            "style": "数据型",
+            "output": {
+                "design_brief": "项目经理（数据型） · 量化管理：以数据驱动进度与风险管理，追求客观可衡量的管理指标。",
+                "personality": "数据型风格",
+                "mapped_to_dept_pipeline": "通过 project_manager 的 PmDeptAgent 派发到项目管理",
+            },
+        }
+
+
+class ReleaseManagerAltHandler(EcosystemHandler):
+    """版本管理（敏捷型） handler：敏捷型风格承接。
+
+    与部门 NPC 体系衔接：承接 release_manager_alt 角色任务，
+    产出敏捷型风格的方案，经 项目管理 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("release_manager_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "agile_release",
+            "style": "敏捷型",
+            "output": {
+                "design_brief": "版本管理（敏捷型） · 敏捷迭代：追求小步快跑与快速持续交付，擅长拆分小版本降低风险。",
+                "personality": "敏捷型风格",
+                "mapped_to_dept_pipeline": "通过 release_manager 的 PmDeptAgent 派发到项目管理",
+            },
+        }
+
+
+class ReferenceLearnerAltHandler(EcosystemHandler):
+    """游戏借鉴学习Agent（灵感雷达型） handler：灵感雷达型风格承接。
+
+    与部门 NPC 体系衔接：承接 reference_learner_alt 角色任务，
+    产出灵感雷达型风格的方案，经 运营线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("reference_learner_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "inspiration_radar",
+            "style": "灵感雷达型",
+            "output": {
+                "design_brief": "游戏借鉴学习Agent（灵感雷达型） · 灵感雷达：以捕捉前沿玩法与行业风向为核心，嗅觉敏锐、行动快速，风格先锋大胆。",
+                "personality": "灵感雷达型风格",
+                "mapped_to_dept_pipeline": "通过 reference_learner 的 OpsDeptAgent 派发到运营线",
+            },
+        }
+
+
+class DataAnalystAltHandler(EcosystemHandler):
+    """数据分析师（可视化型） handler：可视化型风格承接。
+
+    与部门 NPC 体系衔接：承接 data_analyst_alt 角色任务，
+    产出可视化型风格的方案，经 运营线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("data_analyst_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "visual_data_insight",
+            "style": "可视化型",
+            "output": {
+                "design_brief": "数据分析师（可视化型） · 可视呈现：以让数据一目了然为核心，追求洞察可读性与可传播性。",
+                "personality": "可视化型风格",
+                "mapped_to_dept_pipeline": "通过 data_analyst 的 OpsDeptAgent 派发到运营线",
+            },
+        }
+
+
+class GameOperatorAltHandler(EcosystemHandler):
+    """游戏运营（增长型） handler：增长型风格承接。
+
+    与部门 NPC 体系衔接：承接 game_operator_alt 角色任务，
+    产出增长型风格的方案，经 运营线 部门统一头派发。
+    """
+
+    def __init__(self):
+        super().__init__("game_operator_alt")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "growth_hacking",
+            "style": "增长型",
+            "output": {
+                "design_brief": "游戏运营（增长型） · 增长黑客：以用户增长与商业化效率为核心，擅长设计拉新促活活动与裂变机制。",
+                "personality": "增长型风格",
+                "mapped_to_dept_pipeline": "通过 game_operator 的 OpsDeptAgent 派发到运营线",
+            },
+        }
+
+
+# ============================================================
 # 四、Handler 注册表
 # ============================================================
 
@@ -586,6 +1221,33 @@ ECOSYSTEM_HANDLERS: Dict[str, EcosystemHandler] = {
     "producer_alt": ProducerAltHandler(),
     "cto_alt": CtoAltHandler(),
     "server_dev_alt": ServerDevAltHandler(),
+
+    # _alt 批量实体化（backlog，25 个）
+    "lead_designer_alt": LeadDesignerAltHandler(),
+    "system_designer_alt": SystemDesignerAltHandler(),
+    "balance_designer_alt": BalanceDesignerAltHandler(),
+    "level_designer_alt": LevelDesignerAltHandler(),
+    "narrative_designer_alt": NarrativeDesignerAltHandler(),
+    "combat_designer_alt": CombatDesignerAltHandler(),
+    "client_dev_alt": ClientDevAltHandler(),
+    "engine_dev_alt": EngineDevAltHandler(),
+    "ai_programmer_alt": AiProgrammerAltHandler(),
+    "tools_dev_alt": ToolsDevAltHandler(),
+    "art_director_alt": ArtDirectorAltHandler(),
+    "concept_artist_alt": ConceptArtistAltHandler(),
+    "modeler_alt": ModelerAltHandler(),
+    "animator_alt": AnimatorAltHandler(),
+    "vfx_artist_alt": VfxArtistAltHandler(),
+    "ui_ux_alt": UiUxAltHandler(),
+    "tech_artist_alt": TechArtistAltHandler(),
+    "audio_designer_alt": AudioDesignerAltHandler(),
+    "qa_engineer_alt": QaEngineerAltHandler(),
+    "auto_qa_alt": AutoQaAltHandler(),
+    "project_manager_alt": ProjectManagerAltHandler(),
+    "release_manager_alt": ReleaseManagerAltHandler(),
+    "reference_learner_alt": ReferenceLearnerAltHandler(),
+    "data_analyst_alt": DataAnalystAltHandler(),
+    "game_operator_alt": GameOperatorAltHandler(),
 }
 
 
