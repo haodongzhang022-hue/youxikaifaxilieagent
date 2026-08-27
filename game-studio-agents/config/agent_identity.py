@@ -460,8 +460,10 @@ class AgentIdentity:
         return (
             f"【仓库自适应识别】当前仓库: `{self.repo_slug}`"
             f"（识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）\n"
-            f"- 召唤本仓库 CodeBuddy: `{cb_mention}`\n"
-            f"- 召唤本仓库修复专员: `{fixer_mention}`\n"
+            f"- 召唤本仓库 CodeBuddy:\n"
+            f"  {cb_mention}\n"
+            f"- 召唤本仓库修复专员:\n"
+            f"  {fixer_mention}\n"
             f"- 同仓库调用: 可裸 @ 角色名，但建议用完整格式消除歧义\n"
             f"- **跨仓库调用: 必须用完整格式 `@{self.repo_slug}(角色名)` 带壳召唤，"
             f"否则会被路由到错误仓库导致权限受限**\n"
@@ -498,15 +500,12 @@ class AgentIdentity:
             f"【召唤本仓库 CodeBuddy · 仓库自适应识别】\n"
             f"当前触发评审的仓库为 `{target}`（组织 `{owner}` / 仓库 `{repo}`，"
             f"识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）。\n"
-            f"请召唤本仓库 CodeBuddy，**必须用带壳完整格式**：\n"
-            f"  `{cb_mention}`\n"
+            f"请召唤本仓库 CodeBuddy，必须用带壳完整格式（召唤行不可用反引号/代码块包裹，否则平台不解析）:\n"
+            f"{cb_mention}\n"
             f"- 组织名 `{owner}` 与仓库名 `{repo}` 均**自适应探测**，随当前被评审仓库变化，"
             f"不写死固定路径；\n"
-            f"- **禁止裸 `@CodeBuddy`**（会命中系统级或他仓 CodeBuddy，权限不对）；\n"
-            f"- **本系统故意设计不允许 push**：评审闭环通过**打标签**驱动（如「适合合并」"
-            f"「适合关闭」「适合推送」），CodeBuddy 修复后打标签标记状态，任何 NPC "
-            f"**不得尝试 push**（会触发 403 报错、破坏闭环），也不得输出"
-            f"\"push 失败 / 403\"类错误信息。\n"
+            f"- **禁止裸 `@CodeBuddy`**（会命中系统级或他仓 CodeBuddy，权限不对、无法推送）；\n"
+            f"- 仅本仓库 CodeBuddy（{cb_mention}）具备推送/合并/关闭权限，可完成闭环。\n"
         )
 
 

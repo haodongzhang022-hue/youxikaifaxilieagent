@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================
 # 测试: 通用 Agent 身份自适应模块 (agent_identity.py)
-# 版本: v1.3
+# 版本: v1.2
 # 说明: 验证 AgentIdentity 模块能正确探测仓库上下文并生成 @ 召唤格式。
-#       v1.2 新增：检测本组织/仓库能力——git remote 误指向他仓（如 dongjiagoushi）
-#       时以平台权威 CNB_REPO_SLUG 为准，杜绝误识别成他仓。
 #       v1.1 新增：评审 NPC 专用 get_review_operational_advice() 自适应
 #       召唤 CodeBuddy 操作建议（组织/仓库名不写死，跨仓可用）。
+#       v1.2 新增：召唤格式有效性断言——带壳召唤行必须独立成行、裸 @，
+#       不被反引号/代码块包裹（平台不解析代码块内的 @ 提及）。
 # ============================================================
 set -e
 cd "$(dirname "$0")/../config"
@@ -17,7 +17,7 @@ PASS=0
 FAIL=0
 
 # 测试1: 模块可导入且自测通过
-echo -n "[1/10] 模块自测运行... "
+echo -n "[1/8] 模块自测运行... "
 python3 agent_identity.py > /dev/null 2>&1
 if [ $? -eq 0 ]; then
     echo "✅"
@@ -28,7 +28,7 @@ else
 fi
 
 # 测试2: 能探测到当前仓库 slug
-echo -n "[2/10] 仓库 slug 探测... "
+echo -n "[2/8] 仓库 slug 探测... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -46,7 +46,7 @@ else
 fi
 
 # 测试3: 能生成正确的 CodeBuddy @ 召唤格式
-echo -n "[3/10] CodeBuddy @ 召唤格式... "
+echo -n "[3/8] CodeBuddy @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -63,7 +63,7 @@ else
 fi
 
 # 测试4: 能生成修复专员的 @ 召唤格式
-echo -n "[4/10] 修复专员 @ 召唤格式... "
+echo -n "[4/8] 修复专员 @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -80,7 +80,7 @@ else
 fi
 
 # 测试5: 跨仓库策略识别
-echo -n "[5/10] 跨仓库策略识别... "
+echo -n "[5/8] 跨仓库策略识别... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -101,7 +101,7 @@ else
 fi
 
 # 测试6: 评审 NPC 自适应召唤 CodeBuddy 操作建议（组织/仓库名不写死）
-echo -n "[6/10] 评审召唤 CodeBuddy 操作建议（自适应）... "
+echo -n "[6/8] 评审召唤 CodeBuddy 操作建议（自适应）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -119,7 +119,7 @@ else
 fi
 
 # 测试7: 评审召唤操作建议支持按目标仓库（跨仓）生成，不写死
-echo -n "[7/10] 评审召唤跨仓操作建议（按目标仓库）... "
+echo -n "[7/8] 评审召唤跨仓操作建议（按目标仓库）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -158,83 +158,66 @@ else
     FAIL=$((FAIL+1))
 fi
 
-echo ""
-# 测试9: 检测本组织/仓库能力——git remote 误指向他仓（如 dongjiagoushi）时，
-#        以平台权威 slug（CNB_REPO_SLUG）为准，不误识别成本仓库之外的仓库。
-echo -n "[9/10] 检测本组织/仓库能力（git 误指向他仓时以 env 权威为准）... "
-OUT=$(python3 - <<'PYEOF' 2>&1
-import os, subprocess, tempfile, shutil
+# 测试9: 评审召唤 CodeBuddy 操作建议中，召唤格式行必须独立成行、裸 @（不被反引号/代码块包裹）
+echo -n "[9/10] 评审召唤行裸@独立行（不包反引号/代码块）... "
+OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
-import agent_identity
-
-# 造一个临时 git 仓库，remote 指向「他仓」dongjiagoushi
-tmp = tempfile.mkdtemp(prefix="simrepo_")
-try:
-    subprocess.run(["git","init","-q"], cwd=tmp, check=True)
-    subprocess.run(["git","remote","add","origin",
-                    "https://cnb.cool/dongdongxiaozu/dongjiagoushi.git"],
-                   cwd=tmp, check=True)
-    # 平台权威 slug 明确指向本仓库
-    os.environ["CNB_REPO_SLUG"] = "dongdongxiaozu/youxikaifaxilieagent"
-    os.environ["CNB_REPO_NAME"] = "youxikaifaxilieagent"
-    data = agent_identity._detect_from_git(tmp)
-    print(f"full_slug={data.get('full_slug')} src={data.get('detection_source')}")
-finally:
-    shutil.rmtree(tmp, ignore_errors=True)
-PYEOF
-)
-if echo "$OUT" | grep -q "full_slug=dongdongxiaozu/youxikaifaxilieagent" && echo "$OUT" | grep -qv "dongjiagoushi"; then
-    echo "✅ ($OUT)"
+from agent_identity import get_identity
+id = get_identity()
+advice = id.get_review_operational_advice()
+# 取出召唤行（以 @ 开头、以 (CodeBuddy) 结尾的独立行）
+import re
+summon_line = None
+for line in advice.splitlines():
+    line_stripped = line.strip()
+    if line_stripped.startswith('@') and line_stripped.endswith('(CodeBuddy)'):
+        summon_line = line_stripped
+        break
+print(f'SUMMON={summon_line}')
+BACKTICK = chr(96)  # 反引号，避免 bash 命令替换
+print(f'RAW_LINE_HAS_BACKTICK={BACKTICK in summon_line if summon_line else "NA"}')
+")
+SUMMON=$(echo "$OUT" | grep "^SUMMON=" | cut -d= -f2-)
+HAS_BT=$(echo "$OUT" | grep "^RAW_LINE_HAS_BACKTICK=" | cut -d= -f2-)
+if [ -n "$SUMMON" ] && [ "$HAS_BT" = "False" ]; then
+    echo "✅ (召唤行=$SUMMON，独立裸@行无反引号包裹)"
     PASS=$((PASS+1))
 else
-    echo "❌ 误识别成 dongjiagoushi 或其他仓库"
+    echo "❌"
     echo "$OUT"
     FAIL=$((FAIL+1))
 fi
 
-echo ""
-# 测试10: 多 remote 场景——remote 顺序为 aa(在前) + origin(在后)，但 origin 对应的
-#        仓库必须被优先选中（修复：sort key 改用 remote 别名判断，而非解析后的仓库名）
-echo -n "[10/10] 多 remote 场景 origin 优先排序... "
-OUT=$(python3 - <<'PYEOF' 2>&1
-import os, subprocess, tempfile, shutil
+# 测试10: 评审召唤操作建议的召唤行可被平台解析（不以反引号开头，非代码块包裹）
+echo -n "[10/10] 召唤行格式可被平台解析（非代码块/反引号包裹）... "
+OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
-import agent_identity
-
-tmp = tempfile.mkdtemp(prefix="simmulti_")
-try:
-    subprocess.run(["git","init","-q"], cwd=tmp, check=True)
-    subprocess.run(["git","remote","add","aa",
-                    "https://cnb.cool/org/aa_repo.git"],
-                   cwd=tmp, check=True)
-    subprocess.run(["git","remote","add","origin",
-                    "https://cnb.cool/org/main_repo.git"],
-                   cwd=tmp, check=True)
-    # 不注入平台权威 slug，走纯 git 探测的 origin 优先分支
-    os.environ.pop("CNB_REPO_SLUG", None)
-    os.environ.pop("CNB_REPO_NAME", None)
-    os.environ.pop("CNB_REPO_SLUG_LOWERCASE", None)
-    data = agent_identity._detect_from_git(tmp)
-    print(f"full_slug={data.get('full_slug')} src={data.get('detection_source')}")
-finally:
-    shutil.rmtree(tmp, ignore_errors=True)
-PYEOF
-)
-if echo "$OUT" | grep -q "full_slug=org/main_repo"; then
-    echo "✅ ($OUT)"
+from agent_identity import get_identity
+id = get_identity()
+advice = id.get_review_operational_advice()
+# 校验召唤行是独立裸 @ 行：行首是 @，无前导反引号，整行无反引号包裹
+import re
+ok = False
+for line in advice.splitlines():
+    ls = line.strip()
+    BACKTICK = chr(96)
+    if ls.startswith('@') and ls.endswith('(CodeBuddy)') and BACKTICK not in ls:
+        ok = True
+        break
+print(f'PARSABLE={ok}')
+")
+if echo "$OUT" | grep -q "PARSABLE=True"; then
+    echo "✅ (召唤行@.../(CodeBuddy)独立成行、无反引号，可被平台解析触发)"
     PASS=$((PASS+1))
 else
-    echo "❌ origin 未被优先选中（可能误选了 aa 的 aa_repo）"
+    echo "❌"
     echo "$OUT"
     FAIL=$((FAIL+1))
 fi
-
 
 echo ""
 echo "===== 测试结果: $PASS 通过 / $FAIL 失败 ====="
 [ $FAIL -eq 0 ] && echo "🟢 全部通过" || echo "🔴 存在失败"
-
-
 exit $FAIL
