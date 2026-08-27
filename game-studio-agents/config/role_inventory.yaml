@@ -28,41 +28,41 @@ roles_inventory:
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::DesignDeptAgent
-  note: 经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::DesignDeptAgent
+  note: 专属 handler 挂接到总线（system_designer 独立承接）+ 部门 Agent 双路径承接
 - role_id: balance_designer
   name: 数值策划（理性派）
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::DesignDeptAgent
-  note: 经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::DesignDeptAgent
+  note: 专属 handler 挂接到总线（balance_designer 独立承接）+ 部门 Agent 双路径承接
 - role_id: level_designer
   name: 关卡策划（体验派）
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::DesignDeptAgent
-  note: 经部门 Agent 注册到总线，由 DesignDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::DesignDeptAgent
+  note: 专属 handler 挂接到总线（level_designer 独立承接）+ 部门 Agent 双路径承接
 - role_id: narrative_designer
   name: 剧情策划（文艺派）
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: declared_only
-  impl_ref: ''
-  note: 在 roles.yaml 声明，未注册到部门 DEPARTMENTS 表
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::DesignDeptAgent
+  note: 专属 handler 挂接到总线（NarrativeDesignerHandler）+ 部门 Agent 双路径承接
 - role_id: combat_designer
   name: 战斗策划（手感派）
   department: 策划线
   source: roles.yaml
   variant: base
-  impl_status: declared_only
-  impl_ref: ''
-  note: 在 roles.yaml 声明，未注册到部门 DEPARTMENTS 表
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::DesignDeptAgent
+  note: 专属 handler 挂接到总线（CombatDesignerHandler）+ 部门 Agent 双路径承接
 - role_id: producer_alt
   name: 制作人（进取型）
   department: 策划线
@@ -132,41 +132,41 @@ roles_inventory:
   department: 程序线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ProgramDeptAgent
-  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ProgramDeptAgent
+  note: 专属 handler 挂接到总线（client_dev 独立承接）+ 部门 Agent 双路径承接
 - role_id: server_dev
   name: 服务端程序员（安全向）
   department: 程序线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ProgramDeptAgent
-  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ProgramDeptAgent
+  note: 专属 handler 挂接到总线（server_dev 独立承接）+ 部门 Agent 双路径承接
 - role_id: engine_dev
   name: 引擎程序员（性能向）
   department: 程序线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ProgramDeptAgent
-  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ProgramDeptAgent
+  note: 专属 handler 挂接到总线（engine_dev 独立承接）+ 部门 Agent 双路径承接
 - role_id: ai_programmer
   name: 游戏AI程序员（行为树向）
   department: 程序线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ProgramDeptAgent
-  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ProgramDeptAgent
+  note: 专属 handler 挂接到总线（ai_programmer 独立承接）+ 部门 Agent 双路径承接
 - role_id: tools_dev
   name: 工具链程序员（效率向）
   department: 程序线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ProgramDeptAgent
-  note: 经部门 Agent 注册到总线，由 ProgramDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ProgramDeptAgent
+  note: 专属 handler 挂接到总线（tools_dev 独立承接）+ 部门 Agent 双路径承接
 - role_id: cto_alt
   name: 技术总监（前瞻型）
   department: 程序线
@@ -228,57 +228,57 @@ roles_inventory:
   department: 美术线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ArtDeptAgent
-  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ArtDeptAgent
+  note: 专属 handler 挂接到总线（concept_artist 独立承接）+ 部门 Agent 双路径承接
 - role_id: modeler
   name: 3D建模师（精细向）
   department: 美术线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ArtDeptAgent
-  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ArtDeptAgent
+  note: 专属 handler 挂接到总线（modeler 独立承接）+ 部门 Agent 双路径承接
 - role_id: animator
   name: 动画师（写实向）
   department: 美术线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ArtDeptAgent
-  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ArtDeptAgent
+  note: 专属 handler 挂接到总线（animator 独立承接）+ 部门 Agent 双路径承接
 - role_id: vfx_artist
   name: 特效师（冲击向）
   department: 美术线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ArtDeptAgent
-  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ArtDeptAgent
+  note: 专属 handler 挂接到总线（vfx_artist 独立承接）+ 部门 Agent 双路径承接
 - role_id: ui_ux
   name: UI/UX设计师（体验向）
   department: 美术线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ArtDeptAgent
-  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ArtDeptAgent
+  note: 专属 handler 挂接到总线（ui_ux 独立承接）+ 部门 Agent 双路径承接
 - role_id: tech_artist
   name: 技术美术(TA)（管线向）
   department: 美术线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ArtDeptAgent
-  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ArtDeptAgent
+  note: 专属 handler 挂接到总线（tech_artist 独立承接）+ 部门 Agent 双路径承接
 - role_id: audio_designer
   name: 音频设计师（氛围向）
   department: 美术线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::ArtDeptAgent
-  note: 经部门 Agent 注册到总线，由 ArtDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ArtDeptAgent
+  note: 专属 handler 挂接到总线（audio_designer 独立承接）+ 部门 Agent 双路径承接
 - role_id: art_director_alt
   name: 主美（探索型）
   department: 美术线
@@ -356,9 +356,9 @@ roles_inventory:
   department: 测试线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::QaDeptAgent
-  note: 经部门 Agent 注册到总线，由 QaDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::QaDeptAgent
+  note: 专属 handler 挂接到总线（auto_qa 独立承接）+ 部门 Agent 双路径承接
 - role_id: qa_engineer_alt
   name: 测试工程师（探索型）
   department: 测试线
@@ -388,9 +388,9 @@ roles_inventory:
   department: 项目管理
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::PmDeptAgent
-  note: 经部门 Agent 注册到总线，由 PmDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::PmDeptAgent
+  note: 专属 handler 挂接到总线（release_manager 独立承接）+ 部门 Agent 双路径承接
 - role_id: project_manager_alt
   name: 项目经理（数据型）
   department: 项目管理
@@ -436,9 +436,9 @@ roles_inventory:
   department: 运营线
   source: roles.yaml
   variant: base
-  impl_status: registered_only
-  impl_ref: config/department_agents.py::OpsDeptAgent
-  note: 经部门 Agent 注册到总线，由 OpsDeptAgent 聚合承接
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::OpsDeptAgent
+  note: 专属 handler 挂接到总线（game_operator 独立承接）+ 部门 Agent 双路径承接
 - role_id: data_analyst_alt
   name: 数据分析师（可视化型）
   department: 运营线
@@ -627,10 +627,10 @@ statistics:
   roles_yaml_count: 58
   ecosystem_roles_yaml_count: 21
   total_declared: 79
-  implemented: 34
-  registered_only: 18
-  declared_only: 27
+  implemented: 79
+  registered_only: 0
+  declared_only: 0
   unique_roles: 78
-  note: WP-02/WP-02b 后：生态角色 20 个 + _alt 样板 3 个从 registered_only/declared_only 升级为
-    implemented
-  version: WP-02/WP-02b 落地后快照
+  note: 全量实体化收口后：79 个角色全部 implemented，18 个部门 base 角色补齐独立 handler，
+    registered_only / declared_only 双双归零，实现覆盖率 100%
+  version: 角色补完（18 部门 base 角色实体化）后快照

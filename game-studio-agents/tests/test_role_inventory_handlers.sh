@@ -81,11 +81,19 @@ else
   report "ecosystem_handlers.py 演示通过（handler 注册 + 任务 DONE）" 1
 fi
 
-# 7. 生态角色 handler 数量（21 生态 + 28 _alt = 49）
-if echo "$out" | grep -q "handler_count: 49"; then
-  report "生态角色 handler 实体化（49 个：21 生态 + 28 _alt）" 0
+# 7. handler 数量（21 生态 + 28 _alt + 20 部门基角色 = 69）
+if echo "$out" | grep -q "handler_count: 69"; then
+  report "handler 实体化（69 个：21 生态 + 28 _alt + 20 部门基角色）" 0
 else
-  report "生态角色 handler 实体化（49 个：21 生态 + 28 _alt）" 1
+  report "handler 实体化（69 个，全部部门 base 角色已补齐）" 1
+fi
+
+# 7b. handler 全部挂接到总线（attached == 69，含全部 20 个部门 base 角色）
+#     防止 handler_count: 69 掩盖部门 base 角色 handler 未挂接。
+if echo "$out" | grep -q "生态角色 handler 挂接: 69 个"; then
+  report "全部 handler 挂接到总线（69 个，含全部 20 个部门 base 角色）" 0
+else
+  report "全部 handler 挂接到总线（69 个，含全部 20 个部门 base 角色）" 1
 fi
 
 # 8. inventory / registry 对齐

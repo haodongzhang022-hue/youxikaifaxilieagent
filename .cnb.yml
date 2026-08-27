@@ -95,6 +95,7 @@ $:
             bash game-studio-agents/tests/test_framework_upgrade.sh
             bash game-studio-agents/tests/test_framework_upgrade_ops.sh
             bash game-studio-agents/tests/test_framework_upgrade_acceptance.sh
+            bash game-studio-agents/tests/test_design_roles.sh
             bash game-studio-agents/tests/test_agent_identity.sh
             bash game-studio-agents/tests/test_role_inventory.sh
             bash game-studio-agents/tests/test_role_inventory_handlers.sh

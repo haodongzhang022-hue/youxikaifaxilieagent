@@ -702,6 +702,557 @@ class CombatDesignerAltHandler(EcosystemHandler):
             },
         }
 
+
+class NarrativeDesignerHandler(EcosystemHandler):
+    """剧情策划（文艺派）基角色 handler。
+
+    与部门流水线衔接：承接 narrative_designer 角色任务，
+    产出世界观/剧情/任务文案，映射到 DesignDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("narrative_designer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "narrative_design",
+            "style": "文艺派",
+            "output": {
+                "focus": "世界观与剧情叙事",
+                "dept_pipeline": "通过 narrative_designer 的 DesignDeptAgent 派发到 策划线",
+                "approach": "情感共鸣+叙事感染力",
+                "world_depth": "high",
+                "emotional_impact": True,
+                "dialogue_quality": "premium"
+            },
+        }
+
+
+class CombatDesignerHandler(EcosystemHandler):
+    """战斗策划（手感派）基角色 handler。
+
+    与部门流水线衔接：承接 combat_designer 角色任务，
+    产出战斗机制/技能/NPC AI，映射到 DesignDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("combat_designer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "combat_design",
+            "style": "手感派",
+            "output": {
+                "focus": "战斗机制与手感调优",
+                "dept_pipeline": "通过 combat_designer 的 DesignDeptAgent 派发到 策划线",
+                "approach": "打击感优先+实时反馈",
+                "feel_priority": True,
+                "combat_flow": "smooth",
+                "feedback_latency": "minimal"
+            },
+        }
+
+
+# ============================================================
+# 二·B、六大部门 base 角色 Handler 实体化（补齐 registered_only → implemented）
+# 说明：将 18 个原 registered_only（依赖部门 Agent 聚合承接）的部门 base 角色，
+#       各自实体化为独立 handler，与部门 Agent 双路径承接（对齐 narrative/combat_designer）。
+# ============================================================
+
+class SystemDesignerHandler(EcosystemHandler):
+    """系统策划（细节控）基角色 handler。
+
+    与部门流水线衔接：承接 system_designer 角色任务，
+    产出系统功能/规则设计，映射到 DesignDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("system_designer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "system_design",
+            "style": "细节控",
+            "output": {
+                "focus": "系统功能与规则设计",
+                "dept_pipeline": "通过 system_designer 的 DesignDeptAgent 派发到 策划线",
+                "approach": "规则细节精校+逻辑自洽",
+                "detail_rigor": "high",
+                "rule_consistency": True
+            },
+        }
+
+
+class BalanceDesignerHandler(EcosystemHandler):
+    """数值策划（理性派）基角色 handler。
+
+    与部门流水线衔接：承接 balance_designer 角色任务，
+    产出数值/经济/成长曲线，映射到 DesignDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("balance_designer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "balance_design",
+            "style": "理性派",
+            "output": {
+                "focus": "数值模型与经济系统",
+                "dept_pipeline": "通过 balance_designer 的 DesignDeptAgent 派发到 策划线",
+                "approach": "数据驱动+模型推演",
+                "economy_model": True,
+                "growth_curve": "balanced",
+                "data_priority": True
+            },
+        }
+
+
+class LevelDesignerHandler(EcosystemHandler):
+    """关卡策划（体验派）基角色 handler。
+
+    与部门流水线衔接：承接 level_designer 角色任务，
+    产出关卡/流程/体验设计，映射到 DesignDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("level_designer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "level_design",
+            "style": "体验派",
+            "output": {
+                "focus": "关卡与流程体验设计",
+                "dept_pipeline": "通过 level_designer 的 DesignDeptAgent 派发到 策划线",
+                "approach": "体验曲线+节奏编排",
+                "experience_curve": "smooth",
+                "flow_priority": True
+            },
+        }
+
+
+class ClientDevHandler(EcosystemHandler):
+    """客户端程序员（标准流）基角色 handler。
+
+    与部门流水线衔接：承接 client_dev 角色任务，
+    产出客户端渲染/交互/绑定，映射到 ProgramDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("client_dev")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "client_development",
+            "style": "标准流",
+            "output": {
+                "focus": "客户端渲染与交互",
+                "dept_pipeline": "通过 client_dev 的 ProgramDeptAgent 派发到 程序线",
+                "approach": "标准管线+稳定渲染",
+                "render_pipeline": True,
+                "stability_priority": True
+            },
+        }
+
+
+class ServerDevHandler(EcosystemHandler):
+    """服务端程序员（安全向）基角色 handler。
+
+    与部门流水线衔接：承接 server_dev 角色任务，
+    产出服务端 API/数据/安全，映射到 ProgramDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("server_dev")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "server_development",
+            "style": "安全向",
+            "output": {
+                "focus": "服务端逻辑与数据安全",
+                "dept_pipeline": "通过 server_dev 的 ProgramDeptAgent 派发到 程序线",
+                "approach": "安全优先+高可用",
+                "security_priority": True,
+                "api_design": "stable"
+            },
+        }
+
+
+class EngineDevHandler(EcosystemHandler):
+    """引擎程序员（性能向）基角色 handler。
+
+    与部门流水线衔接：承接 engine_dev 角色任务，
+    产出引擎核心/性能优化，映射到 ProgramDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("engine_dev")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "engine_development",
+            "style": "性能向",
+            "output": {
+                "focus": "引擎核心与性能优化",
+                "dept_pipeline": "通过 engine_dev 的 ProgramDeptAgent 派发到 程序线",
+                "approach": "底层优化+帧率保障",
+                "performance_priority": True,
+                "profiling_driven": True
+            },
+        }
+
+
+class AiProgrammerHandler(EcosystemHandler):
+    """游戏AI程序员（行为树向）基角色 handler。
+
+    与部门流水线衔接：承接 ai_programmer 角色任务，
+    产出 NPC 行为树/自适应难度，映射到 ProgramDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("ai_programmer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "game_ai_development",
+            "style": "行为树向",
+            "output": {
+                "focus": "NPC 行为树与自适应难度",
+                "dept_pipeline": "通过 ai_programmer 的 ProgramDeptAgent 派发到 程序线",
+                "approach": "行为树+难度自适应",
+                "behavior_tree": True,
+                "adaptive_difficulty": True
+            },
+        }
+
+
+class ToolsDevHandler(EcosystemHandler):
+    """工具链程序员（效率向）基角色 handler。
+
+    与部门流水线衔接：承接 tools_dev 角色任务，
+    产出工具链/自动化/效率，映射到 ProgramDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("tools_dev")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "tools_development",
+            "style": "效率向",
+            "output": {
+                "focus": "工具链与开发效率",
+                "dept_pipeline": "通过 tools_dev 的 ProgramDeptAgent 派发到 程序线",
+                "approach": "流程自动化+提效",
+                "automation": True,
+                "efficiency_priority": True
+            },
+        }
+
+
+class ConceptArtistHandler(EcosystemHandler):
+    """原画师（写实向）基角色 handler。
+
+    与部门流水线衔接：承接 concept_artist 角色任务，
+    产出原画/概念设定，映射到 ArtDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("concept_artist")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "concept_art",
+            "style": "写实向",
+            "output": {
+                "focus": "原画与概念设定",
+                "dept_pipeline": "通过 concept_artist 的 ArtDeptAgent 派发到 美术线",
+                "approach": "写实细节+概念落地",
+                "realism": "high",
+                "concept_delivery": True
+            },
+        }
+
+
+class ModelerHandler(EcosystemHandler):
+    """3D建模师（精细向）基角色 handler。
+
+    与部门流水线衔接：承接 modeler 角色任务，
+    产出 3D 模型/资产，映射到 ArtDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("modeler")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "modeling",
+            "style": "精细向",
+            "output": {
+                "focus": "3D 模型与资产",
+                "dept_pipeline": "通过 modeler 的 ArtDeptAgent 派发到 美术线",
+                "approach": "精细建模+拓扑规范",
+                "detail_quality": "high",
+                "topology_clean": True
+            },
+        }
+
+
+class AnimatorHandler(EcosystemHandler):
+    """动画师（写实向）基角色 handler。
+
+    与部门流水线衔接：承接 animator 角色任务，
+    产出动画/动作/表现，映射到 ArtDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("animator")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "animation",
+            "style": "写实向",
+            "output": {
+                "focus": "角色动画与动作表现",
+                "dept_pipeline": "通过 animator 的 ArtDeptAgent 派发到 美术线",
+                "approach": "写实动作+权重细腻",
+                "motion_realism": "high",
+                "blend_quality": True
+            },
+        }
+
+
+class VfxArtistHandler(EcosystemHandler):
+    """特效师（冲击向）基角色 handler。
+
+    与部门流水线衔接：承接 vfx_artist 角色任务，
+    产出特效/光效/粒子，映射到 ArtDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("vfx_artist")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "vfx_design",
+            "style": "冲击向",
+            "output": {
+                "focus": "特效与光效表现",
+                "dept_pipeline": "通过 vfx_artist 的 ArtDeptAgent 派发到 美术线",
+                "approach": "冲击力+视觉反馈",
+                "impact_priority": True,
+                "particle_quality": "high"
+            },
+        }
+
+
+class UiUxHandler(EcosystemHandler):
+    """UI/UX设计师（体验向）基角色 handler。
+
+    与部门流水线衔接：承接 ui_ux 角色任务，
+    产出 UI/UX 布局与交互，映射到 ArtDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("ui_ux")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "ui_ux_design",
+            "style": "体验向",
+            "output": {
+                "focus": "UI/UX 布局与交互设计",
+                "dept_pipeline": "通过 ui_ux 的 ArtDeptAgent 派发到 美术线",
+                "approach": "体验导向+交互易用",
+                "usability": "high",
+                "interaction_flow": "smooth"
+            },
+        }
+
+
+class TechArtistHandler(EcosystemHandler):
+    """技术美术TA（管线向）基角色 handler。
+
+    与部门流水线衔接：承接 tech_artist 角色任务，
+    产出渲染管线/Shader/资产规范，映射到 ArtDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("tech_artist")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "tech_art",
+            "style": "管线向",
+            "output": {
+                "focus": "渲染管线与 Shader 规范",
+                "dept_pipeline": "通过 tech_artist 的 ArtDeptAgent 派发到 美术线",
+                "approach": "管线提效+渲染标准",
+                "pipeline_efficiency": True,
+                "shader_quality": "high"
+            },
+        }
+
+
+class AudioDesignerHandler(EcosystemHandler):
+    """音频设计师（氛围向）基角色 handler。
+
+    与部门流水线衔接：承接 audio_designer 角色任务，
+    产出音频/配乐/音效，映射到 ArtDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("audio_designer")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "audio_design",
+            "style": "氛围向",
+            "output": {
+                "focus": "配乐与音效设计",
+                "dept_pipeline": "通过 audio_designer 的 ArtDeptAgent 派发到 美术线",
+                "approach": "氛围沉浸+音效反馈",
+                "immersion": "high",
+                "sfx_feedback": True
+            },
+        }
+
+
+class AutoQaHandler(EcosystemHandler):
+    """自动化测试工程师（框架向）基角色 handler。
+
+    与部门流水线衔接：承接 auto_qa 角色任务，
+    产出自动化测试/框架，映射到 QaDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("auto_qa")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "automated_testing",
+            "style": "框架向",
+            "output": {
+                "focus": "自动化测试框架与用例",
+                "dept_pipeline": "通过 auto_qa 的 QaDeptAgent 派发到 测试线",
+                "approach": "框架沉淀+自动回归",
+                "framework_build": True,
+                "regression_coverage": "high"
+            },
+        }
+
+
+class ReleaseManagerHandler(EcosystemHandler):
+    """版本管理（严格门禁）基角色 handler。
+
+    与部门流水线衔接：承接 release_manager 角色任务，
+    产出版本/里程碑/发版门禁，映射到 PmDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("release_manager")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "release_management",
+            "style": "严格门禁",
+            "output": {
+                "focus": "版本里程碑与发版门禁",
+                "dept_pipeline": "通过 release_manager 的 PmDeptAgent 派发到 项目管理",
+                "approach": "门禁严格+发版稳定",
+                "gate_strictness": "high",
+                "milestone_tracking": True
+            },
+        }
+
+
+class GameOperatorHandler(EcosystemHandler):
+    """游戏运营（用户向）基角色 handler。
+
+    与部门流水线衔接：承接 game_operator 角色任务，
+    产出运营活动/用户增长，映射到 OpsDeptAgent 派发。
+    """
+
+    def __init__(self):
+        super().__init__("game_operator")
+
+    def handle(self, msg: Message) -> Dict[str, Any]:
+        super().handle(msg)
+        return {
+            "role_id": self.role_id,
+            "task_id": msg.content.get("task_id", ""),
+            "action": "game_operation",
+            "style": "用户向",
+            "output": {
+                "focus": "运营活动与用户增长",
+                "dept_pipeline": "通过 game_operator 的 OpsDeptAgent 派发到 运营线",
+                "approach": "用户导向+活动驱动",
+                "user_priority": True,
+                "campaign_driven": True
+            },
+        }
+
+
+
 class ClientDevAltHandler(EcosystemHandler):
     """客户端程序员（表现型） handler：表现型风格。
 
@@ -1232,6 +1783,30 @@ ECOSYSTEM_HANDLERS: Dict[str, EcosystemHandler] = {
     "eco_tech_artist": EcoTechArtistHandler(),
     "eco_audio_designer": EcoAudioDesignerHandler(),
 
+    # 基角色 handler（narrative_designer / combat_designer）
+    "narrative_designer": NarrativeDesignerHandler(),
+    "combat_designer": CombatDesignerHandler(),
+
+    # 六大部门 base 角色 handler（补齐 18 个 registered_only → implemented）
+    "system_designer": SystemDesignerHandler(),
+    "balance_designer": BalanceDesignerHandler(),
+    "level_designer": LevelDesignerHandler(),
+    "client_dev": ClientDevHandler(),
+    "server_dev": ServerDevHandler(),
+    "engine_dev": EngineDevHandler(),
+    "ai_programmer": AiProgrammerHandler(),
+    "tools_dev": ToolsDevHandler(),
+    "concept_artist": ConceptArtistHandler(),
+    "modeler": ModelerHandler(),
+    "animator": AnimatorHandler(),
+    "vfx_artist": VfxArtistHandler(),
+    "ui_ux": UiUxHandler(),
+    "tech_artist": TechArtistHandler(),
+    "audio_designer": AudioDesignerHandler(),
+    "auto_qa": AutoQaHandler(),
+    "release_manager": ReleaseManagerHandler(),
+    "game_operator": GameOperatorHandler(),
+
     # _alt 变体 handler（WP-02b 批量实体化，28 个）
     "producer_alt": ProducerAltHandler(),
     "lead_designer_alt": LeadDesignerAltHandler(),
@@ -1303,15 +1878,24 @@ def attach_handlers_to_registry(registry: EcosystemRoleRegistry,
 
     _alt 变体（producer_alt / cto_alt / server_dev_alt）来自 roles.yaml，
     不在生态注册表中，但需要注册到 message_bus 才能接收 TASK_ASSIGN。
+    部门基角色（narrative_designer / combat_designer）同样来自 roles.yaml 的
+    正式角色（非生态注册表、非 _alt 变体），必须挂接到总线才能真实执行。
     """
     bus = bus or registry.bus
     count = 0
     for role_id, handler in ECOSYSTEM_HANDLERS.items():
         if role_id in registry.roles:
+            # 生态注册表角色：挂接到总线（bus.on 内部会 register）
             bus.on(role_id, handler.handle)
             count += 1
         elif role_id.endswith("_alt"):
             # _alt 变体：注册到总线（bus.on 内部会 register）
+            bus.on(role_id, handler.handle)
+            count += 1
+        else:
+            # 部门基角色（narrative_designer / combat_designer 等来自 roles.yaml）：
+            # 既不在生态注册表也不以 _alt 结尾，此前被静默跳过导致 handler 成死代码。
+            # 统一挂接到总线，使其能承接 TASK_ASSIGN 真实执行。
             bus.on(role_id, handler.handle)
             count += 1
     return count
@@ -1364,7 +1948,13 @@ def verify_inventory_alignment() -> Dict[str, Any]:
     # _alt 变体来自 roles.yaml（非 ecosystem_roles.yaml），
     # 从 handler 清单中排除后再与生态角色 registry 对照。
     alt_handlers = {rid for rid in handler_ids if rid.endswith("_alt")}
-    eco_handler_ids = handler_ids - alt_handlers
+    # 部门基角色 handler（如 narrative_designer / combat_designer）来自 roles.yaml
+    # 的策划线正式角色，不属于生态角色，从生态对照中排除。
+    # 判定：非 _alt 且在 inv_eco_ids（生态角色清单）之外的非生态 handler。
+    non_eco_handlers = {
+        rid for rid in handler_ids - alt_handlers if rid not in inv_eco_ids
+    }
+    eco_handler_ids = handler_ids - alt_handlers - non_eco_handlers
 
     inv_only = inv_eco_ids - eco_handler_ids          # inventory 有但无 handler
     handler_only = eco_handler_ids - inv_eco_ids      # handler 有但不在 inventory

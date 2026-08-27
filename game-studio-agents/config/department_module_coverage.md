@@ -6,8 +6,10 @@
 
 | 部门 | 部门 Agent 类 | base_role | 承载角色 | module 分支 | 行为语义 |
 |---|---|---|---|---|---|
-| 策划线 | `DesignDeptAgent` | lead_designer | lead_designer / system_designer / balance_designer / level_designer | `gameplay` | 核心玩法循环 / 系统架构设计 |
+| 策划线 | `DesignDeptAgent` | lead_designer | lead_designer / system_designer / balance_designer / level_designer / narrative_designer / combat_designer | `gameplay` | 核心玩法循环 / 系统架构设计 |
 | 策划线 | `DesignDeptAgent` | lead_designer | （同上） | `numeric_model` | 数值模型 / 经济产出 / 成长曲线，经 market_input_bridge 转译市场预演 |
+| 策划线 | `DesignDeptAgent` | lead_designer | （同上） | `narrative` | 世界观 / 剧情 / 任务文案，主责 narrative_designer |
+| 策划线 | `DesignDeptAgent` | lead_designer | （同上） | `combat` | 战斗机制 / 技能 / NPC AI，主责 combat_designer |
 | 程序线 | `ProgramDeptAgent` | cto | cto / client_dev / server_dev / engine_dev / ai_programmer / tools_dev | `client` | 客户端渲染管线 / UI 绑定 |
 | 程序线 | `ProgramDeptAgent` | cto | （同上） | `server` | 服务端 API / 数据存储 |
 | 程序线 | `ProgramDeptAgent` | cto | （同上） | `engine` | 引擎核心 / 性能优化 |
@@ -27,6 +29,27 @@
 | reference_learner | `reference_learner_agent.py` | `ReferenceLearnerAgent` | 独立 Agent，参考学习 |
 | progress_pusher | `progress_pusher.py` | `ProgressPusherAgent` | 独立 Agent，进度督导 |
 | merged_confirmer | `merged_confirm_agent.py` | `MergedConfirmAgent` | 独立 Agent，合并确认 |
+| narrative_designer | `ecosystem_handlers.py` | `NarrativeDesignerHandler` | 剧情策划基角色，世界观/剧情/任务文案 |
+| combat_designer | `ecosystem_handlers.py` | `CombatDesignerHandler` | 战斗策划基角色，战斗机制/技能/NPC AI |
+| system_designer | `ecosystem_handlers.py` | `SystemDesignerHandler` | 系统策划基角色，系统功能/规则设计 |
+| balance_designer | `ecosystem_handlers.py` | `BalanceDesignerHandler` | 数值策划基角色，数值/经济/成长曲线 |
+| level_designer | `ecosystem_handlers.py` | `LevelDesignerHandler` | 关卡策划基角色，关卡/流程/体验设计 |
+| client_dev | `ecosystem_handlers.py` | `ClientDevHandler` | 客户端程序员基角色，渲染/交互/绑定 |
+| server_dev | `ecosystem_handlers.py` | `ServerDevHandler` | 服务端程序员基角色，API/数据/安全 |
+| engine_dev | `ecosystem_handlers.py` | `EngineDevHandler` | 引擎程序员基角色，引擎核心/性能 |
+| ai_programmer | `ecosystem_handlers.py` | `AiProgrammerHandler` | 游戏AI程序员基角色，行为树/自适应 |
+| tools_dev | `ecosystem_handlers.py` | `ToolsDevHandler` | 工具链程序员基角色，工具链/自动化 |
+| concept_artist | `ecosystem_handlers.py` | `ConceptArtistHandler` | 原画师基角色，原画/概念设定 |
+| modeler | `ecosystem_handlers.py` | `ModelerHandler` | 3D建模师基角色，模型/资产 |
+| animator | `ecosystem_handlers.py` | `AnimatorHandler` | 动画师基角色，动画/动作 |
+| vfx_artist | `ecosystem_handlers.py` | `VfxArtistHandler` | 特效师基角色，特效/光效 |
+| ui_ux | `ecosystem_handlers.py` | `UiUxHandler` | UI/UX设计师基角色，布局/交互 |
+| tech_artist | `ecosystem_handlers.py` | `TechArtistHandler` | 技术美术基角色，渲染管线/Shader |
+| audio_designer | `ecosystem_handlers.py` | `AudioDesignerHandler` | 音频设计师基角色，配乐/音效 |
+| auto_qa | `ecosystem_handlers.py` | `AutoQaHandler` | 自动化测试基角色，测试框架/用例 |
+| release_manager | `ecosystem_handlers.py` | `ReleaseManagerHandler` | 版本管理基角色，里程碑/发版门禁 |
+| game_operator | `ecosystem_handlers.py` | `GameOperatorHandler` | 游戏运营基角色，运营/用户增长 |
+
 
 ## 三、生态角色 handler 承接（WP-02）
 

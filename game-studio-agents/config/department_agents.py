@@ -369,6 +369,36 @@ class DesignDeptAgent(DepartmentAgent):
                     "metrics": market_result["metrics"],
                 },
             }
+        elif module == "narrative":
+            # 剧情/世界观/任务文案（剧情策划产出）
+            artifact = {
+                "module": "narrative",
+                "label": label,
+                "project": project,
+                "artifact_type": "narrative_doc",
+                "owner_role": "narrative_designer",
+                "content": {
+                    "world_view": "世界观与背景设定",
+                    "storyline": "主线剧情脚本",
+                    "characters": "角色卡",
+                    "quest_copy": "任务文案表",
+                },
+            }
+        elif module == "combat":
+            # 战斗机制/技能/NPC AI（战斗策划产出）
+            artifact = {
+                "module": "combat",
+                "label": label,
+                "project": project,
+                "artifact_type": "combat_doc",
+                "owner_role": "combat_designer",
+                "content": {
+                    "combat_system": "战斗机制框架",
+                    "skills": "技能与职业设计",
+                    "npc_ai": "NPC AI行为设计",
+                    "balance_verify": "战斗数值平衡验证",
+                },
+            }
         else:
             artifact = {
                 "module": module,
@@ -390,6 +420,16 @@ class DesignDeptAgent(DepartmentAgent):
         elif work_package.get("module") == "numeric_model":
             if not content.get("economy"):
                 return False, "缺少经济模型"
+        elif work_package.get("module") == "narrative":
+            if not content.get("world_view"):
+                return False, "缺少世界观设定"
+            if not content.get("storyline"):
+                return False, "缺少主线剧情"
+        elif work_package.get("module") == "combat":
+            if not content.get("combat_system"):
+                return False, "缺少战斗机制设计"
+            if not content.get("skills"):
+                return False, "缺少技能设计"
         return True, "策划产出自检通过"
 
 
