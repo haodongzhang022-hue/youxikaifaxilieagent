@@ -82,6 +82,16 @@ else
   report "全部工作包 DONE（>=12 个）" 1
 fi
 
+# WP-03：生态角色任务（eco_*）经真实 handler 承接并 DONE，纳入 all_done 判定
+# 回归点：P0 段 WP-02 已让 eco_* 真实 DONE；WP-03 不再刻意过滤，需在
+# run_end_to_end_instantiated 中挂接 handler 并纳入全链路完成判定。
+eco_done_count=$(echo "$out" | grep -c "✅ eco_")
+if [ "$eco_done_count" -ge 5 ]; then
+  report "WP-03 生态角色任务（eco_*）真实 DONE（>=5 个）" 0
+else
+  report "WP-03 生态角色任务（eco_*）真实 DONE（>=5 个）" 1
+fi
+
 # 7. 注册/装配口径一致（评审点：DEPT_KEY_BY_NAME 含 support、DEPT_AGENT_CLASS 仅六部门
 #    的漂移修复）——所有已注册实例化角色都装配了总线 Agent，无「已注册却未装配」缺失。
 if ! echo "$out" | grep -q "未装配到总线"; then

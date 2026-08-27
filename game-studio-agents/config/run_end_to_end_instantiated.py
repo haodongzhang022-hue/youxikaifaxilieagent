@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 from agent_core import BaseAgent
 from department_agents import (ArtDeptAgent, DepartmentAgent, DesignDeptAgent,
                                OpsDeptAgent, PmDeptAgent, ProgramDeptAgent, QaDeptAgent)
+from ecosystem_handlers import EcosystemHandlers
 from ecosystem_role_registry import (CIRCLE_NAME, EcosystemRoleRegistry)
 from game_producer_agent import DEPT_KEY_BY_NAME, GameProducerAgent
 from message_bus import MessageBus, build_task_assign
@@ -77,7 +78,9 @@ class InstantiatedTeamOrchestrator:
         self.report: Dict[str, Any] = {}
         self.team_agents: Dict[str, BaseAgent] = {}   # 实例化 role_id -> Agent
         self.ecosystem: Optional[EcosystemRoleRegistry] = None  # wp_server/wp_ai_logic
+        self.ecosystem_handlers: Optional[EcosystemHandlers] = None  # WP-03: 生态 handler
         self.eco_tasks: List[str] = []                # 已派发的生态角色任务 id
+        self.eco_done_tasks: List[str] = []           # WP-03: 已真实 DONE 的生态任务 id
 
     # ---------- 1. 实例化 + 2. 注册 + 3. 装配 ----------
     def assemble_team(self,
@@ -173,15 +176,17 @@ class InstantiatedTeamOrchestrator:
         return {"rounds": rounds, "all_done": all_done}
 
     def _log_blocked_tasks(self):
-        """输出所有非 DONE 工作包的状态诊断，定位阻塞/失败原因。
+        """输出所有非 DONE 任务的状态诊断，定位阻塞/失败原因。
 
-        仅诊断部门工作包流水线任务（带 work_package payload），
-        不含生态角色演示派发任务（eco_*，非部门产出）。
+        WP-03：诊断范围覆盖「部门工作包流水线任务」与「生态角色任务
+        （eco_* 前缀）」两部分。生态任务经 handler 真实承接后仍非 DONE，
+        说明 handler 未挂接 / 派发链路未闭合，同样暴露为阻塞项。
         """
         pending = [
             (t.name or t.id, t.state, t.owner)
             for t in self.scheduler.queue.tasks.values()
-            if t.state != TaskState.DONE.value and t.payload.get("work_package")
+            if t.state != TaskState.DONE.value
+            and (t.payload.get("work_package") or t.id.startswith("eco_"))
         ]
         if not pending:
             return
@@ -193,29 +198,43 @@ class InstantiatedTeamOrchestrator:
                               f"  {name} → {state}（owner={owner}）")
 
     def _all_done(self) -> bool:
-        # 仅评估「部门工作包流水线」任务（带 work_package payload），
-        # 不含生态角色演示派发任务（eco_*）。
+        # WP-03：同时评估「部门工作包流水线」任务与「生态角色任务」。
         #
-        # 说明（评审点）：生态角色派发（dispatch_ecosystem）为**演示性派发**——
-        # 生态角色已注册为可派发 owner 并 publish 到 message_bus，但它们没有真实
-        # 承接 handler，任务恒停留在 TODO、永不 DONE。因此 _all_done 刻意过滤
-        # 掉 eco_*，仅以部门工作包流水线是否全部 DONE 作为全链路完成判定，
-        # 避免演示派发任务阻塞“部门全链路 DONE”。
+        # 背景（评审点）：P0 段 WP-02 已为生态角色挂接真实承接 handler，
+        # 让 eco_* 任务从「演示性派发、恒停 TODO」变为「真实执行并 DONE」。
+        # 因此 _all_done 不再刻意过滤 eco_*，而是把生态任务纳入全链路完成判定。
+        #
+        # 过滤条件收紧（对齐架构师 [MEDIUM] 建议）：
+        #   - 部门工作包：带 work_package payload（部门流水线产出）；
+        #   - 生态任务：显式限定 t.id.startswith("eco_")，避免把其他
+        #     非 work_package 任务误纳入判定（旧逻辑偏宽）。
         wp_tasks = [t for t in self.scheduler.queue.tasks.values()
                     if t.payload.get("work_package")]
-        return bool(wp_tasks) and all(t.state == TaskState.DONE.value for t in wp_tasks)
+        # 生态任务：全部 eco_* 任务须真实 DONE（handler 已承接）。
+        eco_tasks = [t for tid, t in self.scheduler.queue.tasks.items()
+                     if tid.startswith("eco_")]
+        wp_ok = bool(wp_tasks) and all(t.state == TaskState.DONE.value for t in wp_tasks)
+        eco_ok = all(t.state == TaskState.DONE.value for t in eco_tasks)
+        return wp_ok and eco_ok
 
     # ---------- 生态角色派发（wp_server / wp_ai_logic / wp_art_direction）----------
     def dispatch_ecosystem(self) -> Dict[str, Any]:
-        """把生态角色作为可派发 Agent 接入 task_scheduler + message_bus。
+        """把生态角色作为可派发 Agent 接入 task_scheduler + message_bus，并真实 DONE。
 
-        选取代表性的生态角色（协作支持圈 / 玩家圈 / 外部市场圈 / 美术圈）派发任务，
-        证明生态角色已注册为可派发 Agent 并真正进入部门流水线派发。
+        WP-03：在 P0 段 WP-02 的 ecosystem_handlers 基础上，为本实例挂接真实
+        承接 handler，让派发的生态角色任务（eco_*）真实执行并 DONE——
+        不再停留在演示性派发 / 恒 TODO，真正纳入 _all_done 全链路完成判定。
         """
         if self.ecosystem is None:
             return {"dispatched": 0, "error": "ecosystem 未初始化，先调用 assemble_team"}
         registry = self.ecosystem
         registry.register_scheduler(self.scheduler)
+
+        # WP-03：挂接生态 handler（21 生态 + 3 _alt 样板），让 eco_* 任务真实承接。
+        if self.ecosystem_handlers is None:
+            handlers = EcosystemHandlers(registry, self.scheduler)
+            self.ecosystem_handlers = handlers
+            handlers.attach()
 
         # 派发三圈代表性生态角色任务
         eco_jobs = [
@@ -232,11 +251,18 @@ class InstantiatedTeamOrchestrator:
             task = Task(id=tid, name=name, owner=owner, priority=prio)
             registry.dispatch(task)
             self.eco_tasks.append(tid)
-        # 派发消息经总线 publish
+        # 派发消息经总线 publish；handler 收到 TASK_ASSIGN 后真实执行并 on_complete
         dispatched = registry.bus.process_all()
+        # WP-03：统计已真实 DONE 的生态任务
+        self.eco_done_tasks = [
+            tid for tid in self.eco_tasks
+            if tid in self.scheduler.queue.tasks
+            and self.scheduler.queue.tasks[tid].state == TaskState.DONE.value
+        ]
         return {
             "dispatched": len(eco_jobs),
             "publish_messages": dispatched,
+            "done": self.eco_done_tasks,
             "tasks": self.eco_tasks,
         }
 
@@ -298,24 +324,33 @@ def demo() -> InstantiatedTeamOrchestrator:
             "data_ops",                         # 运营线
         ],
     }
+
+    # wp_server / wp_ai_logic：生态角色注册为可派发 Agent + 挂接真实 handler
+    # WP-03：在 run_full_chain 之前派发生态任务（经 handler 真实 DONE），
+    # 使 _all_done 能把 eco_* 生态任务一并纳入全链路完成判定。
+    eco = orch.dispatch_ecosystem()
+    print("\n[2] 生态角色注册为可派发 Agent（wp_server / wp_ai_logic / wp_art_direction）")
+    # 生态角色数（registry 中排除 _alt 样板，21 生态 + 3 _alt handler）
+    eco_role_count = len([r for r in orch.ecosystem.roles.values()
+                          if not (r.get("role_id") or "").endswith("_alt")])
+    print(f"    已注册生态角色: {eco_role_count} 个（协作支持/玩家/外部市场/美术）")
+    print(f"    已派发生态角色任务: {eco['dispatched']} 个 -> {', '.join(orch.eco_tasks)}")
+    print(f"    派发消息已 publish 到 message_bus: {eco['publish_messages']} 条")
+    print(f"    生态任务真实 DONE: {len(eco['done'])} 个（WP-03 handler 承接）")
+    for tid in eco["done"]:
+        print(f"      ✅ {tid} -> DONE")
+
     orch.run_full_chain(architecture)
 
-    print("\n[2] 工作包拆分与实例化团队承接（主责/协办/依赖）")
+    print("\n[3] 工作包拆分与实例化团队承接（主责/协办/依赖）")
     for wp in orch.summary()["work_packages"]:
         support = ", ".join(wp["support"]) or "—"
         print(f"    {wp['id']:<18}{wp['department']:<8}主责={wp['owner']}")
         print(f"    {'':<18}{'':<8}协办={support}")
         print(f"    {'':<18}{'':<8}状态={wp['state']}  依赖={wp['deps']}")
 
-    print("\n[3] 实例化团队装配到总线（可执行部门 Agent）")
+    print("\n[4] 实例化团队装配到总线（可执行部门 Agent）")
     print("    ", ", ".join(orch.summary()["team_agents"]))
-
-    # wp_server / wp_ai_logic：生态角色注册为可派发 Agent
-    eco = orch.dispatch_ecosystem()
-    print("\n[4] 生态角色注册为可派发 Agent（wp_server / wp_ai_logic / wp_art_direction）")
-    print(f"    已注册生态角色: {len(orch.ecosystem.roles)} 个（协作支持/玩家/外部市场/美术）")
-    print(f"    已派发生态角色任务: {eco['dispatched']} 个 -> {', '.join(orch.eco_tasks)}")
-    print(f"    派发消息已 publish 到 message_bus: {eco['publish_messages']} 条")
 
     print(f"\n[5] 端到端联动结果: all_done = {orch.summary()['all_done']}")
     return orch
