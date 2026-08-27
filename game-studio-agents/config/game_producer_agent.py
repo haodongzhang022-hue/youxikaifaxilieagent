@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from agent_core import BaseAgent
 from message_bus import Message, MessageBus, build_task_assign, build_message
 from task_scheduler import Scheduler, Task, TaskState
+from role_collaboration import CollaborationWorkbench
 
 # 尝试加载 PyYAML 用于从 roles.yaml 解析部门角色（缺失时回退到内置默认表）
 try:
@@ -146,6 +147,8 @@ class GameProducerAgent(BaseAgent):
         # balance_designer）时，同一实例化成员被并行 WP 反复指派为唯一主责
         # 而成为产能瓶颈。
         self._owner_load: Dict[str, int] = {}
+        # 角色间协作工作台：支持多角色互相@（任务转交/分工协作/协作请求）
+        self.collab = CollaborationWorkbench()
 
     def dispatch_capability(self):
         """经理的统一派发能力（复用现有 scheduler，与派发流水线共享）。"""
@@ -274,6 +277,46 @@ class GameProducerAgent(BaseAgent):
 
         elif msg.type == "NOTIFICATION":
             self._log("notification", str(msg.content))
+
+    # 说明：角色间互相@ 的协作消息（HANDOFF/DELEGATE/COLLAB_REQ/ACK/COLLAB_NOTIFY）
+    # 已由通用内核 BaseAgent._handle_by_type 统一路由到 _on_collab_event，
+    # 本类不再重复覆写，避免双写与重复落库。
+
+    def handoff_wp(self, wp_id: str, from_role: str, to_role: str,
+                   title: str = "", note: str = "") -> dict:
+        """便捷：经理把工作包转交给指定角色。
+
+        单一数据源：直接写入本 Agent 的 collab 工作台（立即生效并返回），
+        再以 NOTIFICATION（已有接收方，不会触发 HANDOFF 协作路由二次处理）
+        向目标角色广播协作已发生，避免便捷方法与总线重复落库。
+        """
+        res = self.collab.handoff(wp_id, title or wp_id, from_role, to_role, note=note)
+        self.bus.publish(build_message(
+            "NOTIFICATION", from_role, to_role,
+            {"notice": f"协作@转交：{from_role} 把任务 {wp_id} 转交给 {to_role}",
+             "collab_event": "HANDOFF", "task_id": wp_id, "note": note}))
+        return res
+
+    def delegate_wp(self, wp_id: str, from_role: str,
+                    assignments: List[Dict[str, str]],
+                    title: str = "") -> dict:
+        """便捷：经理把工作包拆分为多子任务分发给多角色并行协作。
+
+        单一数据源：直接写入本 Agent 的 collab 工作台，再以 NOTIFICATION
+        向各承接角色广播分工信息，避免重复走 DELEGATE 协作路由二次重置。
+        """
+        res = self.collab.delegate(wp_id, title or wp_id, from_role, assignments)
+        for a in assignments:
+            self.bus.publish(build_message(
+                "NOTIFICATION", from_role, a["role"],
+                {"notice": f"协作@分工：{from_role} 拆分任务 {wp_id}，{a['role']} 承接子任务",
+                 "collab_event": "DELEGATE", "task_id": wp_id,
+                 "assignments": assignments, "note": a.get("desc", "")}))
+        return res
+
+    def collab_status(self, wp_id: str) -> Dict[str, Any]:
+        """查询工作包的协作状态（转交链/进度/审计）。"""
+        return self.collab.audit(wp_id)
 
     # ---------- 编排各阶段 ----------
     def _start_orchestration(self, architecture: Dict[str, Any]):

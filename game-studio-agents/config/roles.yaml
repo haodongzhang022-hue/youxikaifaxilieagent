@@ -2921,7 +2921,7 @@ global:
 
   message_bus:
     type: "事件驱动消息总线"
-    message_types: ["TASK", "REVIEW", "REPORT", "BUG", "APPROVAL", "NOTIFICATION"]
+    message_types: ["TASK", "REVIEW", "REPORT", "BUG", "APPROVAL", "NOTIFICATION", "HANDOFF", "DELEGATE", "COLLAB_REQ", "ACK", "COLLAB_NOTIFY"]
     message_format:
       - id: "唯一消息ID"
       - type: "消息类型"

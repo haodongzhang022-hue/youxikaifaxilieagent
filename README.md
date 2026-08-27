@@ -91,3 +91,54 @@ CNB 平台的 `@` 选择器只收录「已关注仓库中的 NPC」。要让角�
 
 > 若在 `@` 选择器里没看到角色，通常是因为**尚未关注该仓库**——关注后即建立关联。
 > 相关角色配置见 [.cnb/settings.yml](./.cnb/settings.yml)。
+
+## 通用 Agent 身份自适应模块（AgentIdentity）
+
+本仓库所有 Agent（CodeBuddy / 代码审查员 / 游戏向经理 / 合并确认员）在需要
+`@` 召唤其他角色时，**必须**先通过 [agent_identity.py](./game-studio-agents/config/agent_identity.py)
+自适应识别当前仓库上下文，再据此生成正确的召唤格式。
+
+### 为什么需要自适应
+
+被外部仓库跨仓库召唤时，当前仓库的 slug 可能是任意 `owner/repo`，**不能写死**。
+`agent_identity.py` 从 CNB 环境变量（`CNB_REPO_SLUG` / `CNB_GROUP_SLUG` / `CNB_REPO_NAME`）
+自动探测当前仓库，据此生成正确的 `@owner/repo(角色名)` 格式。
+
+### 核心能力
+
+| 能力 | 说明 |
+|------|------|
+| `detect_repo_context()` | 从环境变量 / git remote 自动探测仓库（owner + repo + slug） |
+| `build_mention(role, slug)` | 生成 `@owner/repo(角色名)` 召唤格式 |
+| `decide_mention_strategy()` | 判断同仓库 vs 跨仓库，给出正确策略 |
+| `get_codebuddy_mention()` | 获取本仓库 CodeBuddy 的完整召唤格式 |
+| `get_fixer_mention()` | 获取本仓库修复专员的完整召唤格式 |
+
+### 使用方式
+
+```python
+from agent_identity import get_identity
+
+identity = get_identity()
+ctx = identity.detect_repo_context()
+print(ctx.full_slug)  # 如 "dongdongxiaozu/youxikaifaxilieagent"
+
+mention = identity.get_codebuddy_mention()
+# "@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)"
+```
+
+### 跨仓库 vs 同仓库
+
+- **同仓库**：可直接 `@角色名`，但建议仍用完整格式消除歧义；
+- **跨仓库**：**必须**用完整格式 `@owner/repo(角色名)` 带壳召唤，
+  否则会被路由到系统级或他仓 NPC，导致权限受限。
+
+### 测试
+
+```bash
+# 运行自适应模块自测
+python3 game-studio-agents/config/agent_identity.py
+
+# 运行测试信号灯
+bash game-studio-agents/tests/test_agent_identity.sh
+```
