@@ -79,6 +79,8 @@ $:
             bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
             bash game-studio-agents/tests/test_release_gate.sh
             bash game-studio-agents/tests/test_merged_confirm_agent.sh
+            bash game-studio-agents/tests/test_dispatch_capability.sh
+
             bash game-studio-agents/tests/test_role_collaboration.sh
             bash game-studio-agents/tests/test_framework_upgrade.sh
             bash game-studio-agents/tests/test_agent_identity.sh
@@ -111,14 +113,20 @@ $:
               在 PR 评论中输出审查结论。
               【CodeBuddy 触发机制·评审后闭环】
               5. 若评审结论为"需修改/需改进"：在评论末尾**必须**用完整格式
-                 召唤**本仓库的 CodeBuddy**。具体做法：
+                 召唤**本仓库的 CodeBuddy**。生成召唤操作建议时**必须程序化调用**
+                 `config/agent_identity.py` 的 `get_review_operational_advice()`
+                 （或便捷函数 `review_operational_advice()`），具体做法：
                  - **先运行** `python3 config/agent_identity.py`（或引用
-                   AgentIdentity 模块）从环境变量 `CNB_REPO_SLUG` 自适应探测
-                   当前仓库 slug（格式为 `owner/repo`，不写死仓库名）；
-                 - 然后用 `@<探测到的slug>(CodeBuddy)` 完整格式点名
-                   本仓库 CodeBuddy。例如探测到 slug 为 `org/currentrepo`，
-                   则召唤 `@org/currentrepo(CodeBuddy)`；
-                 - **禁止写死仓库路径**，因为当前被评审的仓库可能不同；
+                   AgentIdentity 模块）从环境变量 `CNB_REPO_SLUG` / `git remote`
+                   自适应探测**当前触发评审的仓库**（组织名 + 仓库名都不写死，
+                   可能是任意 org/repo）；
+                 - 直接调用 `get_review_operational_advice()` 会自动按当前被评审
+                   仓库生成 `@组织/仓库(CodeBuddy)` 完整带壳格式并给出操作建议，
+                   **将这段建议原样粘贴进评论末尾**，无需手写；
+                 - 例如探测到 slug 为 `org/currentrepo`，生成结果即为
+                   `@org/currentrepo(CodeBuddy)`；
+                 - **禁止写死仓库路径**（如 `dongdongxiaozu/youxikaifaxilieagent`），
+                   因为当前被评审的仓库可能不同；
                  - **不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓 CodeBuddy，
                    权限不对无法推送）；
                  - 完整格式定位可确保调取到当前仓库专属 CodeBuddy（具备推送权限），
@@ -171,8 +179,10 @@ $:
                    护栏拦住了，属于护栏正常生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
                    **先运行** `python3 config/agent_identity.py`（AgentIdentity 模块）
-                   从环境变量 `CNB_REPO_SLUG` 探测当前仓库 slug（不写死），
-                   然后用 `@<探测到的slug>(CodeBuddy)` 完整格式
+                   从环境变量 `CNB_REPO_SLUG` / `git remote` 探测**当前触发评审的仓库**
+                   slug（组织名 + 仓库名不写死），并**调用
+                   `get_review_operational_advice()` 生成带壳召唤格式**，
+                   用 `@<探测到的slug>(CodeBuddy)` 完整格式
                    （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
                    `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
                    - 说明文本需写明：已完成的修复点、本次 push 因执行身份不是本仓库
@@ -378,14 +388,15 @@ $:
                    生效，**不做补权限处理**。
                    **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
                    **先运行** `python3 config/agent_identity.py`（AgentIdentity 模块）
-                   从环境变量 `CNB_REPO_SLUG` 探测当前仓库 slug（不写死），
-                   然后用 `@<探测到的slug>(CodeBuddy)` 完整格式
+                   从环境变量 `CNB_REPO_SLUG` / `git remote` 探测**当前触发评审的仓库**
+                   slug（组织名 + 仓库名不写死），并**调用
+                   `get_review_operational_advice()` 生成带壳召唤格式**，
+                   用 `@<探测到的slug>(CodeBuddy)` 完整格式
                    （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
                    `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
                    说明文本需写明已修复点、本次 push 因执行身份不是本仓库 CodeBuddy
                    被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支完成推送并核对
-                   触发新一轮评审；**不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓
-                   CodeBuddy，权限不对）。转交后本轮先告警结束，由本仓库 CodeBuddy 在
+                   触发新一轮评审。转交后本轮先告警结束，由本仓库 CodeBuddy 在
                    评论驱动上下文中完成推送；
                  - 绝不允许：修复完成后因 push 失败而无任何告警地结束，导致评审闭环在
                    "推送"这一步静默中断、看起来像评审机制失效。

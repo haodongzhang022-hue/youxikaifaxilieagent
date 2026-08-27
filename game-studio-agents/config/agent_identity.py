@@ -1,6 +1,6 @@
 # ============================================================
 # 通用 Agent 身份自适应模块 (Agent Identity)
-# 版本: v1.0
+# 版本: v1.1
 # 说明: 让任意 Agent（CodeBuddy / 仓库修复专员 / 代码审查员 / 游戏向经理等）
 #       能**自动识别当前所在的仓库上下文**，并据此生成正确的 @ 召唤格式，
 #       不再硬编码 `dongdongxiaozu/youxikaifaxilieagent`。
@@ -11,13 +11,23 @@
 #     2. build_mention()：根据目标仓库与角色名生成 `@owner/repo(角色名)` 格式；
 #     3. decide_mention_strategy()：智能判断——同仓库用简洁格式，
 #        跨仓库必须用完整路径格式（带壳），防止权限错位；
-#     4. get_codebuddy_mention()：获取本仓库的 CodeBuddy 召唤格式。
+#     4. get_codebuddy_mention()：获取本仓库的 CodeBuddy 召唤格式；
+#     5. get_review_operational_advice()：**面向评审 NPC 的自适应操作建议**，
+#        —— 根据「当前触发评审的仓库」探测组织名 + 仓库名（都不写死），
+#          再生成带壳 `@组织/仓库(CodeBuddy)` 召唤格式，供评审输出操作建议。
+#
+#   v1.1 新增：
+#     - 增强 git 探测：从当前目录**向上查找 .git** 解析 remote，保证评审在
+#       子目录 / 非仓库根目录也能可靠探测到「当前被评审的仓库」；
+#     - 新增 get_review_operational_advice()：评审 NPC 生成召唤 CodeBuddy 的
+#       操作建议时调用，组织名 / 仓库名全部自适应，跨仓可用，禁止写死。
 #
 #   使用方式（所有角色 prompt 中均引用此模块）：
 #     from agent_identity import AgentIdentity
 #     identity = AgentIdentity()
 #     identity.detect_repo_context()
 #     identity.get_codebuddy_mention()
+#     identity.get_review_operational_advice()   # 评审 NPC 专用
 #
 # 语言: Python 3 (可运行，无需外部依赖)
 # ============================================================
@@ -92,11 +102,34 @@ def _detect_from_env() -> Dict[str, str]:
     return {}
 
 
-def _detect_from_git() -> Dict[str, str]:
-    """从 git remote 探测仓库上下文（适用于本地开发/测试环境）。"""
+def _git_root(start: str) -> Optional[str]:
+    """从 start 目录向上查找 .git 所在目录（git 仓库根）。
+
+    评审 NPC 可能在被评审仓库的任意子目录执行，向上查找可保证
+    无论工作目录在哪层都能定位到仓库根，进而探测 remote。
+    """
+    cur = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(cur, ".git")) or os.path.isfile(os.path.join(cur, ".git")):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return None
+        cur = parent
+
+
+def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
+    """从 git remote 探测仓库上下文（适用于本地开发/测试环境）。
+
+    会从 start（默认当前目录）**向上查找 .git** 定位仓库根后再读取
+    remote.origin.url，保证在子目录执行时也能探测到当前被评审的仓库。
+    """
     try:
+        root = _git_root(start or os.getcwd())
+        if root is None:
+            return {}
         result = subprocess.run(
-            ["git", "config", "--get", "remote.origin.url"],
+            ["git", "-C", root, "config", "--get", "remote.origin.url"],
             capture_output=True, text=True, timeout=3)
         url = (result.stdout or "").strip()
         if not url:
@@ -114,7 +147,7 @@ def _detect_from_git() -> Dict[str, str]:
                 "full_slug": f"{owner}/{repo}",
                 "detection_source": "git_remote",
             }
-    except (subprocess.SubprocessError, FileNotFoundError):
+    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
         pass
     return {}
 
@@ -159,7 +192,7 @@ class AgentIdentity:
             self.repo_context = RepoContext(**env_data)
             return self.repo_context
 
-        # 其次 git remote
+        # 其次 git remote（向上查找 .git 定位仓库根，健壮探测）
         git_data = _detect_from_git()
         if git_data:
             self.repo_context = RepoContext(**git_data)
@@ -312,6 +345,44 @@ class AgentIdentity:
             f"- 禁止裸 @CodeBuddy（会命中系统级或他仓，权限不对）\n"
         )
 
+    def get_review_operational_advice(self,
+                                      target_slug: Optional[str] = None) -> str:
+        """评审 NPC 专用：基于「当前触发评审的仓库」自适应生成召唤 CodeBuddy 的操作建议。
+
+        关键点：
+          - **组织名 / 仓库名都不写死**，通过 AgentIdentity 探测当前被评审仓库，
+            得到 `owner/repo` 后构造 `@owner/repo(CodeBuddy)` 带壳召唤；
+          - 支持跨仓：target_slug 不传时用当前仓库（即触发评审的仓库），
+            传了则按目标仓库生成（如评审在 A 仓、被评审对象是 B 仓时用 B 仓壳）；
+          - 输出可直接粘贴进 PR 评论的操作建议文本，杜绝用裸 @CodeBuddy。
+
+        Returns:
+            可直接输出的 Markdown 操作建议文本。
+        """
+        self._detect_once()
+
+        target = target_slug or self.repo_slug
+        if not target or "/" not in target:
+            return (
+                "⚠️ 当前被评审仓库未能自动识别。请通过环境变量 "
+                "`CNB_REPO_SLUG` 或 `CNB_GROUP_SLUG`+`CNB_REPO_NAME` 确认，"
+                "再以 `@组织/仓库(CodeBuddy)` 完整格式召唤本仓库 CodeBuddy，禁止裸 @CodeBuddy。"
+            )
+
+        owner, repo = target.split("/", 1)
+        cb_mention = self.build_mention("CodeBuddy", target)
+        return (
+            f"【召唤本仓库 CodeBuddy · 仓库自适应识别】\n"
+            f"当前触发评审的仓库为 `{target}`（组织 `{owner}` / 仓库 `{repo}`，"
+            f"识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）。\n"
+            f"请召唤本仓库 CodeBuddy，**必须用带壳完整格式**：\n"
+            f"  `{cb_mention}`\n"
+            f"- 组织名 `{owner}` 与仓库名 `{repo}` 均**自适应探测**，随当前被评审仓库变化，"
+            f"不写死固定路径；\n"
+            f"- **禁止裸 `@CodeBuddy`**（会命中系统级或他仓 CodeBuddy，权限不对、无法推送）；\n"
+            f"- 仅本仓库 CodeBuddy（`{cb_mention}`）具备推送/合并/关闭权限，可完成闭环。\n"
+        )
+
 
 # ============================================================
 # 便捷函数（全局单例 / 一次性调用）
@@ -353,6 +424,11 @@ def fixer_mention() -> str:
     return get_identity().get_fixer_mention()
 
 
+def review_operational_advice(target_slug: Optional[str] = None) -> str:
+    """评审 NPC 专用：获取召唤本仓库 CodeBuddy 的自适应操作建议。"""
+    return get_identity().get_review_operational_advice(target_slug)
+
+
 # ============================================================
 # 自测（python agent_identity.py 可运行）
 # ============================================================
@@ -389,5 +465,8 @@ if __name__ == "__main__":
 
     print(f"\n[5] 操作建议:")
     print(identity.get_operational_advice())
+
+    print(f"\n[6] 评审 NPC 召唤 CodeBuddy 操作建议（仓库自适应，不写死）:")
+    print(identity.get_review_operational_advice())
 
     print("AgentIdentity 自测通过 ✅")

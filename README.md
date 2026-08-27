@@ -16,6 +16,10 @@
 - **详细说明**：见 [docs/game-orchestration.md](./game-studio-agents/docs/game-orchestration.md)
 - **统一可视化指挥中枢**（渐进式 / 可溯源 / 降熵决策）：见 [docs/unified-command-center.md](./game-studio-agents/docs/unified-command-center.md)
 - **信息接口层**（FastAPI，接口层与人工可视层分离：AI 读 `/ai/*`，前端读 `/dashboard/*`）：见 [docs/api-layer.md](./game-studio-agents/docs/api-layer.md)
+- **统一派发工作能力**（所有 Agent 共享的高频复用模块）：见 [docs/dispatch-capability.md](./game-studio-agents/docs/dispatch-capability.md)
+  - 统一开发，每个 Agent（经理/部门/生态/CodeBuddy）都具备派发能力；
+  - 包含用法规则（何时派发/派发给谁/派发什么）与使用时机；
+  - 实现：[config/dispatch_capability.py](./game-studio-agents/config/dispatch_capability.py)
 
 ```bash
 # 运行游戏向经理演示
