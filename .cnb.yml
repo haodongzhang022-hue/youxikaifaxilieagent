@@ -86,6 +86,7 @@ $:
             bash game-studio-agents/tests/test_dispatch_capability.sh
 
             bash game-studio-agents/tests/test_role_collaboration.sh
+            bash game-studio-agents/tests/test_dept_group_collaboration.sh
             bash game-studio-agents/tests/test_framework_upgrade.sh
             bash game-studio-agents/tests/test_framework_upgrade_ops.sh
             bash game-studio-agents/tests/test_framework_upgrade_acceptance.sh
