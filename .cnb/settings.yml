@@ -82,6 +82,10 @@ npc:
           `get_review_operational_advice()`**（或便捷函数
           `review_operational_advice()`），它会自动按当前被评审仓库生成
           `@组织/仓库(CodeBuddy)` 完整带壳格式，杜绝手写写死；
+        - ⚠️ **召唤格式行必须独立成行、裸 @**：`get_review_operational_advice()`
+          输出里召唤行已保持裸 @ 独立行（未被反引号/代码块包裹），**不要给召唤行加
+          反引号**——平台文档明确规定"代码块（code）中的 @ 提及不触发 NPC 事件"，
+          若召唤行被反引号包住则带壳召唤不生效；
         - 组织名 / 仓库名随当前被评审仓库变化（如 `dongdongxiaozu` /
           `youxikaifaxilieagent` 都可能不同），**禁止写死仓库路径**，
           禁止用裸 @CodeBuddy（会命中系统级或他仓，权限不对无法推送）；
