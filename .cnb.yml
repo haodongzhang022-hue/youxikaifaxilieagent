@@ -86,6 +86,7 @@ $:
             bash game-studio-agents/tests/test_framework_upgrade_ops.sh
             bash game-studio-agents/tests/test_framework_upgrade_acceptance.sh
             bash game-studio-agents/tests/test_agent_identity.sh
+            bash game-studio-agents/tests/test_role_inventory.sh
             bash game-studio-agents/tests/test_role_inventory_handlers.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
