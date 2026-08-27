@@ -460,6 +460,13 @@ class AgentIdentity:
 
         每个角色（CodeBuddy / 代码审查员 / 游戏向经理等）在需要 @ 其他角色时，
         都应先读取本方法输出的建议，确保使用正确的格式。
+
+        **触发安全控制**：
+        - 本方法输出中的召唤格式引用**一律用反引号包裹**，确保不会在评论中被
+          平台误解析为实际召唤（代码块中的 @ 不触发 NPC 事件）；
+        - 实际需要召唤某角色时，应调用对应的专用方法（如
+          `get_review_operational_advice()`）只生成一个实际的召唤行；
+        - **禁止**在操作建议中同时列出多个角色的裸召唤格式，防止多角色同时触发。
         """
         self._detect_once()
 
@@ -473,19 +480,18 @@ class AgentIdentity:
         fixer_mention = self.get_fixer_mention()
         invoker_mention = self.get_repo_invoker_mention()
 
+        # 注意：所有召唤格式均用反引号包裹，不会触发 NPC 事件。
+        # 实际召唤时用 get_review_operational_advice() 生成唯一的裸召唤行。
         return (
             f"【仓库自适应识别】当前仓库: `{self.repo_slug}`"
             f"（识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）\n"
-            f"- 召唤本仓库 CodeBuddy:\n"
-            f"  {cb_mention}\n"
-            f"- 召唤本仓库仓库调用专员:\n"
-            f"  {invoker_mention}\n"
-            f"- 召唤本仓库修复专员:\n"
-            f"  {fixer_mention}\n"
-            f"- 同仓库调用: 可裸 @ 角色名，但建议用完整格式消除歧义\n"
-            f"- **跨仓库调用: 必须用完整格式 `@{self.repo_slug}(角色名)` 带壳召唤，"
-            f"否则会被路由到错误仓库导致权限受限**\n"
-            f"- 禁止裸 @CodeBuddy（会命中系统级或他仓，权限不对）\n"
+            f"- 本仓库 CodeBuddy 召唤格式: `{cb_mention}`\n"
+            f"- 本仓库仓库调用专员召唤格式: `{invoker_mention}`\n"
+            f"- 本仓库修复专员召唤格式: `{fixer_mention}`\n"
+            f"- **实际召唤时**：只召唤一个目标角色，调用对应的方法生成唯一召唤行，"
+            f"禁止一次列出多个角色的裸召唤格式\n"
+            f"- 跨仓库调用必须用完整格式 `@组织/仓库(角色名)` 带壳召唤，否则会被路由到错误仓库\n"
+            f"- 禁止裸 `@CodeBuddy`（会命中系统级或他仓，权限不对）\n"
         )
 
     def get_review_operational_advice(self,
@@ -526,22 +532,17 @@ class AgentIdentity:
 
         owner, repo = target.split("/", 1)
         mention = self.build_mention(role, target)
-        chain_text = " → ".join(f"`{r}`" for r in self.REPAIR_PRIORITY_CHAIN)
+        # 触发安全：解释性文本中所有召唤格式引用一律用反引号包裹，
+        # 避免平台将描述文本误解析为实际召唤（只保留一个真正的裸召唤行）。
         return (
             f"【召唤本仓库{role} · 仓库自适应识别】\n"
             f"当前触发评审的仓库为 `{target}`（组织 `{owner}` / 仓库 `{repo}`，"
             f"识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）。\n"
             f"请召唤本仓库{role}，必须用带壳完整格式（召唤行不可用反引号/代码块包裹，否则平台不解析）:\n"
             f"{mention}\n"
-            f"- **召唤优先级链**（逐个降级，一次只召唤一个）: {chain_text}\n"
-            f"  本次为最高优先级角色 `{role}`，若它无法承接（不可用/权限不足/超时），"
-            f"再降级召唤链中下一个角色，直至 CodeBuddy 兜底；\n"
-            f"- 组织名 `{owner}` 与仓库名 `{repo}` 均**自适应探测**，随当前被评审仓库变化，不写死固定路径；\n"
-            f"- 带壳完整格式 `{mention}` **即直接触发**本仓库{role}（非「禁止」，而是精确定位到对应仓库），"
-            f"不再需要额外的裸召唤；\n"
-            f"- **召唤了对应仓库的 `{mention}` 后，请勿再裸 `@CodeBuddy`/`@{role}`**"
-            f"（裸召唤可能路由到系统级或他仓，权限不对）；\n"
-            f"- 本仓库{role}（{mention}）具备本仓库推送/合并/关闭权限，可完成闭环。\n"
+            f"- 召唤格式 `{mention}` 即直接触发本仓库{role}（精确定位到对应仓库），无需额外动作；\n"
+            f"- **同一时刻只召唤当前一个角色**，不一次召唤多个；本角色无法承接时再降级处理；\n"
+            f"- 组织名 `{owner}` 与仓库名 `{repo}` 均自适应探测，不写死固定路径。\n"
         )
 
     # ---------- 召唤优先级链 ----------

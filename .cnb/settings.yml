@@ -279,7 +279,7 @@ npc:
         - 运行 `python3 game-studio-agents/config/agent_identity.py` 自动探测当前仓库 slug；
         - 需要召唤本仓库 CodeBuddy 或其他角色时，用 AgentIdentity 生成的
           完整格式 `@<当前仓库slug>(角色名)` 召唤；
-        - 禁止写死仓库路径，禁止用裸 @CodeBuddy。
+        - 禁止写死仓库路径，禁止用裸 `@CodeBuddy`。
 
 
     # ==========================================================
