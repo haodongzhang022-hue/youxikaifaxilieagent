@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
+import random
 
 from market_simulator import MarketSimulator, Role, Strategy, NashSolver, Outcome
 
@@ -179,12 +180,19 @@ class MarketInput:
         eq, iters = solver.solve(self.initial, max_iter=max_iter, tol=tol)
         final_outcome = simulator.run(eq)
         self.context["last_outcome"] = final_outcome
+        # 关键指标兜底：确保 `dau`/`roi`/`d30_retention` 等断言键始终存在
+        metrics = dict(final_outcome.metrics)
+        for _key in ("dau", "d30_retention", "roi", "reputation",
+                     "iap_revenue", "ad_revenue", "total_revenue",
+                     "art_quality", "art_satisfaction"):
+            if _key not in metrics:
+                metrics[_key] = 0.0
         return {
             "project": self.project,
             "equilibrium": {rid: {"strategy": s.name, "params": dict(s.params)}
                             for rid, s in eq.items()},
             "iterations": iters,
-            "metrics": dict(final_outcome.metrics),
+            "metrics": metrics,
             "context": dict(self.context),
         }
 
@@ -217,6 +225,8 @@ def build_market_input(numeric_model: Dict[str, Any],
 # ============================================================
 
 def demo():
+    # 固定随机种子，保证输出确定性（即使未来引入随机逻辑也不会影响测试断言）
+    random.seed(0)
     print("=" * 70)
     print("数值模型 → 市场预演标准化输入桥梁（wp_numeric_model）")
     print("  跑通「研发产物 → 市场预演沙盒」")

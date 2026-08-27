@@ -9,7 +9,11 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../config"
-PY=python3
+
+# 固定 Python 哈希种子，保证字典/集合迭代顺序确定性（跨环境可复现）
+export PYTHONHASHSEED=0
+# 无缓冲模式，防止 stdout 缓冲导致输出截断
+PY="python3 -u"
 pass=0
 fail=0
 
@@ -25,6 +29,12 @@ report() {
 
 echo "== 1. 数值模型 → 市场预演标准化输入桥梁（wp_numeric_model）=="
 out=$($PY market_input_bridge.py 2>&1)
+
+# 输出完整性自检：若输出过短（异常/空输出），打印调试信息辅助定位
+if [ $(echo "$out" | wc -l) -lt 5 ]; then
+  echo "  [debug] market_input_bridge.py 输出异常（不足 5 行），实际输出："
+  echo "$out"
+fi
 
 # 1. 数值模型字段正确映射为市场模拟 context
 if echo "$out" | grep -q "arpu_base" && echo "$out" | grep -q "competition_pressure"; then
@@ -45,6 +55,8 @@ fi
 if echo "$out" | grep -q "均衡策略" && echo "$out" | grep -q "payer.*内购"; then
   report "纳什均衡收敛并输出均衡策略" 0
 else
+  echo "  [debug] 未匹配 均衡策略/payer.*内购。相关输出："
+  echo "$out" | grep -n "均衡\|payer" || true
   report "纳什均衡收敛并输出均衡策略" 1
 fi
 
@@ -53,6 +65,8 @@ if echo "$out" | grep -q "dau" && echo "$out" | grep -q "roi" \
    && echo "$out" | grep -q "d30_retention"; then
   report "均衡结果指标输出（DAU/留存/ROI）" 0
 else
+  echo "  [debug] 未匹配 dau/roi/d30_retention。相关输出："
+  echo "$out" | grep -n "dau\|roi\|d30_retention" || true
   report "均衡结果指标输出（DAU/留存/ROI）" 1
 fi
 
