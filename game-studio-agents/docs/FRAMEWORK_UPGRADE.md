@@ -183,10 +183,64 @@ loc://memory.framework_upgrade.skill.<seq>   升级经验沉淀
 
 | ID | 触发 | 影响面 | 风险 | 优先级 | 决策 | 版本 | 状态 |
 |----|------|--------|------|--------|------|------|------|
-| UPG-001 | 框架自升级闭环缺失（P0 缺口） | 本文档 | 低 | P0 | 待拍板 | v0.6.4 | active |
+| UPG-001 | 框架自升级闭环缺失（P0 缺口） | 本文档 | 低 | P0 | 已批准 | v0.6.4 | active |
 
 ---
 
 ## 七、一句话总结
 
 **触发（新调研 P0 / 评审反复≥3次 / 用户诉求 / 10轮超限 / 多源叠加）→ 评估（影响面/可行性/风险/优先级）→ 人类 CP 拍板 → 落地走 PR → 留痕只增不改只追加**，让框架版本平滑演进、全程可追溯。
+---
+
+## 八、落地接线状态
+
+> 本节记录框架自升级闭环的落地接线进度（wp_server 程序线·cto + wp_data_ops 运营线·data_analyst）。
+
+### ✅ 已完成（v0.6.4）
+
+1. **共享记忆接线**：`framework_upgrade` 空间已与 `SharedMemory` 对接，
+   写入位置 `loc://memory.framework_upgrade.{content|task|skill}.<seq>`
+   可直接通过 `FrameworkUpgradeMemory` 调用；
+2. **UPG 编号递增规则**：`next_upg_id()` 自动扫描共享记忆已有记录，
+   生成 `UPG-XXX` 递增编号，跨实例安全不重复；
+3. **四环节闭环留痕**：`FrameworkUpgradeMemory.record_upgrade()` 一次调用
+   完成「触发→评估→决策→落地」全部环节的共享记忆沉淀；
+4. **只增不改只追加**：复用 SharedMemory 的不可变 + 版本链机制，
+   升级记录写入后不可删改，修订通过追加新版本实现。
+
+### ✅ 已完成（v0.6.4 · wp_data_ops 运营线）
+
+5. **升级记录沉淀**：`framework_upgrade_ops.py` 按新政策把 UPG-001
+   沉淀进共享记忆（`content` + `task` + `skill` 三类记录），
+   幂等执行不产生重复记录；
+6. **升级记录复盘审计**：`audit_upgrade_records()` 对共享记忆中的升级记录
+   做完整性/闭环性/不可变性/状态一致性审计，验证满足政策要求；
+7. **测试信号灯**：`test_framework_upgrade_ops.sh` 16 项断言全部通过
+   （沉淀、闭环完整率、版本清晰率、不可变性、幂等性、多记录回归）；
+8. **评审修复（评审闭环）**：
+   - topk 截断修复：`query_upgrades()` 默认 topk=10000，>2 条升级记录全量返回；
+   - upgrade_id 一致性：`record_upgrade()` 支持显式传 `upg_id`，
+     `seed_known_upgrades()` 显式传入硬编码编号，多记录不错位；
+   - 清理未使用导入；
+   - 机制化编排接入：`run_data_ops_upgrade()` 已注册到 `OpsDeptAgent._execute()`，
+     随 wp_data_ops 工作包经消息总线/调度器机制驱动落地。
+
+### ✅ 已完成（v0.7 · wp_testing 测试线）
+
+9. **四环节验收测试**：`test_framework_upgrade_acceptance.sh` 对框架自升级闭环
+   做端到端验收（36 项断言全部通过），覆盖：
+   - **触发环节**：5 类触发信号（P0 缺口 / 评审反复≥3次 / 用户诉求 /
+     10轮超限 / 多源叠加）均可识别并留痕；
+   - **评估环节**：影响面（含回退路径）/ 可行性 / 风险（含缓解措施）/
+     优先级四步评估完整沉淀；
+   - **决策环节**：人类 CP 拍板（批准 / 打回 / 搁置）正确记录且可追溯；
+   - **留痕环节**：升级记录「只增不改只追加」，修订追加新版本、旧版本
+     标 superseded 保留，历史可回溯；
+   - **端到端闭环**：一次完整升级（触发→评估→决策→留痕）全链路可追溯，
+     经 upgrade_id 可查询到完整记录。
+10. **验收信号灯已接入 .cnb.yml**：`test_framework_upgrade_acceptance.sh`
+    已加入流水线，随 PR 自动执行。
+
+### 🔜 待推进（v0.7）
+
+1. 人类 CP 对本次升级做最终拍板确认（release_gate 发版里程碑）。

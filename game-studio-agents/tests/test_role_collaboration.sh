@@ -341,6 +341,80 @@ else
   report "自发起协作消息幂等守卫生效" 1
 fi
 
+
+echo "== 11. 评审修复回归：终态REHANDOFF / 空assignments / A->A自环 / 缺role键 / cleanup =="
+out=$($PY - <<'PYEOF2'
+from role_collaboration import CollaborationWorkbench
+wb = CollaborationWorkbench()
+wb.handoff("t11", "任务", "A", "B")
+wb.acknowledge("t11", "B", "ACCEPT")
+wb.acknowledge("t11", "B", "COMPLETE")
+r1 = wb.acknowledge("t11", "B", "REHANDOFF", reassign_to="C")
+print("TERMINAL_REHANDOFF=" + str(not r1["ok"]))
+wb2 = CollaborationWorkbench()
+wb2.handoff("t11b", "任务b", "A", "B")
+wb2.acknowledge("t11b", "B", "ACCEPT")
+r2 = wb2.acknowledge("t11b", "B", "REHANDOFF", reassign_to="C")
+print("NONTERMINAL_REHANDOFF=" + str(r2["ok"]))
+r3 = wb.delegate("t11c", "任务c", "A", [])
+print("EMPTY_ASSIGN=" + str(not r3["ok"]))
+r4 = wb.delegate("t11d", "任务d", "A", [{"desc": "无角色"}])
+print("MISSING_ROLE=" + str(not r4["ok"]))
+r5 = wb.handoff("t11e", "任务e", "A", "A")
+print("SELF_HANDOFF=" + str(not r5["ok"]))
+wb6 = CollaborationWorkbench()
+wb6.handoff("t11f", "任务f", "A", "B")
+wb6.acknowledge("t11f", "B", "ACCEPT")
+r6 = wb6.acknowledge("t11f", "B", "REHANDOFF", reassign_to="B")
+print("SELF_REHANDOFF=" + str(not r6["ok"]))
+wb7 = CollaborationWorkbench()
+wb7.handoff("t_old", "旧任务", "A", "B")
+wb7.handoff("t_new", "新任务", "A", "B")
+import time
+rec = wb7.records["t_old"]
+rec.updated_at = time.time() - 31 * 86400
+n = wb7.cleanup(older_than_days=30)
+print("CLEANUP_REMOVED=" + str(n))
+print("CLEANUP_OLD_GONE=" + str("t_old" not in wb7.records))
+print("CLEANUP_NEW_KEPT=" + str("t_new" in wb7.records))
+PYEOF2
+)
+if echo "$out" | grep -q "TERMINAL_REHANDOFF=True"; then
+  report "终态 DONE 不可再转交 REHANDOFF" 0
+else
+  report "终态 DONE 不可再转交 REHANDOFF" 1
+fi
+if echo "$out" | grep -q "NONTERMINAL_REHANDOFF=True"; then
+  report "非终态 REHANDOFF 仍可转交" 0
+else
+  report "非终态 REHANDOFF 仍可转交" 1
+fi
+if echo "$out" | grep -q "EMPTY_ASSIGN=True"; then
+  report "delegate 空 assignments 被拒绝" 0
+else
+  report "delegate 空 assignments 被拒绝" 1
+fi
+if echo "$out" | grep -q "MISSING_ROLE=True"; then
+  report "assignments 缺 role 键被拒绝" 0
+else
+  report "assignments 缺 role 键被拒绝" 1
+fi
+if echo "$out" | grep -q "SELF_HANDOFF=True"; then
+  report "handoff A->A 自环被拒绝" 0
+else
+  report "handoff A->A 自环被拒绝" 1
+fi
+if echo "$out" | grep -q "SELF_REHANDOFF=True"; then
+  report "REHANDOFF 目标为自身被拒绝" 0
+else
+  report "REHANDOFF 目标为自身被拒绝" 1
+fi
+if echo "$out" | grep -q "CLEANUP_REMOVED=1" && echo "$out" | grep -q "CLEANUP_OLD_GONE=True" && echo "$out" | grep -q "CLEANUP_NEW_KEPT=True"; then
+  report "cleanup 清理过期记录、保留新记录" 0
+else
+  report "cleanup 清理过期记录、保留新记录" 1
+fi
+
 echo ""
 echo "测试信号灯结果: $pass 通过 / $fail 失败"
 if [ "$fail" = "0" ]; then
