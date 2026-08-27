@@ -217,6 +217,35 @@ else
     FAIL=$((FAIL+1))
 fi
 
+# 测试11: 纯 git 探测场景（清除所有 CNB env）——_detect_from_git 不得泄漏 _remote 辅助键
+echo -n "[11/11] 纯 git 探测（env 全清）不泄漏 _remote 辅助键... "
+OUT=$(python3 -c "
+import sys, os, subprocess, tempfile, re
+sys.path.insert(0, '.')
+# 清除所有 CNB 相关 env，强制走 _detect_from_git 路径
+for k in list(os.environ.keys()):
+    if k.startswith('CNB_'):
+        del os.environ[k]
+from agent_identity import _detect_from_git, AgentIdentity
+git_data = _detect_from_git()
+# 断言 _remote 辅助键不得出现在返回结果中
+has_remote = '_remote' in git_data
+print(f'GIT_DATA_HAS_REMOTE={has_remote}')
+print(f'GIT_DATA={git_data}')
+# 构造 RepoContext 不得崩溃
+ctx = AgentIdentity().detect_repo_context()
+print(f'CTX_SLUG={ctx.full_slug}')
+" 2>&1)
+if echo "$OUT" | grep -q "GIT_DATA_HAS_REMOTE=False" && echo "$OUT" | grep -q "CTX_SLUG=.*/"; then
+    echo "✅ (纯 git 探测无 _remote 泄漏，RepoContext 构造正常)"
+    PASS=$((PASS+1))
+else
+    echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
+
 echo ""
 echo "===== 测试结果: $PASS 通过 / $FAIL 失败 ====="
 [ $FAIL -eq 0 ] && echo "🟢 全部通过" || echo "🔴 存在失败"
