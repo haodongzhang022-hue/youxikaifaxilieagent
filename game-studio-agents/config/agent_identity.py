@@ -1,6 +1,6 @@
 # ============================================================
 # 通用 Agent 身份自适应模块 (Agent Identity)
-# 版本: v1.1
+# 版本: v1.2
 # 说明: 让任意 Agent（CodeBuddy / 仓库修复专员 / 代码审查员 / 游戏向经理等）
 #       能**自动识别当前所在的仓库上下文**，并据此生成正确的 @ 召唤格式，
 #       不再硬编码 `dongdongxiaozu/youxikaifaxilieagent`。
@@ -14,7 +14,13 @@
 #     4. get_codebuddy_mention()：获取本仓库的 CodeBuddy 召唤格式；
 #     5. get_review_operational_advice()：**面向评审 NPC 的自适应操作建议**，
 #        —— 根据「当前触发评审的仓库」探测组织名 + 仓库名（都不写死），
-#          再生成带壳 `@组织/仓库(CodeBuddy)` 召唤格式，供评审输出操作建议。
+#          再生成身份/权限标识 + 触发召唤说明，供评审输出操作建议。
+#
+#   v1.2 修正（召唤格式对齐平台实际解析规则）：
+#     - 平台 NPC 召唤解析器**只把裸 `@角色名`（如裸 `@CodeBuddy`）解析成召唤事件**，
+#       带壳完整格式 `@owner/repo(CodeBuddy)` 不被解析为召唤、仅作身份/权限标识；
+#     - 修正此前"必须带壳、禁止裸 @CodeBuddy"的错误指引为：**触发召唤用裸 `@CodeBuddy`**，
+#       带壳格式降级为纯身份标识说明；
 #
 #   v1.1 新增：
 #     - 增强 git 探测：从当前目录**向上查找 .git** 解析 remote，保证评审在
@@ -309,8 +315,9 @@ class AgentIdentity:
                 "target_slug": target,
                 "mention": f"@{current}(CodeBuddy)",
                 "recommendation": (
-                    f"同仓库（{current}），可以直接 @ 角色名，"
-                    f"但建议仍使用完整格式 `@{current}(CodeBuddy)` 以消除歧义。"
+                    f"同仓库（{current}）：评论正文用裸 `@CodeBuddy` 即可触发召唤"
+                    f"（平台解析器只认裸 @ 角色名）；`@{current}(CodeBuddy)` 带壳格式"
+                    f"仅作身份/权限标识，不触发召唤事件。"
                 ),
             }
         else:
@@ -347,12 +354,11 @@ class AgentIdentity:
         return (
             f"【仓库自适应识别】当前仓库: `{self.repo_slug}`"
             f"（识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）\n"
-            f"- 召唤本仓库 CodeBuddy: `{cb_mention}`\n"
-            f"- 召唤本仓库修复专员: `{fixer_mention}`\n"
-            f"- 同仓库调用: 可裸 @ 角色名，但建议用完整格式消除歧义\n"
-            f"- **跨仓库调用: 必须用完整格式 `@{self.repo_slug}(角色名)` 带壳召唤，"
-            f"否则会被路由到错误仓库导致权限受限**\n"
-            f"- 禁止裸 @CodeBuddy（会命中系统级或他仓，权限不对）\n"
+            f"- 真正触发召唤: 在评论正文用裸 `@CodeBuddy`（平台 NPC 解析器只识别裸 @ 角色名）\n"
+            f"- 身份/权限标识: `{cb_mention}` 带壳完整格式，仅作说明，平台不解析为召唤事件\n"
+            f"- 召唤本仓库修复专员: `{fixer_mention}`（同样用裸 `@仓库修复专员` 触发）\n"
+            f"- **跨仓库说明: 跨仓召唤需确认目标仓库，但在本仓库评论里裸 `@CodeBuddy` "
+            f"即命中本仓库 CodeBuddy**\n"
         )
 
     def get_review_operational_advice(self,
@@ -361,10 +367,13 @@ class AgentIdentity:
 
         关键点：
           - **组织名 / 仓库名都不写死**，通过 AgentIdentity 探测当前被评审仓库，
-            得到 `owner/repo` 后构造 `@owner/repo(CodeBuddy)` 带壳召唤；
+            得到 `owner/repo` 后构造 `@owner/repo(CodeBuddy)` 身份标识；
+            真正触发召唤需在评论正文用裸 `@CodeBuddy`；
           - 支持跨仓：target_slug 不传时用当前仓库（即触发评审的仓库），
             传了则按目标仓库生成（如评审在 A 仓、被评审对象是 B 仓时用 B 仓壳）；
-          - 输出可直接粘贴进 PR 评论的操作建议文本，杜绝用裸 @CodeBuddy。
+          - 输出可直接粘贴进 PR 评论的操作建议文本。
+          - **注意：真正触发召唤要用裸 `@CodeBuddy`**（平台解析器只认裸 @ 角色名），
+            带壳格式 `@owner/repo(CodeBuddy)` 仅作身份/权限标识，不触发召唤事件。
 
         Returns:
             可直接输出的 Markdown 操作建议文本。
@@ -376,7 +385,7 @@ class AgentIdentity:
             return (
                 "⚠️ 当前被评审仓库未能自动识别。请通过环境变量 "
                 "`CNB_REPO_SLUG` 或 `CNB_GROUP_SLUG`+`CNB_REPO_NAME` 确认，"
-                "再以 `@组织/仓库(CodeBuddy)` 完整格式召唤本仓库 CodeBuddy，禁止裸 @CodeBuddy。"
+                "再在评论正文用裸 `@CodeBuddy` 触发召唤本仓库 CodeBuddy。"
             )
 
         owner, repo = target.split("/", 1)
@@ -385,12 +394,13 @@ class AgentIdentity:
             f"【召唤本仓库 CodeBuddy · 仓库自适应识别】\n"
             f"当前触发评审的仓库为 `{target}`（组织 `{owner}` / 仓库 `{repo}`，"
             f"识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）。\n"
-            f"请召唤本仓库 CodeBuddy，**必须用带壳完整格式**：\n"
-            f"  `{cb_mention}`\n"
+            f"请召唤本仓库 CodeBuddy，**必须在评论正文用裸 `@CodeBuddy` 才能真正触发召唤**（平台 NPC 解析器只识别裸 @ 角色名）：\n"
+            f"  裸 `@CodeBuddy` → 触发召唤事件（平台识别，命中当前评论所在仓库的 CodeBuddy）\n"
             f"- 组织名 `{owner}` 与仓库名 `{repo}` 均**自适应探测**，随当前被评审仓库变化，"
             f"不写死固定路径；\n"
-            f"- **禁止裸 `@CodeBuddy`**（会命中系统级或他仓 CodeBuddy，权限不对、无法推送）；\n"
-            f"- 仅本仓库 CodeBuddy（`{cb_mention}`）具备推送/合并/关闭权限，可完成闭环。\n"
+            f"- `{cb_mention}` 带壳完整格式仅作为**身份/权限标识说明**，"
+            f"写在描述里即可，**平台不把它解析成召唤事件**；\n"
+            f"- 真正触发召唤必须用裸 `@CodeBuddy`（本仓库评论里即命中本仓库 CodeBuddy，具备推送权限）。\n"
         )
 
 

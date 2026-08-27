@@ -156,6 +156,26 @@ else
     FAIL=$((FAIL+1))
 fi
 
+# 测试9: 操作建议明确引导用裸 @CodeBuddy 触发召唤（对齐平台解析规则）
+echo -n "[9/9] 裸 @CodeBuddy 触发召唤指引... "
+OUT=$(python3 -c "
+import sys
+sys.path.insert(0, '.')
+from agent_identity import get_identity
+id = get_identity()
+print(id.get_review_operational_advice())
+print('----')
+print(id.get_operational_advice())
+" 2>&1)
+if echo "$OUT" | grep -q "裸 .@CodeBuddy." && echo "$OUT" | grep -q "触发召唤"; then
+    echo "✅ (引导用裸 @CodeBuddy 触发召唤)"
+    PASS=$((PASS+1))
+else
+    echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
 echo ""
 echo "===== 测试结果: $PASS 通过 / $FAIL 失败 ====="
 [ $FAIL -eq 0 ] && echo "🟢 全部通过" || echo "🔴 存在失败"

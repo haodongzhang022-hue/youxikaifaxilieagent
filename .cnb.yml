@@ -136,10 +136,11 @@ $:
                    `@org/currentrepo(CodeBuddy)`；
                  - **禁止写死仓库路径**（如 `dongdongxiaozu/youxikaifaxilieagent`），
                    因为当前被评审的仓库可能不同；
-                 - **不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓 CodeBuddy，
-                   权限不对无法推送）；
-                 - 完整格式定位可确保调取到当前仓库专属 CodeBuddy（具备推送权限），
-                   避免 push 403 导致闭环在"推送"一步静默中断。
+                 - **触发召唤必须用裸 `@CodeBuddy`**（平台 NPC 召唤解析器只认裸 @ 角色名，
+                   在本仓库评论里即命中本仓库 CodeBuddy，具备推送权限）；带壳完整格式
+                   `@组织/仓库(CodeBuddy)` 仅作身份/权限标识说明，**不被平台解析为召唤事件**；
+                 - 真正触发 `pull_request.comment@npc` 靠评论正文里的裸 `@CodeBuddy`，
+                   避免闭环在"推送"一步静默中断。
         - name: CodeBuddy 闭环修复（评审→修复→重推，钩子没 bug 就停）
           type: npc:go
           options:
@@ -186,20 +187,17 @@ $:
                    具备推送/合并/关闭 Issue 权限的那个），而是评审 NPC 或其他仓库的
                    CodeBuddy（其职责只是读和审，本就不具备推送权限）。这是调取错误被
                    护栏拦住了，属于护栏正常生效，**不做补权限处理**。
-                   **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
+                   **正确处置**：立即在本 PR 评论中**带上完整说明文本**，
                    **先运行** `python3 config/agent_identity.py`（AgentIdentity 模块）
                    从环境变量 `CNB_REPO_SLUG` / `git remote` 探测**当前触发评审的仓库**
-                   slug（组织名 + 仓库名不写死），并**调用
-                   `get_review_operational_advice()` 生成带壳召唤格式**，
-                   用 `@<探测到的slug>(CodeBuddy)` 完整格式
-                   （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
-                   `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
+                   slug（组织名 + 仓库名不写死）。
+                   **触发召唤：评论正文用裸 `@CodeBuddy`**（平台解析器只认裸 @ 角色名，
+                   本仓库评论里即命中本仓库 CodeBuddy，触发 `pull_request.comment@npc`）；
+                   带壳格式 `@<探测到的slug>(CodeBuddy)` 仅作身份/权限标识说明：
                    - 说明文本需写明：已完成的修复点、本次 push 因执行身份不是本仓库
                      CodeBuddy 被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支
                      完成推送并核对触发新一轮评审；
-                   - 强调调取时必须用「仓库路径(角色名)」完整格式定位到本仓库的
-                     CodeBuddy，**不能用裸 `@CodeBuddy`**（裸 @ 会命中系统级或他仓
-                     CodeBuddy，权限不对）；
+                   - 真正触发召唤用裸 `@CodeBuddy`，不带壳；带壳格式不触发召唤事件；
                    - 转交后本轮先告警结束，由本仓库 CodeBuddy 在评论驱动上下文中完成推送；
                  - 绝不允许：修复完成后因 push 失败而无任何告警地结束，导致评审闭环
                    在"推送"这一步静默中断、看起来像评审机制失效。
@@ -231,8 +229,8 @@ $:
                  - 推送成功但长时间（超时阈值）无任何后续评审 run 跟进；
                  - 评审结论长期停留在"需修改"且超过 10 轮上限仍未收敛。
                  满足任一信号才显式输出"评审闭环中断"告警，说明中断环节（推送 / 评审触发 /
-                 评审结论）与处置建议（**用「仓库路径(角色名)」完整格式定位本仓库 CodeBuddy
-                 代推，不做补权限**），并中断流水线返回失败，不放行合并；
+                 评审结论）与处置建议（评论正文用裸 `@CodeBuddy` 触发召唤，带壳格式
+                 `仓库路径(角色名)` 仅作身份标识定位本仓库 CodeBuddy 代推，不做补权限**），并中断流水线返回失败，不放行合并；
 
               4. 若闭环正常且已有评审结论：进入合并门禁校验。
         - name: 合并门禁检查
@@ -398,14 +396,13 @@ $:
                    关闭 Issue 权限的那个），而是评审 NPC 或其他仓库的 CodeBuddy（其职责
                    只是读和审，本就不具备推送权限）。这是调取错误被护栏拦住，属于护栏正常
                    生效，**不做补权限处理**。
-                   **正确处置**：立即在本 PR 评论中**带上完整说明文本 + 召唤壳**，
+                   **正确处置**：立即在本 PR 评论中**带上完整说明文本**，
                    **先运行** `python3 config/agent_identity.py`（AgentIdentity 模块）
                    从环境变量 `CNB_REPO_SLUG` / `git remote` 探测**当前触发评审的仓库**
-                   slug（组织名 + 仓库名不写死），并**调用
-                   `get_review_operational_advice()` 生成带壳召唤格式**，
-                   用 `@<探测到的slug>(CodeBuddy)` 完整格式
-                   （仓库路径 + 角色名）定位到**本仓库的 CodeBuddy**，触发
-                   `pull_request.comment@npc` 让本仓库 CodeBuddy 接手执行本次推送：
+                   slug（组织名 + 仓库名不写死）。
+                   **触发召唤：评论正文用裸 `@CodeBuddy`**（平台解析器只认裸 @ 角色名，
+                   本仓库评论里即命中本仓库 CodeBuddy，触发 `pull_request.comment@npc`）；
+                   带壳格式 `@<探测到的slug>(CodeBuddy)` 仅作身份/权限标识说明。
                    说明文本需写明已修复点、本次 push 因执行身份不是本仓库 CodeBuddy
                    被 403 拒绝、请本仓库 CodeBuddy 用其自带权限在源分支完成推送并核对
                    触发新一轮评审。转交后本轮先告警结束，由本仓库 CodeBuddy 在
