@@ -69,7 +69,7 @@ class RepoContext:
 # ============================================================
 
 def _slug_normalize(slug: str) -> str:
-    """规范化仓库 slug：去掉首尾空白、可选 .git 后缀、统一小写尾缀（保留原文）。"""
+    """规范化仓库 slug：去掉首尾空白、可选 .git 后缀，不做大小写转换（保留原文）。"""
     slug = (slug or "").strip().rstrip("/")
     if slug.endswith(".git"):
         slug = slug[:-4]
@@ -225,6 +225,8 @@ def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
             url = (res.stdout or "").strip()
             parsed = _parse_remote_url(url)
             if parsed:
+                # 记录 remote 别名，便于多 remote 场景下按 origin 优先排序
+                parsed["_remote"] = remote
                 candidates.append(parsed)
 
         if not candidates:
@@ -250,7 +252,7 @@ def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
             }
 
         # 无平台权威时，返回第一个可解析的 remote（用 origin 优先）
-        candidates.sort(key=lambda c: 0 if c["repo_name"] == "origin" else 1)
+        candidates.sort(key=lambda c: 0 if c.get("_remote") == "origin" else 1)
         out = dict(candidates[0])
         out["detection_source"] = "git_remote"
         return out
