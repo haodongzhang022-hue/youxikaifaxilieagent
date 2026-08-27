@@ -22,6 +22,7 @@ from message_bus import Message, MessageBus
 from game_producer_agent import DEPARTMENTS
 from market_input_bridge import build_market_input
 from data_ops_diagnosis import run_data_ops
+from framework_upgrade_ops import run_data_ops_upgrade
 from release_gate import aggregate_and_release, run_release_gate
 
 
@@ -658,7 +659,25 @@ class OpsDeptAgent(DepartmentAgent):
             # 生态位诊断 + 敏感性分析结论 + 发布建议（wp_data_ops 落地产出）
             "market_diagnosis": market_report,
         }
-        self._log("execute", f"运营线产出数据洞察 + 市场生态位诊断")
+
+        # 框架升级记录沉淀 + 复盘审计（wp_data_ops 落地·只增不改只追加）
+        # 幂等调用：已有记录自动跳过，不产生重复沉淀
+        try:
+            upgrade_ops = run_data_ops_upgrade()
+            artifact["framework_upgrade"] = {
+                "seeded": upgrade_ops.get("seeded", {}).get("seeded", 0),
+                "skipped": upgrade_ops.get("seeded", {}).get("skipped", 0),
+                "audit_verdict": upgrade_ops.get("audit", {}).get("verdict", "-"),
+                "total_upgrades": upgrade_ops.get("audit", {}).get("summary", {}).get("total_upgrades", 0),
+            }
+        except Exception as e:
+            # 升级沉淀为附加能力，失败不影响主运营诊断
+            artifact["framework_upgrade"] = {
+                "error": str(e),
+                "seeded": 0,
+            }
+
+        self._log("execute", f"运营线产出数据洞察 + 市场生态位诊断 + 框架升级记录沉淀")
         return artifact
 
     def _verify(self, work_package, artifact):

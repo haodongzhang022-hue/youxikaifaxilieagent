@@ -230,13 +230,14 @@ class FrameworkUpgradeMemory:
                        tasks: List[str],
                        pr_links: List[str],
                        version: str,
-                       owner: str = "cto") -> SharedMemoryRecord:
+                       owner: str = "cto",
+                       upg_id: Optional[str] = None) -> SharedMemoryRecord:
         """完整记录一次框架升级闭环（触发→评估→决策→落地→留痕）。
 
         一次调用自动完成全部环节的留痕，返回最终的完整升级记录。
-        其中 UPG 编号由 next_upg_id() 自动生成。
+        若未显式传 upg_id，则由 next_upg_id() 自动生成递增编号。
         """
-        upg_id = next_upg_id(self.memory)
+        upg_id = upg_id or next_upg_id(self.memory)
 
         # 环节 1：触发
         self.record_trigger(trigger, {}, upg_id=upg_id, owner=owner)
@@ -269,10 +270,17 @@ class FrameworkUpgradeMemory:
         return self._add("content", complete, owner=owner)
 
     # ---- 查询 ----
-    def query_upgrades(self, keyword: str = "") -> List[SharedMemoryRecord]:
-        """查询 framework_upgrade 空间的升级记录。"""
+    def query_upgrades(self, keyword: str = "",
+                       topk: int = 10000) -> List[SharedMemoryRecord]:
+        """查询 framework_upgrade 空间的升级记录。
+
+        Args:
+            keyword: 查询关键词（可选）
+            topk: 返回记录上限，默认 10000 避免 SharedMemory.query 默认
+                  topk=10 截断导致审计/幂等判定覆盖不全。
+        """
         return self.memory.query(FRAMEWORK_UPGRADE_SPACE, kind="content",
-                                 keyword=keyword)
+                                 keyword=keyword, topk=topk)
 
     def get_upgrade(self, upg_id: str) -> Optional[SharedMemoryRecord]:
         """按 upgrade_id 查询完整升级记录（type=upgrade）。"""

@@ -186,6 +186,85 @@ else
   report "跨实例重复沉淀被跳过（幂等）" 1
 fi
 
+echo "== 4. 多升级记录与 topk 截断回归（>2 条全部返回）=="
+out4=$($PY - <<'PYEOF'
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from framework_upgrade_ops import seed_known_upgrades, audit_upgrade_records, list_upgrade_summaries
+from framework_upgrade_memory import FrameworkUpgradeMemory
+
+fmu = FrameworkUpgradeMemory()
+
+# 沉淀已知升级记录（UPG-001）
+seed_known_upgrades(fmu)
+
+# 再手动写入 UPG-002 和 UPG-003（模拟后续新升级，不走 _KNOWN_UPGRADES 清单）
+fmu.record_upgrade(
+    trigger="评审反复指出同类问题≥3次",
+    impact={"scope": "流水线", "modules": ["game_producer_agent.py"]},
+    feasibility={"tech": "兼容", "migration": "中"},
+    risk={"level": "中", "mitigation": "分阶段灰度"},
+    priority="P1",
+    decision="批准",
+    reason="评审反馈需框架级修复",
+    tasks=["修复评审问题", "补充回归测试"],
+    pr_links=["#52"],
+    version="v0.7",
+    owner="data_analyst",
+)
+fmu.record_upgrade(
+    trigger="用户提出新架构诉求",
+    impact={"scope": "协作层", "modules": ["role_collaboration.py"]},
+    feasibility={"tech": "可行", "migration": "低"},
+    risk={"level": "低", "mitigation": "回退到旧版"},
+    priority="P2",
+    decision="搁置",
+    reason="待评估资源",
+    tasks=[],
+    pr_links=[],
+    version="v0.8",
+    owner="data_analyst",
+)
+
+# 多升级记录场景：UPG-001/002/003 三条都应完整沉淀
+summaries = list_upgrade_summaries(fmu)
+total = len(summaries)
+ids = sorted(s["upgrade_id"] for s in summaries)
+audit = audit_upgrade_records(fmu)
+
+print("TOTAL=", total)
+print("IDS=", ids)
+print("AUDIT_TOTAL=", audit["summary"]["total_upgrades"])
+print("CHAIN_RATE=", audit["summary"]["chain_rate"])
+print("VERSION_RATE=", audit["summary"]["version_rate"])
+print("VERDICT=", audit["verdict"])
+PYEOF
+)
+
+if echo "$out4" | grep -q "TOTAL= 3"; then
+  report "多升级记录全部返回（3 条未被 topk=10 截断）" 0
+else
+  report "多升级记录全部返回（3 条未被 topk=10 截断）" 1
+fi
+
+if echo "$out4" | grep -q "AUDIT_TOTAL= 3"; then
+  report "审计覆盖 3 条升级记录（无截断遗漏）" 0
+else
+  report "审计覆盖 3 条升级记录（无截断遗漏）" 1
+fi
+
+if echo "$out4" | grep -q "CHAIN_RATE= 100.0" && echo "$out4" | grep -q "VERSION_RATE= 100.0"; then
+  report "3 条记录闭环完整率 100% + 版本清晰率 100%" 0
+else
+  report "3 条记录闭环完整率 100% + 版本清晰率 100%" 1
+fi
+
+if echo "$out4" | grep -q "VERDICT= 通过"; then
+  report "多记录场景审计结论：通过" 0
+else
+  report "多记录场景审计结论：通过" 1
+fi
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"

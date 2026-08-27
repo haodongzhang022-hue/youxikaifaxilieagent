@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 # ---- 接入 SharedMemory 与 FrameworkUpgradeMemory ----
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,9 +30,8 @@ if _ARCH_DIR not in sys.path:
     sys.path.insert(0, _ARCH_DIR)
 
 from framework_upgrade_memory import (
-    FrameworkUpgradeMemory, FRAMEWORK_UPGRADE_SPACE, next_upg_id,
+    FrameworkUpgradeMemory,
 )
-from shared_memory import SharedMemory, SharedMemoryRecord
 
 
 # ============================================================
@@ -111,6 +110,7 @@ def seed_known_upgrades(memory: Optional[FrameworkUpgradeMemory] = None) -> Dict
             pr_links=upgrade["implemented"]["pr_links"],
             version=upgrade["implemented"]["version"],
             owner="data_analyst",
+            upg_id=upg_id,
         )
         seeded += 1
         seeded_ids.append(rec.mem_id)

@@ -81,6 +81,7 @@ $:
             bash game-studio-agents/tests/test_merged_confirm_agent.sh
             bash game-studio-agents/tests/test_role_collaboration.sh
             bash game-studio-agents/tests/test_framework_upgrade.sh
+            bash game-studio-agents/tests/test_framework_upgrade_ops.sh
             bash game-studio-agents/tests/test_agent_identity.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
