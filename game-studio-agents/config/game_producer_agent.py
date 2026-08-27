@@ -65,6 +65,8 @@ MANAGER_ROLE_ID = "producer"
 ARCHITECTURE_MODULES = {
     "gameplay":        {"department": "design",  "label": "玩法/系统架构"},
     "numeric_model":   {"department": "design",  "label": "数值模型/经济系统", "role": "balance_designer"},
+    "narrative":       {"department": "design",  "label": "世界观/剧情/任务文案", "role": "narrative_designer"},
+    "combat":          {"department": "design",  "label": "战斗机制/技能/NPC AI", "role": "combat_designer"},
     "client":          {"department": "program", "label": "客户端渲染与交互"},
     "server":          {"department": "program", "label": "服务端逻辑与数据", "role": "cto"},
     "engine":          {"department": "program", "label": "引擎底层与性能"},
@@ -137,6 +139,7 @@ class GameProducerAgent(BaseAgent):
             "engine": "engine_dev", "ai_logic": "ai_programmer",
             "art_direction": "tech_artist", "audio": "audio_designer",
             "gameplay": "balance_designer", "numeric_model": "balance_designer",
+            "narrative": "narrative_designer", "combat": "combat_designer",
             "ui_ux": "tech_artist", "testing": "qa_engineer",
             "release": "project_manager", "data_ops": "game_operator",
         }

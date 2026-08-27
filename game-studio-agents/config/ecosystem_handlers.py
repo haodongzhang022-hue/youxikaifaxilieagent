@@ -1364,15 +1364,24 @@ def attach_handlers_to_registry(registry: EcosystemRoleRegistry,
 
     _alt 变体（producer_alt / cto_alt / server_dev_alt）来自 roles.yaml，
     不在生态注册表中，但需要注册到 message_bus 才能接收 TASK_ASSIGN。
+    部门基角色（narrative_designer / combat_designer）同样来自 roles.yaml 的
+    正式角色（非生态注册表、非 _alt 变体），必须挂接到总线才能真实执行。
     """
     bus = bus or registry.bus
     count = 0
     for role_id, handler in ECOSYSTEM_HANDLERS.items():
         if role_id in registry.roles:
+            # 生态注册表角色：挂接到总线（bus.on 内部会 register）
             bus.on(role_id, handler.handle)
             count += 1
         elif role_id.endswith("_alt"):
             # _alt 变体：注册到总线（bus.on 内部会 register）
+            bus.on(role_id, handler.handle)
+            count += 1
+        else:
+            # 部门基角色（narrative_designer / combat_designer 等来自 roles.yaml）：
+            # 既不在生态注册表也不以 _alt 结尾，此前被静默跳过导致 handler 成死代码。
+            # 统一挂接到总线，使其能承接 TASK_ASSIGN 真实执行。
             bus.on(role_id, handler.handle)
             count += 1
     return count

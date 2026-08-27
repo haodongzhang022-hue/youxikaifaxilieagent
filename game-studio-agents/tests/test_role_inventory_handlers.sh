@@ -88,6 +88,14 @@ else
   report "生态角色 handler 实体化（49 个：21 生态 + 28 _alt）" 1
 fi
 
+# 7b. handler 全部挂接到总线（attached == 51，含 narrative_designer / combat_designer）
+#     防止 handler_count: 51 掩盖 2 个部门基角色 handler 未挂接。
+if echo "$out" | grep -q "生态角色 handler 挂接: 51 个"; then
+  report "全部 handler 挂接到总线（51 个，含 narrative_designer / combat_designer）" 0
+else
+  report "全部 handler 挂接到总线（51 个，含 narrative_designer / combat_designer）" 1
+fi
+
 # 8. inventory / registry 对齐
 if echo "$out" | grep -q "inventory_aligned: True" \
    && echo "$out" | grep -q "registry_aligned: True" \
