@@ -87,6 +87,14 @@ python3 game-studio-agents/api/main.py   # http://localhost:8000/docs
 > `department_agents.py`（DepartmentAgent 统一头）、`dispatch_capability.py`
 > （`dispatch_to_department`）、`role_collaboration.py`（协作工作台）。
 
+> **流水线已接通（非仅声明）**：六大部门 NPC 已在 `.cnb.yml` 配置对应的 `npc:go`
+> 执行阶段——`issue.open`（游戏向经理拆解派单后按部门执行）与
+> `pull_request.merged`（合并后下游解锁执行）两条链路各含 6 个部门执行阶段。
+> 游戏向经理 `@部门名` 派发工作包后，流水线会真正驱动对应部门 NPC 承接执行
+> （组内协作拆派 + 跨部门协作 + 上报验收），不再是"只声明、无执行"的断档。
+> 护栏：`tests/test_dept_npc_pipeline.sh` 校验每个注册部门在 `.cnb.yml` 都有
+> 对应 npc:go 阶段，防止再断档。
+
 **跨部门服务圈（非六大执行部门）**
 
 | 角色 | 用途 |
