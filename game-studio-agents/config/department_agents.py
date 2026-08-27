@@ -22,6 +22,8 @@ from message_bus import Message, MessageBus
 from game_producer_agent import DEPARTMENTS
 from market_input_bridge import build_market_input
 from data_ops_diagnosis import run_data_ops
+from framework_upgrade_ops import run_data_ops_upgrade
+from shared_memory import SharedMemory
 from release_gate import aggregate_and_release, run_release_gate
 
 
@@ -37,9 +39,13 @@ _DEPT_KEY_BY_NAME = {
 # ============================================================
 
 class DepartmentAgent(BaseAgent):
-    """部门执行 Agent 基类。
+    """部门执行 Agent 基类 · 部门统一头（小组）。
 
-    统一封装「接收派单 → 分析 → 执行 → 校验 → 上报验收」流程，
+    部门 == 一个 NPC 小组：以部门名为**统一头**对外承接（@ 部门名 = 一次 @
+    部门内多个角色），对内通过协作工作台把跨角色任务**组内协作**拆解派发给
+    部门内各角色执行，并可跨部门 @ 协作请求/转交。
+
+    统一封装「接收派单 → 分析 →（组内协作）执行 → 校验 → 上报验收」流程，
     子类只需提供部门专属的 _execute(work_package) 与领域知识。
     """
 
@@ -51,6 +57,10 @@ class DepartmentAgent(BaseAgent):
         self.pending_rework: list = []         # 收到返工通知、待重新加工的工作包 id
         self.rework_count: Dict[str, int] = {}  # 工作包 id -> 返工次数
         self.biz_state = "IDLE"                 # 部门业务状态（IDLE/EXECUTING/REWORK/DELIVERING）
+        # 组内协作记录：工作包 id -> 已派发的内部子任务 role 清单
+        self.internal_subtasks: Dict[str, list] = {}
+        # 跨部门协作记录：工作包 id -> [（协作类型, 对方角色）]
+        self.peer_collab: list = []
         # 部门 Agent 需接收本部门所有角色的派单（balance_designer / ai_programmer 等），
         # 统一由部门 Agent 按 module 执行；为此注册部门内全部 role_id 到总线。
         dept_key = _DEPT_KEY_BY_NAME.get(department)
@@ -59,6 +69,10 @@ class DepartmentAgent(BaseAgent):
                 if dept_role != role_id:
                     self.bus.register(dept_role)
                     self.bus.on(dept_role, self._receive)
+            # 把「部门名」也注册为总线索引 → @部门名 等同于 @ 部门统一头
+            if department not in self.bus.roles:
+                self.bus.register(department)
+                self.bus.on(department, self._receive)
 
     def on_boot(self):
         """加载部门领域知识基线。"""
@@ -68,6 +82,78 @@ class DepartmentAgent(BaseAgent):
             "mode": "事件驱动",
             "rule": "收到 TASK_ASSIGN 后执行，产出物上报 REVIEW_RESULT",
         })
+
+    # ============================================================
+    # 部门统一头 · 组内协作
+    # ============================================================
+    def _internal_roles(self) -> list:
+        """返回本部门内全部角色 role_id（含本头自身）。"""
+        dept_key = _DEPT_KEY_BY_NAME.get(self.department)
+        if dept_key and dept_key in DEPARTMENTS:
+            return list(DEPARTMENTS[dept_key]["roles"])
+        return [self.role_id]
+
+    def _delegate_internal(self, wp_id: str, title: str,
+                           assignments: list) -> dict:
+        """组内协作：部门头把跨角色工作包按 role_id 拆给部门内角色。
+
+        复用协作工作台（role_collaboration.CollaborationWorkbench.delegate）
+        的 @分工 能力，形成「部门头 @ 组内角色」的组内协作，全程留痕可审计。
+        assignments: [{"role": "system_designer", "desc": "..."}, ...]
+        """
+        if not assignments:
+            return {"ok": False, "error": "无组内子任务"}
+        # 只保留本部门内的角色，跨部门角色走跨部门协作（request_peer）
+        internal = [a for a in assignments
+                    if a["role"] in self._internal_roles()]
+        if not internal:
+            return {"ok": False, "error": "assignments 不包含本部门角色"}
+        res = self.collab.delegate(wp_id, title or wp_id, self.role_id, internal)
+        self.internal_subtasks[wp_id] = [a["role"] for a in internal]
+        self._log("dept_group", f"{self.department} 组内协作: {wp_id} "
+                  f"@分工给 {internal}")
+        return {"ok": True, "sub_tasks": res["sub_tasks"],
+                "roles": [a["role"] for a in internal]}
+
+    def _sub_progress(self, wp_id: str) -> Dict[str, Any]:
+        """组内协作进度汇总（@分工 各子任务承接情况）。"""
+        p = self.collab.sub_progress(wp_id)
+        return {"work_package_id": wp_id,
+                "total": p.get("total", 0), "done": p.get("done", 0),
+                "blocked": p.get("blocked", 0),
+                "pending": p.get("pending", 0),
+                "detail": p.get("detail", {})}
+
+    # ============================================================
+    # 跨部门协作（部门 ↔ 部门 @ 协作请求 / 转交）
+    # ============================================================
+    def request_peer(self, wp_id: str, title: str, peer_role: str,
+                     need: str = "") -> dict:
+        """跨部门协作：本部门 @ 协作请求 其他部门/角色协助某任务。
+
+        复用协作工作台 request_collab，仅登记协助请求、不转移持有权。
+        """
+        res = self.collab.request_collab(wp_id, title or wp_id, self.role_id,
+                                         peer_role, need=need)
+        self.peer_collab.append({"type": "COLLAB_REQ", "task_id": wp_id,
+                                 "peer": peer_role, "need": need})
+        self._log("cross_dept", f"{self.department} 跨部门 @请求 {peer_role}"
+                  f" 协助 {wp_id}: {need}")
+        return {"ok": True, "record": res["record"],
+                "assist_requested_to": res["assist_requested_to"]}
+
+    def group_audit(self, wp_id: str) -> Dict[str, Any]:
+        """部门统一头审计：组内子任务 + 跨部门协作全记录。"""
+        collab_audit = self.collab.audit(wp_id)
+        return {
+            "department": self.department,
+            "head": self.role_id,
+            "work_package_id": wp_id,
+            "internal_subtasks": self.internal_subtasks.get(wp_id, []),
+            "peer_collab": [p for p in self.peer_collab
+                            if p["task_id"] == wp_id],
+            "collab": collab_audit,
+        }
 
     # ---------- 主业务处理 ----------
     def handle_task(self, msg: Message):
@@ -112,7 +198,15 @@ class DepartmentAgent(BaseAgent):
         self._log("analyze", f"解析工作包 {wp_id}（{wp_label} @ {dept_name}）")
 
         self._transition("PLANNING")
-        # 部门专属执行
+        # 部门统一头：若工作包携带组内/跨部门协作计划，先经协作机制执行
+        internal_assignments = work_package.get("internal_assignments")
+        peer_collabs = work_package.get("peer_collabs")
+        if internal_assignments:
+            self._delegate_internal(wp_id, wp_label, internal_assignments)
+        for pc in (peer_collabs or []):
+            self.request_peer(wp_id, wp_label,
+                              pc.get("peer", ""), need=pc.get("need", ""))
+        # 部门专属执行（统一头汇总组内协作产出）
         self._transition("EXECUTING")
         artifact = self._execute(work_package, content)
 
@@ -149,6 +243,9 @@ class DepartmentAgent(BaseAgent):
             "pending_rework": list(self.pending_rework),
             "rework_count": dict(self.rework_count),
             "log_len": len(self.log),
+            # 部门统一头（小组）协作状态：组内子任务 + 跨部门协作
+            "internal_subtasks": dict(self.internal_subtasks),
+            "peer_collab": list(self.peer_collab),
         }
 
     def _on_notification(self, msg: Message):
@@ -272,6 +369,36 @@ class DesignDeptAgent(DepartmentAgent):
                     "metrics": market_result["metrics"],
                 },
             }
+        elif module == "narrative":
+            # 剧情/世界观/任务文案（剧情策划产出）
+            artifact = {
+                "module": "narrative",
+                "label": label,
+                "project": project,
+                "artifact_type": "narrative_doc",
+                "owner_role": "narrative_designer",
+                "content": {
+                    "world_view": "世界观与背景设定",
+                    "storyline": "主线剧情脚本",
+                    "characters": "角色卡",
+                    "quest_copy": "任务文案表",
+                },
+            }
+        elif module == "combat":
+            # 战斗机制/技能/NPC AI（战斗策划产出）
+            artifact = {
+                "module": "combat",
+                "label": label,
+                "project": project,
+                "artifact_type": "combat_doc",
+                "owner_role": "combat_designer",
+                "content": {
+                    "combat_system": "战斗机制框架",
+                    "skills": "技能与职业设计",
+                    "npc_ai": "NPC AI行为设计",
+                    "balance_verify": "战斗数值平衡验证",
+                },
+            }
         else:
             artifact = {
                 "module": module,
@@ -293,6 +420,16 @@ class DesignDeptAgent(DepartmentAgent):
         elif work_package.get("module") == "numeric_model":
             if not content.get("economy"):
                 return False, "缺少经济模型"
+        elif work_package.get("module") == "narrative":
+            if not content.get("world_view"):
+                return False, "缺少世界观设定"
+            if not content.get("storyline"):
+                return False, "缺少主线剧情"
+        elif work_package.get("module") == "combat":
+            if not content.get("combat_system"):
+                return False, "缺少战斗机制设计"
+            if not content.get("skills"):
+                return False, "缺少技能设计"
         return True, "策划产出自检通过"
 
 
@@ -588,6 +725,11 @@ class PmDeptAgent(DepartmentAgent):
 # 六、运营线 Agent（data_analyst）
 # ============================================================
 
+# 运营线框架升级沉淀的模块级共享内存（进程内纯内存 dict，
+# 仅同进程跨 _execute 调用复用；进程重启即清空，UPG-001 重新 seed）。
+# 如需跨进程持久化需另接落盘/共享存储。
+_OPS_UPGRADE_MEMORY: SharedMemory = SharedMemory()
+
 class OpsDeptAgent(DepartmentAgent):
     """运营线部门 Agent：负责数据分析与运营洞察。
 
@@ -658,7 +800,39 @@ class OpsDeptAgent(DepartmentAgent):
             # 生态位诊断 + 敏感性分析结论 + 发布建议（wp_data_ops 落地产出）
             "market_diagnosis": market_report,
         }
-        self._log("execute", f"运营线产出数据洞察 + 市场生态位诊断")
+
+        # 框架升级记录沉淀 + 复盘审计（仅 upgrade 主题工作包触发，幂等只追加）
+        # 按工作包主题判断：label 含 "upgrade" 或 payload 含 "framework_upgrade" 才沉淀
+        _is_upgrade_topic = (
+            "upgrade" in str(label).lower()
+            or "framework_upgrade" in str(content)
+        )
+        if _is_upgrade_topic:
+            try:
+                # 复用模块级共享内存（进程内纯内存，同进程跨 _execute 幂等；
+                # 进程重启清空、UPG-001 重新 seed；真持久化需另接落盘/共享存储）
+                upgrade_ops = run_data_ops_upgrade(shared_memory=_OPS_UPGRADE_MEMORY)
+                artifact["framework_upgrade"] = {
+                    "seeded": upgrade_ops.get("seeded", {}).get("seeded", 0),
+                    "skipped": upgrade_ops.get("seeded", {}).get("skipped", 0),
+                    "audit_verdict": upgrade_ops.get("audit", {}).get("verdict", "-"),
+                    "total_upgrades": upgrade_ops.get("audit", {}).get("summary", {}).get("total_upgrades", 0),
+                }
+            except Exception as e:
+                # 升级沉淀为附加能力，失败不影响主运营诊断，但需显式告警避免静默吞错
+                self._log("framework_upgrade_error",
+                          f"升级记录沉淀失败：{e}")
+                artifact["framework_upgrade"] = {
+                    "error": str(e),
+                    "seeded": 0,
+                }
+        else:
+            # 非升级主题工作包跳过沉淀
+            artifact["framework_upgrade"] = {"enabled": False, "reason": "not_upgrade_topic"}
+
+        self._log("execute",
+                 f"运营线产出数据洞察 + 市场生态位诊断"
+                 + (" + 框架升级记录沉淀" if _is_upgrade_topic else ""))
         return artifact
 
     def _verify(self, work_package, artifact):

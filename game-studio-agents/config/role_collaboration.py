@@ -156,6 +156,8 @@ class CollaborationWorkbench:
     def handoff(self, task_id: str, title: str, from_role: str,
                 to_role: str, note: str = "") -> dict:
         """角色 from_role @转交任务 task_id 给 to_role。返回 {ok, record}"""
+        if from_role == to_role:
+            return {"ok": False, "error": "转交目标不能是自身", "record": None}
         rec = self._collab(task_id, title, origin=from_role, owner=from_role)
         # 更新持有者与转交链
         rec.owner = to_role
@@ -174,10 +176,17 @@ class CollaborationWorkbench:
 
         assignments: [{"role": "client_dev", "desc": "实现背包界面"}, ...]
         """
+        if not assignments:
+            return {"ok": False, "error": "assignments 不能为空", "record": None}
+        for a in assignments:
+            role = a.get("role", "")
+            if not role:
+                return {"ok": False, "error": "assignments 元素缺少 role 键",
+                        "record": None}
         rec = self._collab(task_id, title, origin=from_role, owner=from_role)
         rec.sub_tasks = {}
         for i, a in enumerate(assignments):
-            role = a["role"]
+            role = a.get("role")
             sub_id = f"{task_id}__sub{i + 1}"
             rec.sub_tasks[sub_id] = SubTask(sub_id=sub_id, role=role,
                                             desc=a.get("desc", ""))
@@ -244,9 +253,16 @@ class CollaborationWorkbench:
                     self._emit(CollabEvent(ACK, from_role, rec.origin, task_id,
                                            action="COMPLETE"))
             elif ack == "REHANDOFF":
-                # 再转交：承接方把任务再 @ 给第三位角色（转交不受状态机约束，总是允许）
+                # 再转交：承接方把任务再 @ 给第三位角色
+                # 终态（DONE/CANCELLED）不可再转交，走状态机约束
+                if rec.status in ("DONE", "CANCELLED"):
+                    return {"ok": False, "error": f"状态 {rec.status} 是终态，不可再转交",
+                            "allowed": [], "record": None}
                 if not reassign_to:
                     return {"ok": False, "error": "REHANDOFF 需指定 reassign_to",
+                            "record": None}
+                if from_role == reassign_to:
+                    return {"ok": False, "error": "再转交目标不能是自身",
                             "record": None}
                 rec.status = "OFFERED"
                 rec.owner = reassign_to
@@ -302,6 +318,26 @@ class CollaborationWorkbench:
             "pending": len(rec.sub_tasks) - done - blocked,
             "detail": {sid: s.status for sid, s in rec.sub_tasks.items()},
         }
+
+    # ---------- 清理机制 ----------
+    @_synchronized
+    def cleanup(self, older_than_days: float = 30.0) -> int:
+        """清理超过指定天数未更新的协作记录与事件流水，避免内存无限增长。
+
+        Args:
+            older_than_days: 清理阈值（天）。记录 updated_at 距今超过该天数即清理。
+        Returns:
+            int: 清理的记录条数。
+        """
+        cutoff = time.time() - older_than_days * 86400
+        removed_ids = [tid for tid, rec in self.records.items()
+                       if rec.updated_at < cutoff]
+        for tid in removed_ids:
+            del self.records[tid]
+        # 同步清理事件流水：仅保留与现存记录关联的事件
+        keep_tids = set(self.records.keys())
+        self._events = [ev for ev in self._events if ev.task_id in keep_tids]
+        return len(removed_ids)
 
     # ---------- 审计 ----------
     @_synchronized
