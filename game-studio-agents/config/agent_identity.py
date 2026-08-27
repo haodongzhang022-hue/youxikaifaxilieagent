@@ -236,9 +236,11 @@ def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
         for cand in candidates:
             if env_slug and cand["full_slug"] == env_slug:
                 cand["detection_source"] = "git_remote_matches_env"
+                cand.pop("_remote", None)  # 辅助键不进入 RepoContext，避免 TypeError
                 return cand
             if env_repo_name and cand["repo_name"] == env_repo_name:
                 cand["detection_source"] = "git_remote_matches_env_repo"
+                cand.pop("_remote", None)  # 辅助键不进入 RepoContext，避免 TypeError
                 return cand
 
         # 平台权威 slug 存在但 git 探测到不同仓库：以平台为准，绝不误识别
@@ -254,6 +256,7 @@ def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
         # 无平台权威时，返回第一个可解析的 remote（用 origin 优先）
         candidates.sort(key=lambda c: 0 if c.get("_remote") == "origin" else 1)
         out = dict(candidates[0])
+        out.pop("_remote", None)  # 辅助键不进入 RepoContext，避免 TypeError
         out["detection_source"] = "git_remote"
         return out
 
