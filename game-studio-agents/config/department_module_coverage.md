@@ -6,8 +6,10 @@
 
 | 部门 | 部门 Agent 类 | base_role | 承载角色 | module 分支 | 行为语义 |
 |---|---|---|---|---|---|
-| 策划线 | `DesignDeptAgent` | lead_designer | lead_designer / system_designer / balance_designer / level_designer | `gameplay` | 核心玩法循环 / 系统架构设计 |
+| 策划线 | `DesignDeptAgent` | lead_designer | lead_designer / system_designer / balance_designer / level_designer / narrative_designer / combat_designer | `gameplay` | 核心玩法循环 / 系统架构设计 |
 | 策划线 | `DesignDeptAgent` | lead_designer | （同上） | `numeric_model` | 数值模型 / 经济产出 / 成长曲线，经 market_input_bridge 转译市场预演 |
+| 策划线 | `DesignDeptAgent` | lead_designer | narrative_designer | `narrative` | 世界观 / 主线剧情 / 角色卡 / 任务文案 |
+| 策划线 | `DesignDeptAgent` | lead_designer | combat_designer | `combat` | 战斗机制 / 技能职业 / NPC AI / 平衡验证 |
 | 程序线 | `ProgramDeptAgent` | cto | cto / client_dev / server_dev / engine_dev / ai_programmer / tools_dev | `client` | 客户端渲染管线 / UI 绑定 |
 | 程序线 | `ProgramDeptAgent` | cto | （同上） | `server` | 服务端 API / 数据存储 |
 | 程序线 | `ProgramDeptAgent` | cto | （同上） | `engine` | 引擎核心 / 性能优化 |
