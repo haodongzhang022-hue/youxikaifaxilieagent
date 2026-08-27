@@ -1,13 +1,12 @@
 #!/bin/bash
 # ============================================================
 # 测试: 通用 Agent 身份自适应模块 (agent_identity.py)
-# 版本: v1.3
+# 版本: v1.2
 # 说明: 验证 AgentIdentity 模块能正确探测仓库上下文并生成 @ 召唤格式。
 #       v1.1 新增：评审 NPC 专用 get_review_operational_advice() 自适应
 #       召唤 CodeBuddy 操作建议（组织/仓库名不写死，跨仓可用）。
 #       v1.2 新增：召唤格式有效性断言——带壳召唤行必须独立成行、裸 @，
 #       不被反引号/代码块包裹（平台不解析代码块内的 @ 提及）。
-#       v1.3 新增：「仓库调用专员」角色召唤格式测试。
 # ============================================================
 set -e
 cd "$(dirname "$0")/../config"
@@ -18,7 +17,7 @@ PASS=0
 FAIL=0
 
 # 测试1: 模块可导入且自测通过
-echo -n "[1/12] 模块自测运行... "
+echo -n "[1/13] 模块自测运行... "
 python3 agent_identity.py > /dev/null 2>&1
 if [ $? -eq 0 ]; then
     echo "✅"
@@ -29,7 +28,7 @@ else
 fi
 
 # 测试2: 能探测到当前仓库 slug
-echo -n "[2/12] 仓库 slug 探测... "
+echo -n "[2/13] 仓库 slug 探测... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -47,7 +46,7 @@ else
 fi
 
 # 测试3: 能生成正确的 CodeBuddy @ 召唤格式
-echo -n "[3/12] CodeBuddy @ 召唤格式... "
+echo -n "[3/13] CodeBuddy @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -64,7 +63,7 @@ else
 fi
 
 # 测试4: 能生成修复专员的 @ 召唤格式
-echo -n "[4/12] 修复专员 @ 召唤格式... "
+echo -n "[4/13] 修复专员 @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -81,7 +80,7 @@ else
 fi
 
 # 测试4b: 能生成仓库调用专员的 @ 召唤格式
-echo -n "[5/12] 仓库调用专员 @ 召唤格式... "
+echo -n "[5/13] 仓库调用专员 @ 召唤格式... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -98,7 +97,7 @@ else
 fi
 
 # 测试5: 跨仓库策略识别
-echo -n "[6/12] 跨仓库策略识别... "
+echo -n "[6/13] 跨仓库策略识别... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -119,7 +118,7 @@ else
 fi
 
 # 测试6: 评审 NPC 自适应召唤 CodeBuddy 操作建议（组织/仓库名不写死）
-echo -n "[7/12] 评审召唤 CodeBuddy 操作建议（自适应）... "
+echo -n "[7/13] 评审召唤 CodeBuddy 操作建议（自适应）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -137,7 +136,7 @@ else
 fi
 
 # 测试7: 评审召唤操作建议支持按目标仓库（跨仓）生成，不写死
-echo -n "[8/12] 评审召唤跨仓操作建议（按目标仓库）... "
+echo -n "[8/13] 评审召唤跨仓操作建议（按目标仓库）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -155,7 +154,7 @@ else
 fi
 
 # 测试8: 部门统一头（小组）角色结构——六大部门 + 协作支持圈独立
-echo -n "[9/12] 部门统一头 KNOWN_ROLES 结构... "
+echo -n "[9/13] 部门统一头 KNOWN_ROLES 结构... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -177,7 +176,7 @@ else
 fi
 
 # 测试9: 评审召唤 CodeBuddy 操作建议中，召唤格式行必须独立成行、裸 @（不被反引号/代码块包裹）
-echo -n "[10/12] 评审召唤行裸@独立行（不包反引号/代码块）... "
+echo -n "[10/13] 评审召唤行裸@独立行（不包反引号/代码块）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -208,7 +207,7 @@ else
 fi
 
 # 测试10: 评审召唤操作建议的召唤行可被平台解析（不以反引号开头，非代码块包裹）
-echo -n "[11/12] 召唤行格式可被平台解析（非代码块/反引号包裹）... "
+echo -n "[11/13] 召唤行格式可被平台解析（非代码块/反引号包裹）... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -235,8 +234,37 @@ else
     FAIL=$((FAIL+1))
 fi
 
+# 测试11: 纯 git 探测场景（清除所有 CNB env）——_detect_from_git 不得泄漏 _remote 辅助键
+echo -n "[12/13] 纯 git 探测（env 全清）不泄漏 _remote 辅助键... "
+OUT=$(python3 -c "
+import sys, os, subprocess, tempfile, re
+sys.path.insert(0, '.')
+# 清除所有 CNB 相关 env，强制走 _detect_from_git 路径
+for k in list(os.environ.keys()):
+    if k.startswith('CNB_'):
+        del os.environ[k]
+from agent_identity import _detect_from_git, AgentIdentity
+git_data = _detect_from_git()
+# 断言 _remote 辅助键不得出现在返回结果中
+has_remote = '_remote' in git_data
+print(f'GIT_DATA_HAS_REMOTE={has_remote}')
+print(f'GIT_DATA={git_data}')
+# 构造 RepoContext 不得崩溃
+ctx = AgentIdentity().detect_repo_context()
+print(f'CTX_SLUG={ctx.full_slug}')
+" 2>&1)
+if echo "$OUT" | grep -q "GIT_DATA_HAS_REMOTE=False" && echo "$OUT" | grep -q "CTX_SLUG=.*/"; then
+    echo "✅ (纯 git 探测无 _remote 泄漏，RepoContext 构造正常)"
+    PASS=$((PASS+1))
+else
+    echo "❌"
+    echo "$OUT"
+    FAIL=$((FAIL+1))
+fi
+
+
 # 测试11: 仓库调用专员 KNOWN_ROLES 包含在角色列表中
-echo -n "[12/12] 仓库调用专员角色注册检查... "
+echo -n "[13/13] 仓库调用专员角色注册检查... "
 OUT=$(python3 -c "
 import sys
 sys.path.insert(0, '.')

@@ -587,10 +587,56 @@ class ArtDeptAgent(DepartmentAgent):
                 "dispatchable_eco_owner": "eco_tech_artist",
             }
         elif module == "audio":
+            # wp_audio：生态音频角色接入流水线 + 音频维度入市场预演联动。
+            # 产出完整音频规范（音效/BGM/配音/混响/资源格式），
+            # 并把音频品质基准接入市场预演沙盒（audio_quality 维度）。
+            numeric_model_audio = {
+                "base_quality": 65.0,
+                "audio_quality": 68.0,          # 音频品质基准（audio_designer 产出）
+                "audio_sens": 0.15,             # 泛玩家音频敏感度
+                "arpu": 2.5,
+                "ecpm": 6.0,
+                "ad_impressions": 8,
+                "channel_cut": 0.3,
+                "competition": 0.4,
+                "marketing_budget": 80000,
+                "mass_player_base": 200000,
+                "complexity": 0.35,
+                "monetization": {"iap_depth": 0.5, "iaa_density": 0.25},
+            }
+            # 音频维度接入市场预演沙盒：音频品质进入市场预演的品质/留存/口碑计算
+            market_input = build_market_input(numeric_model_audio, project=project)
+            market_result = market_input.solve()
             artifact = {
                 "module": "audio", "label": label, "project": project,
                 "artifact_type": "audio_asset",
-                "content": {"sfx": "音效清单", "bgm": "背景音乐"},
+                "content": {
+                    "sfx": "音效清单",
+                    "bgm": "背景音乐",
+                    # 完整音频规范（对齐 eco_audio_designer 产出）
+                    "audio_spec": {
+                        "sfx_design": "技能/交互/环境音效设计",
+                        "bgm_emotion": "BGM 情绪引导（剧情/战斗/UI）",
+                        "voiceover": "角色配音（中/英双语）",
+                        "mixing": "混响/均衡/空间音频",
+                        "resource_format": "AudioClip 格式（.ogg / .wav）",
+                    },
+                    "audio_quality": numeric_model_audio["audio_quality"],
+                    "audio_immersion": market_result["metrics"]["audio_immersion"],
+                },
+                "market_input": {
+                    "context": market_input.context,
+                    "roles": [{"role_id": r.role_id, "circle": r.circle,
+                                "strategies": [s.name for s in r.strategy_space]}
+                               for r in market_input.roles],
+                },
+                "market_simulation": {
+                    "equilibrium": market_result["equilibrium"],
+                    "iterations": market_result["iterations"],
+                    "metrics": market_result["metrics"],
+                },
+                "dispatchable_owner": "audio_designer",
+                "dispatchable_eco_owner": "eco_audio_designer",
             }
         else:
             artifact = {"module": module, "label": label, "project": project,

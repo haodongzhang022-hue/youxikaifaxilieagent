@@ -34,6 +34,7 @@ FIELD_MAP = {
     # 数值模型字段        市场模拟 context 字段
     "base_quality":       "base_quality",           # 研发产物品质（决定上限）
     "art_quality":        "art_quality",            # wp_art_direction：美术品质基准
+    "audio_quality":      "audio_quality",          # wp_audio：音频品质基准
     "arpu":               "arpu_base",              # 人均付费基准(ARPU)
     "ecpm":               "ecpm_base",              # 广告千次曝光收益
     "ad_impressions":     "ad_impressions",         # 日均广告曝光次数
@@ -229,6 +230,7 @@ def demo():
         "balance": "平衡性数值",
         "base_quality": 65.0,
         "art_quality": 70.0,          # wp_art_direction：美术品质基准
+        "audio_quality": 68.0,          # wp_audio：音频品质基准
         "art_sens": 0.2,               # 泛玩家美术敏感度偏好
         "arpu": 2.5,
         "ecpm": 6.0,
@@ -268,6 +270,7 @@ def demo():
     print(f"      口碑: {m['reputation']:.2f}/10")
     print(f"      30日留存: {m['d30_retention']*100:.1f}%")
     print(f"      美术品质: {m['art_quality']:.0f}  美术满意度: {m['art_satisfaction']:.2f}/10")
+    print(f"      音频品质: {m['audio_quality']:.0f}  音频沉浸感: {m['audio_immersion']:.2f}/10")
     print(f"      ROI: {m['roi']:.2f}")
     return result
 

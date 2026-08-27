@@ -1,11 +1,13 @@
 # ============================================================
 # 市场预演与纳什均衡引擎
-# 版本: v0.3
+# 版本: v0.4
 # 说明: 在"发布"前模拟整个市场生态，让各圈层角色互相博弈，
 #       直到收敛到纳什均衡，输出发布建议与生态位诊断。
 #       v0.3 新增美术品质维度（art_quality）——把美术风格/品质基准接入
 #       生态角色体系，让玩家圈角色（对美术品质的偏好）进入市场预演博弈
 #       （wp_art_direction 美术线·art_director 落地产出）。
+#       v0.4 新增音频品质维度（audio_quality）——把音频风格/品质基准接入
+#       生态角色体系，音频维度进入市场预演联动（wp_audio 美术线·audio_designer 落地产出）。
 # 语言: Python (面向架构与原型，可逐步落地)
 # ============================================================
 
@@ -77,6 +79,10 @@ class MarketSimulator:
         # 美术风格/品质基准（0~100），作为玩家圈对美术品质偏好的响应输入。
         # 默认以整体品质为锚点；若数值模型显式给出 art_quality 则覆盖。
         art_quality = c.get("art_quality", quality)
+        # ---- 音频品质维度（wp_audio）----
+        # 音频风格/品质基准（0~100），作为音频生态角色对音频品质偏好的响应输入。
+        # 默认以整体品质为锚点；若数值模型显式给出 audio_quality 则覆盖。
+        audio_quality = c.get("audio_quality", quality)
 
         # ---- 商业化结构：IAP(内购) 与 IAA(广告) 的取舍 ----
         iap = strategies["payer"].params.get("iap_depth", 0.5)
@@ -99,9 +105,17 @@ class MarketSimulator:
         art_factor = 1.0 + (art_quality - 60.0) / 60.0 * 0.5
         art_penalty = max(0.0, 1.0 - (art_quality / 100.0) * (1.0 - mass_art_sens))
 
-        # 留存受"广告体验损伤 + 美术品质偏好"影响
-        d1_retention = 0.4 * (1 - ad_experience_penalty) * (0.85 + 0.15 * art_factor)
-        d30_retention = 0.12 * (1 - ad_experience_penalty) * (quality / 60.0) * (0.85 + 0.15 * art_factor)
+        # ---- 音频品质偏好（wp_audio）----
+        # 泛玩家对音频品质的敏感度（用于计算音频对体验/留存的影响）。
+        # 核心玩家(audio_designer 联动)对音频品质有偏好，音频品质高会抬升沉浸感，
+        # 劣质音频会损伤玩家留存（如刺耳 BGM / 缺失音效反馈）。
+        mass_audio_sens = strategies["mass_player"].params.get("audio_sens", 0.15)
+        audio_factor = 1.0 + (audio_quality - 60.0) / 60.0 * 0.4
+        audio_penalty = max(0.0, 1.0 - (audio_quality / 100.0) * (1.0 - mass_audio_sens))
+
+        # 留存受"广告体验损伤 + 美术品质偏好 + 音频品质"影响
+        d1_retention = 0.4 * (1 - ad_experience_penalty) * (0.85 + 0.15 * art_factor) * (0.85 + 0.15 * audio_factor)
+        d30_retention = 0.12 * (1 - ad_experience_penalty) * (quality / 60.0) * (0.85 + 0.15 * art_factor) * (0.85 + 0.15 * audio_factor)
 
         dau = mass * acquisition_rate * d1_retention * 0.5
         maus = dau * 15
@@ -118,8 +132,8 @@ class MarketSimulator:
         competition_pressure = c.get("competition_pressure", 0.5)
         reachable_revenue = total_revenue * (1 - channel_cut) * (1 - 0.5 * competition_pressure)
 
-        # ---- 口碑（美术品质偏好也影响口碑）----
-        reputation = 5.0 - (iaa * 5) + (quality / 60.0) * 2 - ad_experience_penalty + (art_quality - 60.0) / 60.0 * 1.5
+        # ---- 口碑（美术品质偏好 + 音频品质也影响口碑）----
+        reputation = 5.0 - (iaa * 5) + (quality / 60.0) * 2 - ad_experience_penalty + (art_quality - 60.0) / 60.0 * 1.5 + (audio_quality - 60.0) / 60.0 * 1.2
 
         # ---- 美术满意度（wp_art_direction 验收指标）----
         # 玩家圈对美术品质的综合满意度（0~10），作为美术品质进入市场预演博弈的可见信号。
@@ -133,6 +147,13 @@ class MarketSimulator:
         # 修复（评审点3）：满意度收敛到 0~10 区间，避免越界。
         art_satisfaction = max(0.0, min(10.0, art_satisfaction))
 
+        # ---- 音频沉浸感（wp_audio 验收指标）----
+        # 玩家圈对音频品质的综合沉浸感评分（0~10），作为音频维度进入市场预演博弈的可见信号。
+        # 基于 audio_quality 与音频敏感度计算，音频品质越高沉浸感越好。
+        audio_immersion = max(0.0, min(10.0,
+            3.0 + 5.0 * (audio_quality / 100.0) * (1.0 - audio_penalty) + 2.0 * audio_factor
+        ))
+
         # ---- 汇总 ----
         metrics = {
             "dau": dau,
@@ -144,6 +165,8 @@ class MarketSimulator:
             "roi": reachable_revenue / max(c.get("marketing_budget", 50000), 1),
             "art_quality": art_quality,
             "art_satisfaction": art_satisfaction,
+            "audio_quality": audio_quality,
+            "audio_immersion": audio_immersion,
         }
         return Outcome(metrics=metrics)
 
@@ -302,6 +325,7 @@ def demo():
     context = {
         "base_quality": 65.0,
         "art_quality": 72.0,           # wp_art_direction：美术品质基准进入市场预演
+        "audio_quality": 68.0,          # wp_audio：音频品质基准进入市场预演
         "mass_player_base": 200000,
         "arpu_base": 2.5,
         "ecpm_base": 6.0,
@@ -317,8 +341,8 @@ def demo():
         Role("mass_player", "泛玩家", "players",
              payoff_fn=lambda ctx, mine, others: ctx["last_outcome"].metrics["reputation"] * ctx["last_outcome"].metrics["dau"],
              strategy_space=[
-                 Strategy("低门槛", {"complexity": 0.2, "art_sens": 0.15}),
-                 Strategy("中门槛", {"complexity": 0.5, "art_sens": 0.25}),
+                 Strategy("低门槛", {"complexity": 0.2, "art_sens": 0.15, "audio_sens": 0.10}),
+                 Strategy("中门槛", {"complexity": 0.5, "art_sens": 0.25, "audio_sens": 0.20}),
              ]),
         Role("core_player", "核心玩家", "players",
              payoff_fn=lambda ctx, mine, others: ctx["last_outcome"].metrics["art_satisfaction"] * ctx["last_outcome"].metrics["d30_retention"],
@@ -379,6 +403,7 @@ def demo():
     print(f"  口碑: {final_outcome.metrics['reputation']:.2f}/10")
     print(f"  30日留存: {final_outcome.metrics['d30_retention']*100:.1f}%")
     print(f"  美术品质: {final_outcome.metrics['art_quality']:.0f}  美术满意度: {final_outcome.metrics['art_satisfaction']:.2f}/10")
+    print(f"  音频品质: {final_outcome.metrics['audio_quality']:.0f}  音频沉浸感: {final_outcome.metrics['audio_immersion']:.2f}/10")
     print(f"  IAP营收: {final_outcome.metrics['iap_revenue']:.0f}  广告营收: {final_outcome.metrics['ad_revenue']:.0f}")
     print('  提示: 纳什均衡下的组合是“各角色不再单方面改动”的稳定态。')
     print("        若希望某方更好，需看帕累托改进空间与敏感性分析。")
