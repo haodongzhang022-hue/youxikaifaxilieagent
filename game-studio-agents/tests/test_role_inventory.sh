@@ -46,7 +46,9 @@ if [ "$GAP_RC" -eq 0 ]; then
 else
   # 返回码 1 说明工具能运行且检测到差距（这正是工具的价值，非故障）
   ok "--gap 运行正常：检测到差距（返回码 $GAP_RC，当前声明≠实现清单已暴露）"
-  echo "     提示: 当前差距数=$(echo "$GAP_OUT" | grep -cE '⚠️|❌' || true)"
+  # 从 --gap 首行 "共 N 个" 解析精确差距数（避免 grep 误计汇总行）
+  GAP_COUNT=$(echo "$GAP_OUT" | head -1 | grep -oP '共 \K[0-9]+' || echo '0')
+  echo "     提示: 当前差距数=$GAP_COUNT"
 fi
 
 # [3] 关键已承诺实体化角色必须 implemented（防回退）

@@ -212,7 +212,7 @@ class InstantiatedTeamOrchestrator:
             return True
         # 生态 handler 已接入：eco_* 应真实 DONE，若有未承接的 eco_* 则不算全链路完成
         eco_tasks = [t for t in self.scheduler.queue.tasks.values()
-                     if t.id.startswith("eco_") or (not t.payload.get("work_package"))]
+                     if t.id.startswith("eco_")]
         return all(t.state == TaskState.DONE.value for t in eco_tasks)
 
     # ---------- 生态角色派发（wp_server / wp_ai_logic / wp_art_direction）----------
