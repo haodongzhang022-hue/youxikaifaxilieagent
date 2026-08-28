@@ -1,7 +1,7 @@
 # ============================================================
 # 通用 Agent 身份自适应模块 (Agent Identity)
 # 版本: v1.4
-# 说明: 让任意 Agent（CodeBuddy / 仓库调用专员 / 仓库修复专员 / 代码审查员 / 游戏向经理等）
+# 说明: 让任意 Agent（CodeBuddy / 仓库处理专员 / 代码审查员 / 游戏向经理等）
 #       能**自动识别当前所在的仓库上下文**，并据此生成正确的 @ 召唤格式，
 #       不再硬编码 `dongdongxiaozu/youxikaifaxilieagent`。
 #
@@ -14,8 +14,8 @@
 #     4. get_codebuddy_mention()：获取本仓库的 CodeBuddy 召唤格式；
 #     5. get_review_operational_advice()：**面向评审 NPC 的自适应操作建议**，
 #        —— 根据「当前触发评审的仓库」探测组织名 + 仓库名（都不写死），
-#          遵循「召唤优先级链」（仓库修复专员 → 仓库调用专员 → CodeBuddy），
-#          默认生成带壳 `@组织/仓库(仓库修复专员)` 召唤格式（CodeBuddy 兜底），
+#          遵循「召唤优先级链」（仓库处理专员 → CodeBuddy），
+#          默认生成带壳 `@组织/仓库(仓库处理专员)` 召唤格式（CodeBuddy 兜底），
 #          支持 role= 显式指定，供评审输出操作建议。
 #
 #   v1.1 新增：
@@ -35,8 +35,8 @@
 #       等候选变量 + slug 归一化（去空白 / 去 .git），提高 env 命中率。
 #
 #   v1.3 新增：
-#     - **新增「仓库调用专员」角色**：注册到 KNOWN_ROLES，新增
-#       get_repo_invoker_mention() / repo_invoker_mention()，为调用管家角色
+#     - **新增「仓库处理专员」角色**：注册到 KNOWN_ROLES，提供带壳召唤支持。
+#       get_handler_mention() / handler_mention()，为调用管家角色
 #       提供带壳召唤格式支持。
 #
 #   使用方式（所有角色 prompt 中均引用此模块）：
@@ -279,7 +279,7 @@ def _detect_from_git(start: Optional[str] = None) -> Dict[str, str]:
 class AgentIdentity:
     """通用 Agent 身份识别与 @ 召唤格式生成器。
 
-    所有角色（CodeBuddy / 仓库修复专员 / 代码审查员 / 游戏向经理 /
+    所有角色（CodeBuddy / 仓库处理专员 / 代码审查员 / 游戏向经理 /
     合并确认员等）都应引用本模块来生成跨仓库 / 同仓库的 @ 召唤格式，
     确保：
       - 不写死仓库名（自适应探测）；
@@ -291,8 +291,7 @@ class AgentIdentity:
     KNOWN_ROLES = [
         # 核心编排角色
         "CodeBuddy",
-        "仓库调用专员",
-        "仓库修复专员",
+        "仓库处理专员",
         "代码审查员",
         "游戏向经理",
         "合并确认员",
@@ -370,13 +369,13 @@ class AgentIdentity:
         """生成 @ 召唤格式。
 
         Args:
-            role: 角色名（如 "CodeBuddy"、"仓库修复专员"）
+            role: 角色名（如 "CodeBuddy"、"仓库处理专员"）
             target_slug: 目标仓库 slug（owner/repo）。
                 不传时使用当前仓库（self.repo_slug）。
 
         Returns:
             如 "@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)"
-            或 "@dongdongxiaozu/youxikaifaxilieagent(仓库修复专员)"
+            或 "@dongdongxiaozu/youxikaifaxilieagent(仓库处理专员)"
         """
         slug = target_slug or self.repo_slug
         if not slug or "/" not in slug:
@@ -388,17 +387,13 @@ class AgentIdentity:
         """获取本仓库 CodeBuddy 的完整 @ 召唤格式。"""
         return self.build_mention("CodeBuddy")
 
-    def get_fixer_mention(self) -> str:
-        """获取本仓库修复专员（仓库修复专员）的完整 @ 召唤格式。"""
-        return self.build_mention("仓库修复专员")
+    def get_handler_mention(self) -> str:
+        """获取本仓库处理专员（仓库处理专员）的完整 @ 召唤格式。"""
+        return self.build_mention("仓库处理专员")
 
     def get_reviewer_mention(self) -> str:
         """获取本仓库代码审查员的完整 @ 召唤格式。"""
         return self.build_mention("代码审查员")
-
-    def get_repo_invoker_mention(self) -> str:
-        """获取本仓库「仓库调用专员」的完整 @ 召唤格式。"""
-        return self.build_mention("仓库调用专员")
 
     # ---------- 智能策略判断 ----------
     def decide_mention_strategy(self,
@@ -477,8 +472,7 @@ class AgentIdentity:
             )
 
         cb_mention = self.get_codebuddy_mention()
-        fixer_mention = self.get_fixer_mention()
-        invoker_mention = self.get_repo_invoker_mention()
+        handler_mention = self.get_handler_mention()
 
         # 注意：所有召唤格式均用反引号包裹，不会触发 NPC 事件。
         # 实际召唤时用 get_review_operational_advice() 生成唯一的裸召唤行。
@@ -486,8 +480,7 @@ class AgentIdentity:
             f"【仓库自适应识别】当前仓库: `{self.repo_slug}`"
             f"（识别来源: {self.repo_context.detection_source if self.repo_context else 'unknown'}）\n"
             f"- 本仓库 CodeBuddy 召唤格式: `{cb_mention}`\n"
-            f"- 本仓库仓库调用专员召唤格式: `{invoker_mention}`\n"
-            f"- 本仓库修复专员召唤格式: `{fixer_mention}`\n"
+            f"- 本仓库处理专员召唤格式: `{handler_mention}`\n"
             f"- **实际召唤时**：只召唤一个目标角色，调用对应的方法生成唯一召唤行，"
             f"禁止一次列出多个角色的裸召唤格式\n"
             f"- 跨仓库调用必须用完整格式 `@组织/仓库(角色名)` 带壳召唤，否则会被路由到错误仓库\n"
@@ -496,22 +489,22 @@ class AgentIdentity:
 
     def get_review_operational_advice(self,
                                       target_slug: Optional[str] = None,
-                                      role: str = "仓库修复专员") -> str:
+                                      role: str = "仓库处理专员") -> str:
         """评审 NPC 专用：基于「当前触发评审的仓库」自适应生成召唤操作建议。
 
         遵循「召唤优先级链 · 逐个降级」原则：
           - **优先级链**（由 REPAIR_PRIORITY_CHAIN 定义）：
-            仓库修复专员 → 仓库调用专员 → CodeBuddy → 兜底说明。
+            仓库处理专员 → CodeBuddy → 兜底说明。
             同一时刻**只召唤最高优先级的一个角色**，解决不了再降级到下一个，
             绝不一股脑同时召唤多个角色；
-          - 默认优先召唤**仓库修复专员**（本仓库修复闭环的第一执行者，
-            权限最匹配）；仓库修复专员不可用/降级时再召唤 CodeBuddy 兜底；
+          - 默认优先召唤**仓库处理专员**（本仓库修复闭环的第一执行者，
+            权限最匹配）；仓库处理专员不可用/降级时再召唤 CodeBuddy 兜底；
           - 组织名 / 仓库名均不写死，通过 AgentIdentity 探测当前被评审仓库；
           - 支持跨仓：target_slug 不传时用当前仓库，传了则按目标仓库生成。
 
         Args:
             target_slug: 目标仓库 slug（owner/repo），缺省用当前仓库。
-            role: 要召唤的角色（默认"仓库修复专员"，CodeBuddy 通用兜底）。
+            role: 要召唤的角色（默认"仓库处理专员"，CodeBuddy 通用兜底）。
 
         Returns:
             可直接输出的 Markdown 操作建议文本（召唤行裸 @、独立成行可被解析）。
@@ -553,10 +546,10 @@ class AgentIdentity:
         越靠前优先级越高，一次只召唤最高优先级可用角色；
         它无法承接时降级到下一个，最后落到 CodeBuddy 通用兜底。
         """
-        return ["仓库修复专员", "仓库调用专员", "CodeBuddy"]
+        return ["仓库处理专员", "CodeBuddy"]
 
     def get_repair_priority_chain(self) -> list:
-        """获取修复闭环的召唤优先级链（仓库修复专员 → 仓库调用专员 → CodeBuddy）。"""
+        """获取修复闭环的召唤优先级链（仓库处理专员 → CodeBuddy）。"""
         return list(self.REPAIR_PRIORITY_CHAIN)
 
 # ============================================================
@@ -594,19 +587,14 @@ def codebuddy_mention() -> str:
     return get_identity().get_codebuddy_mention()
 
 
-def fixer_mention() -> str:
-    """快速获取本仓库修复专员的 @ 召唤格式。"""
-    return get_identity().get_fixer_mention()
-
-
-def repo_invoker_mention() -> str:
-    """快速获取本仓库「仓库调用专员」的 @ 召唤格式。"""
-    return get_identity().get_repo_invoker_mention()
+def handler_mention() -> str:
+    """快速获取本仓库处理专员的 @ 召唤格式。"""
+    return get_identity().get_handler_mention()
 
 
 def review_operational_advice(target_slug: Optional[str] = None,
-                               role: str = "仓库修复专员") -> str:
-    """评审 NPC 专用：获取召唤本仓库修复角色的自适应操作建议（默认优先仓库修复专员）。"""
+                               role: str = "仓库处理专员") -> str:
+    """评审 NPC 专用：获取召唤本仓库修复角色的自适应操作建议（默认优先仓库处理专员）。"""
     return get_identity().get_review_operational_advice(target_slug, role)
 
 
@@ -626,8 +614,7 @@ if __name__ == "__main__":
     print(f"    来源={ctx.detection_source}")
 
     print(f"\n[2] 本仓库 CodeBuddy 召唤格式: {identity.get_codebuddy_mention()}")
-    print(f"    本仓库修复专员召唤格式: {identity.get_fixer_mention()}")
-    print(f"    本仓库仓库调用专员召唤格式: {identity.get_repo_invoker_mention()}")
+    print(f"    本仓库处理专员召唤格式: {identity.get_handler_mention()}")
 
     # 同仓库策略
     print(f"\n[3] 同仓库策略: {identity.repo_slug}")
