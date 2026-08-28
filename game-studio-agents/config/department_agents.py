@@ -25,7 +25,7 @@ from data_ops_diagnosis import run_data_ops
 from framework_upgrade_ops import run_data_ops_upgrade
 from shared_memory import SharedMemory
 from release_gate import aggregate_and_release, run_release_gate
-from engine_adapters import get_engine, detect_engine_from_project, build_engine_aware_artifact, EngineType
+from engine_adapters import get_engine
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -662,7 +662,10 @@ class ArtDeptAgent(DepartmentAgent):
                     # 引擎感知：音频资源格式与目标引擎挂钩
                     "engine": engine_name,
                     "engine_type": engine_type,
-                    "audio_resource_extension": engine.resource_specs()[0].extension if engine.resource_specs() else "",
+                    "audio_resource_extension": next(
+                        (rs.extension for rs in engine.resource_specs() if rs.resource_type == "audio"),
+                        ""
+                    ),
                     "audio_import_dir": engine.resource_import_path("audio"),
                     "build_command": engine.build_command("windows"),
                 },
