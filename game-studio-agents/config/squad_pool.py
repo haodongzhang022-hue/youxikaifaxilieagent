@@ -166,9 +166,10 @@ class SquadPool:
       3. 领域寻址——按 skills/domain 匹配，"多个小组分别做不一样的事"。
     """
 
-    def __init__(self):
+    def __init__(self, max_log_size: int = 1000):
         self._squads: Dict[str, Squad] = {}   # squad_id -> Squad
-        self._assign_log: List[Dict[str, Any]] = []  # 调配留痕
+        self._assign_log: List[Dict[str, Any]] = []  # 调配留痕（有界，最多保留 max_log_size 条）
+        self._max_log_size = max_log_size
 
     # ---------- 注册 / 注销 ----------
     def register_squad(self, squad: Squad) -> Squad:
@@ -279,8 +280,9 @@ class SquadPool:
             return {"ok": False, "squad": None,
                     "reason": f"小组 {squad_id} 不存在",
                     "code": ACQUIRE_UNREG}
+        dept = squad.owner_department
         squad.release()
-        self._log_release(squad)
+        self._log_release(squad, department=dept)
         return {"ok": True, "squad": squad,
                 "reason": f"{squad.name} 已释放回池，可再次调配",
                 "code": "RELEASED"}
@@ -290,8 +292,9 @@ class SquadPool:
         released = []
         for sid, s in self._squads.items():
             if s.owner_department == department and s.status == SQUAD_BUSY:
+                dept = s.owner_department
                 s.release()
-                self._log_release(s)
+                self._log_release(s, department=dept)
                 released.append(sid)
         return released
 
@@ -356,14 +359,26 @@ class SquadPool:
             "code": code,
             "at": time.time(),
         })
+        self._trim_log()
 
-    def _log_release(self, squad: Squad) -> None:
+    def _trim_log(self) -> None:
+        """裁剪调配留痕，保持有界增长（保留最新 max_log_size 条）。"""
+        if len(self._assign_log) > self._max_log_size:
+            self._assign_log = self._assign_log[-self._max_log_size:]
+
+    def _append_log(self, entry: Dict[str, Any]) -> None:
+        """追加一条留痕记录并裁剪（供内部统一使用）。"""
+        self._assign_log.append(entry)
+        self._trim_log()
+
+    def _log_release(self, squad: Squad, department: str = "") -> None:
         self._assign_log.append({
             "event": "release",
             "squad_id": squad.squad_id,
-            "department": squad.owner_department,
+            "department": department,
             "at": time.time(),
         })
+        self._trim_log()
 
 
 # ============================================================

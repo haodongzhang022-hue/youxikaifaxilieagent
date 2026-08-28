@@ -148,6 +148,107 @@ else
   echo "$out2"
 fi
 
+echo "== 2b. 评审修复回归（双 acquire / BUSY误释放 / READY / BLOCKED / 留痕 / 有界） =="
+out2b=$($PY << 'PYBLK2B'
+from message_bus import MessageBus
+from dispatch_capability import DispatchCapability
+from squad_pool import SquadPool, Squad, create_default_squad_pool, \
+    SQUAD_IDLE, SQUAD_BUSY, SQUAD_READY, SQUAD_BLOCKED
+
+bus = MessageBus()
+pool = create_default_squad_pool()
+cap = DispatchCapability("producer", bus=bus, squad_pool=pool)
+
+def register_leader(leader):
+    if leader not in bus.roles:
+        bus.register(leader)
+        bus.on(leader, lambda m: None)
+
+for s in pool.list_squads():
+    register_leader(s["leader"])
+
+res = {}
+# 现有 client_dev 小组（自动 id）
+c_orig = pool.find(domain="client_dev")[0]
+c_orig_id = c_orig.squad_id
+
+# --- (1) 同 domain 多 squad 精确调配不误伤（双 acquire 修复）---
+# 新增第二个 client_dev 小组（同 domain），leader 不注册
+pool.create_squad(name="客户端开发F组", domain="client_dev",
+                  skills=["client"], leader="client_lead_f",
+                  members=["client_dev_f1"], squad_id="squad_client_f")
+# 直接对指定 squad 调配：F 组 leader 未注册 → 派发失败
+r = cap.dispatch_to_squad("squad_client_f", {"id": "wp_f", "label": "F组"}, "程序线")
+f = pool.get("squad_client_f")
+# F 组被 acquire 置 BUSY 后派发失败，newly_acquired → 释放回 IDLE
+res["same_domain_precise_busy"] = (not r.dispatched and f is not None)
+res["same_domain_release_on_fail"] = (f.status == SQUAD_IDLE)
+# 同域原小组 c_orig 保持空闲（未被双 acquire 误调配）
+others = [x for x in pool.find(domain="client_dev") if x.squad_id != "squad_client_f"]
+res["no_misdispatch"] = (all(x.status == SQUAD_IDLE for x in others))
+
+# --- (2) BUSY 小组派发失败不误释放（复用场景）---
+# 先把 c_orig 调配成 BUSY（本调配方占用）
+cap.dispatch_to_squad(c_orig_id, {"id": "wp_a1", "label": "A组任务1"}, "程序线")
+ca = pool.get(c_orig_id)
+res["busy_setup"] = (ca.status == SQUAD_BUSY and ca.owner_department == "程序线")
+# 移除 leader 注册制造复用派发失败，验证 BUSY 小组不被误释放
+bus.unregister(ca.leader)
+r2 = cap.dispatch_to_squad(c_orig_id, {"id": "wp_a2", "label": "A组任务2"}, "程序线")
+res["busy_fail_no_release"] = (not r2.dispatched and ca.status == SQUAD_BUSY)
+res["busy_kept_owner"] = (ca.owner_department == "程序线")
+register_leader(ca.leader)
+
+# --- (3) SQUAD_BLOCKED 拒绝调配 ---
+pool.create_squad(name="阻塞组", domain="blocked_dev", leader="blocked_lead",
+                  squad_id="squad_blocked")
+register_leader("blocked_lead")
+bl = pool.get("squad_blocked")
+bl.block("临时阻塞")
+r3 = cap.dispatch_to_squad("squad_blocked", {"id": "wp_blk", "label": "阻塞"}, "程序线")
+res["blocked_reject"] = (not r3.dispatched and bl.status == SQUAD_BLOCKED)
+
+# --- (4) SQUAD_READY 释放后重新调配 ---
+pool.create_squad(name="就绪组", domain="ready_dev", leader="ready_lead",
+                  squad_id="squad_ready")
+register_leader("ready_lead")
+ry = pool.get("squad_ready")
+ry.status = SQUAD_READY   # 置为 READY（任务完成待释放）
+r4 = cap.dispatch_to_squad("squad_ready", {"id": "wp_rdy", "label": "就绪"}, "程序线")
+res["ready_reacquire"] = (r4.dispatched and ry.status == SQUAD_BUSY)
+res["ready_newly_acquired"] = (ry.assign_count >= 1)
+
+# --- (5) 释放日志 department 留痕 ---
+# 单独创建一个小队并调配成 BUSY 后释放，验证 release 日志记录调配方 department
+pool.create_squad(name="留痕组", domain="trace_dev", leader="trace_lead",
+                  squad_id="squad_trace")
+register_leader("trace_lead")
+cap.dispatch_to_squad("squad_trace", {"id": "wp_trace", "label": "留痕"}, "美术线")
+rel = cap.release_squad("squad_trace")
+rel_logs = [e for e in pool._assign_log if e["event"] == "release" and e["squad_id"] == "squad_trace"]
+res["release_dept_trace"] = (rel["ok"] and rel_logs and rel_logs[-1]["department"] == "美术线")
+
+# --- (6) assign_log 有界裁剪 ---
+small = SquadPool(max_log_size=5)
+for i in range(20):
+    small.create_squad(name=f"小{i}", domain=f"d{i}", squad_id=f"s{i}")
+    small.acquire(domain=f"d{i}", department=f"dep{i}", task_id=f"t{i}")
+res["log_bounded"] = (len(small._assign_log) <= 5)
+
+for k, v in res.items():
+    print(f"  {k}: {'OK' if v else 'FAIL'}")
+print("ALL_PASS" if all(res.values()) else "SOME_FAIL")
+PYBLK2B
+)
+
+if echo "$out2b" | grep -q "ALL_PASS"; then
+  report "评审修复回归（双acquire/BUSY/READY/BLOCKED/留痕/有界）全部通过" 0
+  echo "$out2b"
+else
+  report "评审修复回归（双acquire/BUSY/READY/BLOCKED/留痕/有界）全部通过" 1
+  echo "$out2b"
+fi
+
 echo "== 3. SquadPool 文档 =="
 if [ -f "../docs/squad-pool.md" ]; then
   report "文档存在（docs/squad-pool.md）" 0

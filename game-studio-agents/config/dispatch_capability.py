@@ -40,7 +40,8 @@ from typing import Any, Dict, List, Optional
 
 from message_bus import Message, MessageBus
 from task_scheduler import Scheduler, Task, TaskState
-from squad_pool import SquadPool, Squad, create_default_squad_pool, SQUAD_IDLE, SQUAD_BUSY
+from squad_pool import (SquadPool, Squad, create_default_squad_pool,
+                       SQUAD_IDLE, SQUAD_BUSY, SQUAD_READY, SQUAD_BLOCKED)
 
 
 # ============================================================
@@ -335,23 +336,17 @@ class DispatchCapability:
         # 若已被调配（BUSY）且是本调配方调度的，直接复用（避免重复 acquire）
         caller = department or self.caller_role
         task_id = work_package.get("id", "")
+        # newly_acquired: 本次调用是否真正新调配了该小组（用于派发失败时精确回滚）
+        newly_acquired = False
         if squad.status == SQUAD_IDLE:
-            acquire_result = self.squad_pool.acquire(
-                domain=squad.domain,
-                department=caller,
-                task_id=task_id,
-            )
-            if not acquire_result.get("ok"):
-                return DispatchResult(
-                    task_id=task_id or "?",
-                    owner=squad.squad_id,
-                    task_name=work_package.get("label", "?"),
-                    priority=work_package.get("priority", "NORMAL"),
-                    dispatched=False,
-                    reason=acquire_result.get("reason", "小组不可调配"),
-                )
-            squad = acquire_result["squad"]
-        elif squad.status == SQUAD_BUSY and squad.owner_department != caller:
+            # 直接对目标小组精确 acquire，不再走 squad_pool.acquire(domain=...)
+            # 搜索路径，避免误调配到同领域 assign_count 最少（却不是本目标）的其他小组。
+            squad.acquire(caller, task_id)
+            newly_acquired = True
+        elif squad.status == SQUAD_BUSY and squad.owner_department == caller:
+            # 已被本调配方占用（复用正在执行任务的小组），不再重复 acquire
+            newly_acquired = False
+        elif squad.status == SQUAD_BUSY:
             # 已被其他部门占用，不可重复调配（除非释放）
             return DispatchResult(
                 task_id=task_id or "?",
@@ -361,6 +356,31 @@ class DispatchCapability:
                 dispatched=False,
                 reason=f"小组 {squad.name} 已被 {squad.owner_department} 占用，无法调配",
             )
+        elif squad.status == SQUAD_READY:
+            # READY：任务已完成待释放，先归还回池（release 内部记录留痕），再重新调配进入 BUSY
+            self.squad_pool.release(squad.squad_id)
+            squad.acquire(caller, task_id)
+            newly_acquired = True
+        elif squad.status == SQUAD_BLOCKED:
+            # BLOCKED：阻塞/异常，拒绝调配
+            return DispatchResult(
+                task_id=task_id or "?",
+                owner=squad.squad_id,
+                task_name=work_package.get("label", "?"),
+                priority=work_package.get("priority", "NORMAL"),
+                dispatched=False,
+                reason=f"小组 {squad.name} 处于 BLOCKED 状态，无法调配",
+            )
+        else:
+            # 未知状态兜底拒绝
+            return DispatchResult(
+                task_id=task_id or "?",
+                owner=squad.squad_id,
+                task_name=work_package.get("label", "?"),
+                priority=work_package.get("priority", "NORMAL"),
+                dispatched=False,
+                reason=f"小组 {squad.name} 状态异常（{squad.status}），拒绝派发",
+            )
 
         # 派发给小组长（leader）
         wp = dict(work_package)
@@ -368,8 +388,9 @@ class DispatchCapability:
         wp.setdefault("squad_id", squad.squad_id)
         wp.setdefault("department", caller)
         result = self.dispatch_work_package(wp)
-        # 派发失败则释放小组
-        if not result.dispatched:
+        # 派发失败时，仅释放「本次新调配」的小组归还回池；
+        # 若是复用的 BUSY 小组（正在执行原任务），不误释放其占用状态。
+        if not result.dispatched and newly_acquired:
             self.squad_pool.release(squad.squad_id)
         return result
 
