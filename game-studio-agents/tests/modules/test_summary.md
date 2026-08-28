@@ -25,12 +25,13 @@
 | 10 | 进度督导 (ProgressPusher) | test_mod_progress_pusher.sh | 9 | 🟢 |
 | 11 | 发版质量门禁 (ReleaseGate) | test_mod_release_gate.sh | 7 | 🟢 |
 | 12 | 生态角色 (EcosystemRoleRegistry) | test_mod_ecosystem_roles.sh | 6 | 🟢 |
+| 13 | 美术线生态角色 (ArtEcosystem) | test_mod_art_ecosystem.sh | 16 | 🟢 |
 | 13 | 预设实例化 (PresetInstantiator) | test_mod_instantiator.sh | 6 | 🟢 |
 | 14 | 合并确认 (MergedConfirmAgent) | test_mod_merged_confirm.sh | 7 | 🟢 |
 | 15 | 借鉴学习 (ReferenceLearnerAgent) | test_mod_reference_learner.sh | 4 | 🟢 |
 | 16 | 端到端联动 (EndToEnd) | test_mod_end_to_end.sh | 6 | 🟢 |
 
-**合计：16 个功能模块，118 项断言，全部通过。**
+**合计：17 个功能模块，134 项断言，全部通过。**
 
 ## 模块验收明细
 
@@ -161,7 +162,24 @@
 - 程序线与策划线均有角色分配
 - 实例化角色均为 agent_enabled
 
-### 13. 合并确认 (MergedConfirmAgent) — 7 项断言
+### 12. 美术线生态角色 (ArtEcosystem) — 16 项断言
+- 美术圈三角色定义完整（eco_art_director/eco_tech_artist/eco_audio_designer）
+- 美术圈三角色注册到 ecosystem_role_registry 并接入 message_bus
+- 美术指导角色元数据完整（profile/circle=art）
+- 美术圈三角色 Handler 全部注册（art_quality / pipeline_optimize / audio_quality）
+- 音频生态角色 handler 执行 audio_quality 产出沉浸感/音效匹配
+- 美术指导生态角色 handler 执行 art_quality 产出风格统一度
+- 美术品质维度进入市场预演（art_quality/art_satisfaction）
+- 音频品质维度进入市场预演（audio_quality/audio_immersion）
+- 美术/音频品质基准正确（72/68）进入市场预演纳什均衡
+- ArtDeptAgent 已创建并可在流水线执行
+- wp_art_direction 承接产出美术规范并接入市场预演
+- wp_ui_ux 承接产出交互规范可派发 tech_artist/eco_tech_artist
+- wp_audio 承接产出完整音频规范（audio_spec/audio_quality）
+- wp_audio 可派发 audio_designer/eco_audio_designer
+- 美术圈生态角色全链路可派发（task_scheduler）
+
+### 14. 合并确认 (MergedConfirmAgent) — 7 项断言
 - 合并确认 Agent 创建成功
 - 探查正确筛选出已合并标签 Issue（3 个）
 - 决策输出完整（3 个判定）
@@ -170,13 +188,13 @@
 - 模糊讨论→keep 判定
 - 决策类型定义完整
 
-### 14. 借鉴学习 (ReferenceLearnerAgent) — 4 项断言
+### 15. 借鉴学习 (ReferenceLearnerAgent) — 4 项断言
 - 借鉴决策历史完整记录
 - 创意工坊 Mod 正确构建
 - 借鉴 Agent 消息投递到总线
 - 借鉴决策策略输出正确
 
-### 15. 端到端联动 (EndToEndOrchestrator) — 6 项断言
+### 16. 端到端联动 (EndToEndOrchestrator) — 6 项断言
 - 端到端编排器创建成功
 - 全链路端到端联动完成
 - 工作包全部 DONE
@@ -198,5 +216,5 @@ bash game-studio-agents/tests/modules/test_mod_task_scheduler.sh
 
 ## 验收结论
 
-✅ **16/16 个功能模块全部验收通过（118 项断言）**，每个模块的确认均以实际测试
+✅ **17/17 个功能模块全部验收通过（134 项断言）**，每个模块的确认均以实际测试
 结果为支撑，可运行、可复现、可证明、可反驳。

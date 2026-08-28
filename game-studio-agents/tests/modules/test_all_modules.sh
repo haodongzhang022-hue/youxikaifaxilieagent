@@ -23,6 +23,7 @@ MODULES=(
     "test_mod_progress_pusher.sh"
     "test_mod_release_gate.sh"
     "test_mod_ecosystem_roles.sh"
+    "test_mod_art_ecosystem.sh"
     "test_mod_instantiator.sh"
     "test_mod_merged_confirm.sh"
     "test_mod_reference_learner.sh"
