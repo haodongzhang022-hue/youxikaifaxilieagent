@@ -10,14 +10,17 @@
 | wp_handler_pm | handler 角色职责治理验收 | project_manager | wp_handler_pm_仓库处理专员职责边界闭环验收.md |
 | wp_release_plan | release | project_manager | wp_release_plan_发版计划.md |
 | wp_release_gate | release | release_manager | wp_release_gate_发版门禁.md |
+| wp_release | release 发版质量门禁验收放行 | project_manager + release_manager | 承接报告_REVIEW_RESULT_wp_release.md |
+| wp_engine_adaptation_pm | engine_adaptation 项目管理架构里程碑验收 | project_manager + release_manager | 承接报告_PR86_项目管理_wp_engine_adaptation_pm.md |
 
-## 二、PR #82 下游解锁 · 本轮承接记录
+## 二、PR #86 下游解锁 · 本轮承接记录
 
 | 工作包 | 状态 | 说明 |
 |--------|------|------|
-| wp_engine_adaptation_pm | ⛔ 未解锁 | 测试线 wp_engine_adaptation_qa 打回（程序线 PR#87 未合入），PM 工作包未解锁，本轮跳过 |
+| wp_release | ✅ 已交付 | 发版质量门禁验收放行（GO），前序流水线已完成 |
+| wp_engine_adaptation_pm | ✅ DONE | 双引擎适配底座项目管理架构里程碑验收，测试线 wp_engine_adaptation_qa 验收通过后解锁，经 @分工 拆派 project_manager + release_manager 完成 |
 
-详细见：`承接报告_PR82_跳过.md`
+详细见：`承接报告_PR86_项目管理_wp_engine_adaptation_pm.md`
 
 ## 三、组内分工表
 
@@ -27,11 +30,15 @@
 | 仓库处理专员职责边界与闭环验收 | project_manager | wp_handler_pm_仓库处理专员职责边界闭环验收.md |
 | 发版计划/里程碑 | project_manager | wp_release_plan_发版计划.md |
 | 发版门禁检查 | release_manager | wp_release_gate_发版门禁.md |
+| 发版质量门禁验收放行 | project_manager + release_manager | 承接报告_REVIEW_RESULT_wp_release.md |
+| 双引擎适配底座里程碑验收 | project_manager + release_manager | 承接报告_PR86_项目管理_wp_engine_adaptation_pm.md |
 
 ## 四、跨部门协作
 
 | 协作方向 | 部门 | 协作内容 | 触发时机 |
 |---------|------|---------|---------|
 | 上游消费 | 测试线/程序线/美术线 | 消费回归结论做验收依据 | 测试验收通过后 |
+| 上游消费 | 测试线 | 消费 wp_engine_adaptation_qa 验收结论做引擎适配里程碑依据 | 测试线验收通过后 |
+| 上游消费 | 程序线 | 消费 PR #87 wp_engine_adaptation_integration 合入状态 | 引擎适配集成合入后 |
 | 下游解锁 | 运营线 | wp_review_ops + wp_handler_ops 对外同步 | PM 验收通过后 |
 | 前置依赖 | 程序线 | PR #87 wp_engine_adaptation_integration 合入 | 解锁 PM 工作包前置条件 |
