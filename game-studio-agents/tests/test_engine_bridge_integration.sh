@@ -163,6 +163,59 @@ else
   report "状态报告含集成信息" 1
 fi
 
+echo "== 8. emit 单次投递（防双重投递回归） =="
+out=$($PY - <<'PYEOF'
+from engine_integration import EngineIntegrationFacade
+from engine_bridge import EngineEvent
+from message_bus import MessageBus
+
+bus = MessageBus()
+call_counts = {"cto": 0, "qa": 0}
+bus.register("cto"); bus.register("qa")
+bus.on("cto", lambda m: call_counts.__setitem__("cto", call_counts["cto"] + 1))
+bus.on("qa", lambda m: call_counts.__setitem__("qa", call_counts["qa"] + 1))
+
+facade = EngineIntegrationFacade(use_mock=True, engines=["cocos", "ue5"], bus=bus)
+facade.event_bridge.subscribe("scene_changed", "cto")
+facade.event_bridge.subscribe("scene_changed", "qa")
+
+ev = EngineEvent(event_type="scene_changed", data={"scene": "main"}, engine="cocos")
+delivered = facade.event_bridge.emit(ev)
+assert call_counts["cto"] == 1, f"cto expected 1 got {call_counts['cto']}"
+assert call_counts["qa"] == 1, f"qa expected 1 got {call_counts['qa']}"
+assert set(delivered) == {"cto", "qa"}, delivered
+print(f"EMIT_ONCE_OK cto={call_counts['cto']} qa={call_counts['qa']}")
+PYEOF
+)
+if echo "$out" | grep -q "EMIT_ONCE_OK"; then
+  report "emit 单次投递（防双重投递）" 0
+else
+  report "emit 单次投递（防双重投递）" 1
+fi
+
+echo "== 9. execute 异常路径携带 command（防 TypeError 回归） =="
+out=$($PY - <<'PYEOF'
+from engine_integration import EngineIntegrationFacade
+from engine_bridge import EngineCommand, EngineCapability, EngineBridgeError
+
+facade = EngineIntegrationFacade(use_mock=True, engines=["cocos"])
+cmd = EngineCommand(capability=EngineCapability.SCENE_LOAD, params={"path": "Main.scene"})
+
+def boom(c, e=""):
+    raise EngineBridgeError("engine connect failed")
+facade._bridge.execute = boom
+r = facade.execute(cmd, "cocos")
+assert r.success is False, "should be failure"
+assert r.command is cmd, "command should be preserved"
+print(f"EXEC_ERR_OK success={r.success} error={r.error}")
+PYEOF
+)
+if echo "$out" | grep -q "EXEC_ERR_OK"; then
+  report "execute 异常路径携带 command" 0
+else
+  report "execute 异常路径携带 command" 1
+fi
+
 echo ""
 echo "=== 汇总 ==="
 echo "通过: $pass / $((pass+fail))"
