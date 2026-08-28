@@ -358,3 +358,30 @@ cat docs/岗位体系调研.md
 1. ✅ 消息总线 / Agent 内核 / 任务调度已落地为可运行模块
 2. ✅ reference_learner 对接基础设施并复用强化层，落地为可运行 Agent
 3. 🔜 接入 `message_bus` + `task_scheduler`，建立「策划→程序→测试」自动流水线
+
+---
+
+## 🎮 引擎桥接层（Engine Bridge）
+
+> 面向 **Windows + Cocos Creator + Unreal Engine 5** 引擎环境的统一桥接架构。
+> 通过 **MCP（Model Context Protocol）** 和 **引擎插件** 控制引擎，
+> 为游戏开发 Agent 系统提供引擎能力访问的标准化接口。
+
+**核心设计**：
+- **统一抽象**：Agent 使用同一套 `EngineCommand` 与 Cocos/UE5 交互，无需关心底层差异；
+- **MCP 优先**：首选通过 MCP 协议与引擎 MCP Server 通信；
+- **插件补充**：MCP 不可用时降级到引擎原生插件（Cocos Extension / UE5 Plugin）；
+- **Windows 适配**：路径探测、MCP 端点、进程管理均面向 Windows 环境；
+- **测试可验证**：35 项测试信号灯覆盖协议/环境/MCP/插件/适配器/门面。
+
+**模块**：`config/engine_bridge/`（protocol / mcp_client / plugin_adapter / engine_adapter / cocos_adapter / ue5_adapter / environment / bridge）
+
+```bash
+# 运行引擎桥接层测试
+bash game-studio-agents/tests/test_engine_bridge.sh
+
+# 运行引擎桥接层演示
+python3 game-studio-agents/config/engine_bridge/__init__.py
+```
+
+详见 [docs/engine-bridge/README.md](./docs/engine-bridge/README.md)。

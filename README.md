@@ -193,3 +193,25 @@ python3 game-studio-agents/config/agent_identity.py
 # 运行测试信号灯
 bash game-studio-agents/tests/test_agent_identity.sh
 ```
+
+---
+
+## 🎮 引擎桥接层（Engine Bridge）
+
+> 面向 **Windows + Cocos Creator + Unreal Engine 5** 引擎环境的统一桥接架构。
+> 通过 **MCP（Model Context Protocol）** 和 **引擎插件** 控制引擎，
+> 为游戏开发 Agent 系统提供引擎能力访问的标准化接口。
+
+**核心设计**：
+- **统一抽象**：Agent 使用同一套 `EngineCommand` 与 Cocos/UE5 交互，无需关心底层差异；
+- **MCP 优先**：首选通过 MCP 协议与引擎 MCP Server 通信；
+- **插件补充**：MCP 不可用时降级到引擎原生插件；
+- **Windows 适配**：面向 Windows 环境的路径探测与端点管理；
+- **测试可验证**：35 项测试信号灯覆盖全部模块。
+
+```bash
+# 运行引擎桥接层测试
+bash game-studio-agents/tests/test_engine_bridge.sh
+```
+
+详见 [game-studio-agents/docs/engine-bridge/README.md](./game-studio-agents/docs/engine-bridge/README.md)。

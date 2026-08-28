@@ -306,6 +306,7 @@ $:
             bash game-studio-agents/tests/test_agent_identity.sh
             bash game-studio-agents/tests/test_role_inventory.sh
             bash game-studio-agents/tests/test_role_inventory_handlers.sh
+            bash game-studio-agents/tests/test_engine_bridge.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
         - name: 自动分配评审人
