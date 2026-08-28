@@ -45,7 +45,7 @@ python3 game-studio-agents/api/main.py   # http://localhost:8000/docs
 
 ## 跨仓库 NPC 召唤指南
 
-本仓库的 NPC 角色（游戏向经理 / 代码审查员 / CodeBuddy）可在**其它仓库**跨仓库召唤，
+本仓库的 NPC 角色（游戏向经理 / 代码审查员 / 仓库处理专员 / CodeBuddy）可在**其它仓库**跨仓库召唤，
 无需在本仓库内操作。跨仓库 `@` 调用平台已原生支持，格式如下：
 
 ```
@@ -59,8 +59,9 @@ python3 game-studio-agents/api/main.py   # http://localhost:8000/docs
 | 角色 | 用途 |
 |------|------|
 | 游戏向经理 | 机制化拆解需求 / 派发部门工作包 / 推进协作 |
-| 代码审查员 | 审查 PR 代码质量 / 架构 / 安全 |
-| CodeBuddy | 评审修复 / 手动指令处理 |
+| 代码审查员 | 审查 PR 代码质量 / 架构 / 安全（只读） |
+| 仓库处理专员 | 本仓库修复/打标签唯一执行者（适合推送/合并/关闭） |
+| CodeBuddy | 评审修复 / 手动指令处理（通用兜底） |
 | 合并确认员 | 确认已合并标签 Issue 是否可关闭 / 需新提任务 |
 
 **六大部门 NPC（按流水线顺序）**
@@ -145,7 +146,7 @@ CNB 平台的 `@` 选择器只收录「已关注仓库中的 NPC」。要让角�
 
 ## 通用 Agent 身份自适应模块（AgentIdentity）
 
-本仓库所有 Agent（CodeBuddy / 代码审查员 / 游戏向经理 / 合并确认员）在需要
+本仓库所有 Agent（仓库处理专员 / CodeBuddy / 代码审查员 / 游戏向经理 / 合并确认员）在需要
 `@` 召唤其他角色时，**必须**先通过 [agent_identity.py](./game-studio-agents/config/agent_identity.py)
 自适应识别当前仓库上下文，再据此生成正确的召唤格式。
 
