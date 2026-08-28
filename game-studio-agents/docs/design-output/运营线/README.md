@@ -15,7 +15,31 @@
 | wp_engine_ops | ops | data_analyst + game_operator + reference_learner | 引擎桥接层接入对外数据同步与运营部署 | ✅ DONE |
 | wp_engine_adaptation_ops | ops | data_analyst + game_operator + reference_learner | 双引擎适配底座接入对外数据同步与运营部署 | ✅ DONE |
 
-## 二、组内分工表
+
+## 二、PR #89 下游解锁 · 本轮承接记录
+
+| 工作包 | 状态 | 说明 |
+|--------|------|------|
+| wp_engine_ops（D2 真机接入对外部署） | ✅ DONE | PR89 引擎桥接层 P1 修复后生产就绪，wp_engine_ops 由 D1 Mock 推进到 D2 真机接入对外部署，程序线 wp_engine_bridge_verify + 项目管理 wp_engine_release 发版门禁复验 GO 后级联解锁，经 @分工 拆派 data_analyst + game_operator + reference_learner 完成 |
+
+详细见：`wp_engine_ops_D2_真机接入对外部署_PR89.md`
+
+## 三、组内分工表（PR89 本轮）
+
+| 子任务 | 承接角色 | 内容 | 状态 |
+|--------|---------|------|:----:|
+| wp_engine_ops_d2_pr89__sub1 | data_analyst | 真机接入对外数据口径与埋点对接 | ✅ DONE |
+| wp_engine_ops_d2_pr89__sub2 | game_operator | 真机接入对外部署与沟通策略 | ✅ DONE |
+| wp_engine_ops_d2_pr89__sub3 | reference_learner | 真机接入影响调研与借鉴 | ✅ DONE |
+
+## 四、跨部门协作（PR89 本轮）
+
+| 协作方向 | 部门 | 协作内容 | 状态 |
+|---------|------|---------|:----:|
+| 上游消费 | 程序线 | 消费 wp_engine_bridge_verify 生产就绪验证结论做真机接入技术依据 | ✅ 已消费 |
+| 上游消费 | 项目管理 | 消费 wp_engine_release 发版门禁复验 GO 结论做真机接入放行依据 | ✅ 已消费 |
+
+## 五、组内分工表
 
 | 子任务 | 承接角色 | 产出物文件 | 状态 |
 |--------|---------|-----------|------|
