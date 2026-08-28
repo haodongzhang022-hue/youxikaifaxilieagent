@@ -19,6 +19,7 @@ MODULES=(
     "test_mod_dispatch.sh"
     "test_mod_game_producer.sh"
     "test_mod_department_agents.sh"
+    "test_mod_engine_adaptation.sh"
     "test_mod_progress_pusher.sh"
     "test_mod_release_gate.sh"
     "test_mod_ecosystem_roles.sh"

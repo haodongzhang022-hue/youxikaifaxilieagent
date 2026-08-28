@@ -373,6 +373,16 @@ class UnrealEngineAdapter(EngineAdapter):
                 max_size_mb=5.0,
                 notes="C++ 源码（模块/类）",
             ),
+            ResourceSpec(
+                engine=EngineType.UNREAL_ENGINE,
+                resource_type="map",
+                extension=".umap",
+                import_dir="Content/Maps",
+                export_dir="Saved/Cooked/",
+                build_tool="RunUAT BuildCookRun",
+                max_size_mb=200.0,
+                notes="关卡地图资源（.umap）",
+            ),
         ]
 
     def resource_import_path(self, resource_type: str) -> str:
@@ -383,6 +393,7 @@ class UnrealEngineAdapter(EngineAdapter):
             "animation": "Content/Animations",
             "blueprint": "Content/Blueprints",
             "script": "Source/",
+            "map": "Content/Maps",
         }
         return mapping.get(resource_type, "Content/")
 

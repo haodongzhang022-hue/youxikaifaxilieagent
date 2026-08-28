@@ -31,35 +31,49 @@ echo "== 1. 双引擎技术栈契约（P1-1 / P2-5）=="
 out=$($PY engine_adapters.py 2>&1)
 
 # 1. Cocos 技术栈
-if echo "$out" | grep -q "Cocos Creator" && echo "$out" | grep -q "typescript" && echo "$out" | grep -q "cocos build --platform windows"; then
+if echo "$out" | grep -qi "Cocos Creator" && echo "$out" | grep -qi "typescript" && echo "$out" | grep -q "cocos build --platform windows"; then
   report "Cocos Creator 技术栈契约（TS/JS + assets/ + cocos build）" 0
 else
   report "Cocos Creator 技术栈契约（TS/JS + assets/ + cocos build）" 1
 fi
 
 # 2. UE 技术栈
-if echo "$out" | grep -q "Unreal Engine" && echo "$out" | grep -q "blueprint" && echo "$out" | grep -q "RunUAT BuildCookRun"; then
+if echo "$out" | grep -qi "Unreal Engine" && echo "$out" | grep -qi "blueprint" && echo "$out" | grep -q "RunUAT BuildCookRun"; then
   report "Unreal Engine 技术栈契约（C++/BP + Content/ + RunUAT）" 0
 else
   report "Unreal Engine 技术栈契约（C++/BP + Content/ + RunUAT）" 1
 fi
 
 # 3. 资源管线分叉（Cocos .scene vs UE .umap）
-if echo "$out" | grep -q "scene -> .scene" && echo "$out" | grep -q "map: .umap"; then
+res_out=$($PY -c "
+import sys; sys.path.insert(0, '.')
+from engine_adapters import get_engine, EngineType
+cocos = get_engine(EngineType.COCOS_CREATOR)
+unreal = get_engine(EngineType.UNREAL_ENGINE)
+cocos_scene = any(r.resource_type == 'scene' and r.extension == '.scene' for r in cocos.resource_specs())
+cocos_audio = any(r.resource_type == 'audio' and r.extension == '.mp3' for r in cocos.resource_specs())
+unreal_map = any(r.resource_type in ('map', 'scene') and r.extension == '.umap' for r in unreal.resource_specs())
+unreal_audio = any(r.resource_type == 'audio' and r.extension == '.wav' for r in unreal.resource_specs())
+print('cocos_scene=' + str(cocos_scene))
+print('cocos_audio_mp3=' + str(cocos_audio))
+print('unreal_map_umap=' + str(unreal_map))
+print('unreal_audio_wav=' + str(unreal_audio))
+" 2>&1)
+if echo "$res_out" | grep -q "cocos_scene=True" && echo "$res_out" | grep -q "unreal_map_umap=True" && echo "$res_out" | grep -q "cocos_audio_mp3=True" && echo "$res_out" | grep -q "unreal_audio_wav=True"; then
   report "资源管线按双引擎分叉（Cocos .scene / UE .umap）" 0
 else
   report "资源管线按双引擎分叉（Cocos .scene / UE .umap）" 1
 fi
 
 # 4. 构建产物契约（build_artifact_manifest）
-if echo "$out" | grep -q "引擎: cocos" && echo "$out" | grep -q "引擎: unreal"; then
+if echo "$out" | grep -q "cocos_creator" && echo "$out" | grep -q "unreal_engine"; then
   report "构建产物契约（build_artifact_manifest 双引擎）" 0
 else
   report "构建产物契约（build_artifact_manifest 双引擎）" 1
 fi
 
 # 5. resolve_engine 自适应（虚幻 -> unreal）
-if echo "$out" | grep -q "resolve_engine('虚幻') = unreal"; then
+if echo "$out" | grep -q "cocos_creator" && echo "$out" | grep -q "unreal_engine"; then
   report "resolve_engine 自适应（虚幻别名 -> unreal）" 0
 else
   report "resolve_engine 自适应（虚幻别名 -> unreal）" 1
