@@ -4,3 +4,7 @@ __pycache__/
 # 参考克隆项目（探索用，非交付物）
 claude-code-game-studios/
 dongjiagoushi/
+
+# Python
+__pycache__/
+*.pyc
