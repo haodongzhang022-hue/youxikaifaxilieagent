@@ -1,24 +1,24 @@
 # ============================================================
 # 部门派发路由决策模块 (DepartmentRouting)
-# 版本: v1.0
+# 版本: v2.0
 # 说明: 解决「无工作部门凑热闹」问题——每次编排不再无条件触发全部
-#       六大部门，而是由一个**路由决策**环节，依据"工作内容匹配"规则
+#       六大部门，而是由一个**路由决策**环节，依据"显性声明"规则
 #       精准判定本轮应触发哪些部门，只有被命中的部门才被派发/执行。
 #
-# 核心能力:
-#   1. route_by_content(): 按工作内容(标题/正文/改动描述) 关键词规则
-#       匹配 → 返回本轮应触发的部门清单；
-#   2. route_by_deps():     按依赖解锁结果 → 返回应解锁的下游部门；
-#   3. route():             综合内容匹配 + 依赖解锁 + 明确点名，
-#       输出最终 active_departments 路由清单；
-#   4. is_department_active(): 供流水线 stage 的 if 条件判断本部门
-#       是否被路由命中，未命中则整体跳过（不再凑热闹）。
+# v2.0 核心变更（修复关键词匹配误判）:
+#   1. 引入「显性声明」语法：`%部门名`（如 `%测试线`）才是有效的
+#      触发标记。正文中普通提及部门名（如"测试线验收中"标签）不再触发。
+#   2. 移除普通关键词匹配（v1.0 的 DEPT_RULES 关键词匹配已废弃），
+#      避免"提及"与"分配"混淆导致的误判。
+#   3. `manually_requested`（@部门名 点名）仍为最高优先级，必触发。
+#   4. 依赖解锁（deps_unlocked）仍然有效——上游验收解锁下游部门。
+#   5. `route_from_env()` 不再拼接 labels 到匹配内容，
+#      避免 CI 平台注入的状态标签（如"测试线验收中"）导致误判。
 #
 # 路由规则原则:
-#   - 明确点名(manually_requested) 优先：人类/上游点名某部门 → 必触发；
-#   - 工作内容匹配(rule) 兜底：标题/正文命中部门关键词 → 触发该部门；
-#   - 依赖解锁(deps_unlocked) 补充：上游验收通过 → 解锁下游部门；
-#   - 未命中任何规则 → 不触发（缺省不派发，杜绝无意义凑热闹）。
+#   - 显性声明 (%部门名) / 明确点名 (@部门名)  → 必触发；
+#   - 依赖解锁 (deps_unlocked)                → 解锁下游部门；
+#   - 其他情况                                 → 不触发（缺省不派发）。
 #
 # 语言: Python 3 (可运行)
 # 依赖: 无外部依赖（纯标准库）
@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import re
+import os
 from typing import Any, Dict, List, Optional, Set
 
 # 部门中文名 → 内部键（与 game_producer_agent / roles.yaml 对齐）
@@ -34,130 +35,50 @@ DEPT_KEY_BY_NAME = {
     "测试线": "qa", "项目管理": "pm", "运营线": "ops",
 }
 
-# ============================================================
-# 部门 → 工作内容关键词匹配规则表
-# 每个部门列出其职责强相关关键词；工作内容命中越多 → 越应触发该部门。
-# 按"职责强绑定"设计，避免无关任务误触发（如"美术总是无工作凑热闹"）。
-# ============================================================
-DEPT_RULES: Dict[str, Dict[str, Any]] = {
-    "策划线": {
-        "keywords": [
-            "玩法", "系统设计", "数值", "经济", "关卡", "剧情", "世界观",
-            "战斗机制", "技能", "NPC AI", "任务文案", "设计文档", "gameplay",
-            "level_design", "narrative", "combat_designer", "balance",
-        ],
-        "modules": ["gameplay", "numeric_model", "narrative", "combat", "level"],
-    },
-    "程序线": {
-        "keywords": [
-            "客户端", "服务端", "引擎", "渲染", "AI", "工具链", "接口",
-            "bug修复", "代码", "实现", "重构", "client", "server", "engine",
-            "backend", "frontend", "api", "refactor", "编码", "性能优化",
-        ],
-        "modules": ["client", "server", "engine", "ai_logic", "tools"],
-    },
-    "美术线": {
-        "keywords": [
-            "美术", "原画", "建模", "动画", "特效", "UI", "场景", "音频",
-            "视觉", "贴图", "材质", "3D", "角色资产", "art", "concept",
-            "modeling", "animation", "vfx", "ui_ux", "audio", "tech_artist",
-        ],
-        "modules": ["art_direction", "ui_ux", "audio"],
-    },
-    "测试线": {
-        "keywords": [
-            "测试", "验收", "回归", "质量", "QA", "自动化测试", "测试报告",
-            "信号灯", "冒烟", "性能测试", "case", "断言", "test", "qa",
-            "regression", "验收报告",
-        ],
-        "modules": ["testing"],
-    },
-    "项目管理": {
-        "keywords": [
-            "发版", "版本", "里程碑", "门禁", "排期", "验收", "闭环", "发布计划",
-            "release", "milestone", "gate", "plan", "schedule", "project_manager",
-        ],
-        "modules": ["release"],
-    },
-    "运营线": {
-        "keywords": [
-            "运营", "数据分析", "竞品", "生态", "市场", "推广", "指标",
-            "洞察", "运营策略", "数据", "ops", "data", "market", "运营部署",
-        ],
-        "modules": ["data_ops"],
-    },
-}
+# 显性声明前缀（类似于 @ 的部门点名语法，用于区分"提及"与"分配"）
+EXPLICIT_PREFIX = "%"
 
-# 汇总所有部门名，供校验
+# 所有部门名（有序）
 ALL_DEPARTMENTS = list(DEPT_KEY_BY_NAME.keys())
 
-
 # ============================================================
-# 关键词命中打分
+# 显性声明匹配
 # ============================================================
 
-def _compile_keywords(keywords: List[str]) -> re.Pattern:
-    """把关键词列表编译为大小写不敏感的正则。"""
-    escaped = [re.escape(kw) for kw in keywords]
-    return re.compile("|".join(escaped), re.IGNORECASE)
+def _extract_explicit_depts(text: str) -> List[str]:
+    """从文本中提取显性声明（%部门名）的部门清单。
 
-
-# 预编译每个部门的匹配模式
-_DEPT_PATTERNS = {
-    dept: _compile_keywords(rule["keywords"])
-    for dept, rule in DEPT_RULES.items()
-}
-
-
-def _count_hits(text: str, dept: str) -> int:
-    """统计文本命中某部门关键词的次数。"""
-    if not text:
-        return 0
-    return len(_DEPT_PATTERNS[dept].findall(text))
-
-
-def route_by_content(text: str, threshold: int = 1) -> List[str]:
-    """按工作内容关键词匹配，返回应触发的部门清单。
-
-    Args:
-        text: 工作内容文本（Issue 标题+正文 / PR 描述 / 改动说明）。
-        threshold: 命中次数达到该值即触发（默认 1）。
-
-    Returns:
-        命中的部门中文名列表。
+    规则：`%测试线`、`%美术线` 等带 % 前缀的部门名
+    才视为显性声明。正文中裸提及（如"测试线验收中"）不触发。
     """
     if not text:
         return []
-    hits: Dict[str, int] = {}
+    found: List[str] = []
     for dept in ALL_DEPARTMENTS:
-        n = _count_hits(text, dept)
-        if n >= threshold:
-            hits[dept] = n
-    # 按命中次数降序，越相关越靠前
-    return [d for d, _ in sorted(hits.items(), key=lambda kv: -kv[1])]
+        # 匹配 %部门名（允许有空格）
+        pattern = re.compile(
+            re.escape(EXPLICIT_PREFIX) + r'\s*' + re.escape(dept),
+            re.IGNORECASE
+        )
+        if pattern.search(text):
+            found.append(dept)
+    return found
 
 
-def route_by_deps(deps_unlocked: List[str]) -> List[str]:
-    """按依赖解锁结果，返回应解锁的下游部门。
-
-    Args:
-        deps_unlocked: 已解锁的下游工作包 id 列表（wp_xxx）。
-
-    Returns:
-        应触发的部门中文名列表。
-    """
-    if not deps_unlocked:
+def _extract_manual_requested(text: str) -> List[str]:
+    """从文本中提取 @部门名 点名的部门清单（最高优先级）。"""
+    if not text:
         return []
-    active: List[str] = []
-    for dept, rule in DEPT_RULES.items():
-        # 工作包 id 以部门模块名开头（如 wp_engine / wp_art_testing）
-        for module in rule["modules"]:
-            for wp in deps_unlocked:
-                if wp == module or wp.startswith(f"wp_{module}"):
-                    if dept not in active:
-                        active.append(dept)
-                    break
-    return active
+    found: List[str] = []
+    for dept in ALL_DEPARTMENTS:
+        # 匹配 @部门名（允许空格）
+        pattern = re.compile(
+            r'@\s*' + re.escape(dept),
+            re.IGNORECASE
+        )
+        if pattern.search(text):
+            found.append(dept)
+    return found
 
 
 # ============================================================
@@ -172,15 +93,20 @@ def route(
     deps_unlocked: Optional[List[str]] = None,
     manually_requested: Optional[List[str]] = None,
     threshold: int = 1,
+    include_content_match: bool = True,
 ) -> Dict[str, Any]:
     """综合路由决策：输出本轮应触发的部门清单。
 
-    决策优先级（高→低）:
-      1. manually_requested：人类/上游明确点名某部门 → 必触发；
-      2. route_by_content：工作内容命中部门关键词 → 触发；
-      3. route_by_deps：上游验收解锁下游工作包 → 触发下游部门。
+    v2.0 决策规则:
+      1. 显性声明（%部门名）：正文中出现 `%测试线` 等 → 触发该部门；
+      2. 明确点名（@部门名 / manually_requested）：最高优先级 → 必触发；
+      3. 依赖解锁（deps_unlocked）：上游验收解锁下游 → 触发下游部门。
 
-    结果:
+    注意：
+      - v1.0 的「普通关键词匹配」已废弃——裸提及部门名不触发。
+      - `include_content_match` 保留为兼容参数（默认 True 但已不影响行为）。
+
+    Returns:
       {
         "active_departments": [...],   # 本轮应触发的部门（有序）
         "inactive_departments": [...], # 本轮应跳过的部门
@@ -188,22 +114,24 @@ def route(
         "all_departments": [...],
       }
     """
-    # 汇总内容文本（标题+正文+PR描述+变更文件路径）
+    # 汇总内容文本（标题+正文+PR描述）
     parts = [issue_title or "", issue_body or "", pr_description or ""]
-    if changed_files:
-        parts.append(" ".join(changed_files))
     content = " ".join([p for p in parts if p])
 
-    matched_content = route_by_content(content, threshold=threshold)
-    matched_deps = route_by_deps(deps_unlocked or [])
+    # 1. 显性声明匹配（%部门名）
+    explicit_depts = _extract_explicit_depts(content)
 
-    # 明确点名（最高优先级）
+    # 2. 明确点名（@部门名 或 manually_requested 参数）
     requested = set(manually_requested or [])
+    requested |= set(_extract_manual_requested(content))
+
+    # 3. 依赖解锁
+    matched_deps = _route_by_deps(deps_unlocked or [])
 
     # 合并命中部门（保持部门流水线顺序）
     active: List[str] = []
     for dept in ALL_DEPARTMENTS:  # 按固定部门顺序，保证输出稳定
-        if dept in requested or dept in matched_content or dept in matched_deps:
+        if dept in requested or dept in explicit_depts or dept in matched_deps:
             active.append(dept)
 
     inactive = [d for d in ALL_DEPARTMENTS if d not in active]
@@ -212,12 +140,43 @@ def route(
         "active_departments": active,
         "inactive_departments": inactive,
         "matched": {
-            "content": matched_content,
+            "explicit": explicit_depts,
             "deps": matched_deps,
             "requested": list(requested),
         },
         "all_departments": list(ALL_DEPARTMENTS),
     }
+
+
+def _route_by_deps(deps_unlocked: List[str]) -> List[str]:
+    """按依赖解锁结果，返回应解锁的下游部门。
+
+    Args:
+        deps_unlocked: 已解锁的下游工作包 id 列表（wp_xxx）。
+
+    Returns:
+        应触发的部门中文名列表。
+    """
+    if not deps_unlocked:
+        return []
+    # 部门 → 工作包模块前缀
+    DEPT_MODULES = {
+        "策划线": ["gameplay", "numeric_model", "narrative", "combat", "level"],
+        "程序线": ["client", "server", "engine", "ai_logic", "tools"],
+        "美术线": ["art_direction", "ui_ux", "audio", "art"],
+        "测试线": ["testing", "test", "qa"],
+        "项目管理": ["release", "plan", "gate"],
+        "运营线": ["data_ops", "ops"],
+    }
+    active: List[str] = []
+    for dept, modules in DEPT_MODULES.items():
+        for module in modules:
+            for wp in deps_unlocked:
+                if wp == module or wp.startswith(f"wp_{module}"):
+                    if dept not in active:
+                        active.append(dept)
+                    break
+    return active
 
 
 def is_department_active(route_result: Dict[str, Any], dept_name: str) -> bool:
@@ -239,74 +198,11 @@ def active_to_marker_file(route_result: Dict[str, Any], path: str) -> str:
     未命中部门 stage 整体跳过（杜绝无工作凑热闹）。
     返回写入的清单字符串。
     """
-    import os
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     content = serialize_active(route_result)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content + "\n")
     return content
-
-
-# ============================================================
-# 命令行演示（可直接 python routing.py 运行）
-# ============================================================
-
-def demo() -> None:
-    print("== 部门派发路由决策演示 ==")
-    print("六大部门:", ALL_DEPARTMENTS)
-    print()
-
-    # 场景1: 纯程序类 Issue（美术/测试不应凑热闹）
-    r1 = route(
-        issue_title="修复服务端接口并发 bug",
-        issue_body="涉及 server 端接口逻辑与引擎适配，需要代码实现与性能优化。",
-    )
-    print("场景1(服务端bug) 触发:", r1["active_departments"],
-          "| 跳过:", r1["inactive_departments"])
-    assert "美术线" not in r1["active_departments"], "美术线不应被无关任务触发"
-
-    # 场景2: 纯美术类 Issue（程序/测试不应凑热闹）
-    r2 = route(
-        issue_title="角色原画与 3D 建模规范",
-        issue_body="制定角色资产美术风格，含原画、建模、贴图材质。",
-    )
-    print("场景2(美术) 触发:", r2["active_departments"],
-          "| 跳过:", r2["inactive_departments"])
-    assert "美术线" in r2["active_departments"]
-    assert "程序线" not in r2["active_departments"], "程序线不应被美术任务触发"
-
-    # 场景3: 上游解锁下游（依赖驱动）
-    r3 = route(
-        issue_body="策划线 gameplay 设计文档已验收，解锁下游实现。",
-        deps_unlocked=["wp_gameplay", "wp_engine"],
-    )
-    print("场景3(依赖解锁) 触发:", r3["active_departments"])
-    assert "策划线" in r3["active_departments"]
-    assert "程序线" in r3["active_departments"]
-
-    # 场景4: 明确点名（最高优先级）
-    r4 = route(
-        issue_body="机制改动，未命中明显部门关键词",
-        manually_requested=["美术线"],
-    )
-    print("场景4(点名美术) 触发:", r4["active_departments"])
-    assert "美术线" in r4["active_departments"]
-
-    # 场景5: 完全无关 → 不触发任何部门（杜绝凑热闹）
-    r5 = route(issue_title="环境配置说明")
-    print("场景5(无关) 触发:", r5["active_departments"],
-          "| 跳过:", r5["inactive_departments"])
-    assert r5["active_departments"] == [], "无关任务不应触发任何部门"
-
-    # is_department_active 校验
-    assert is_department_active(r1, "程序线") is True
-    assert is_department_active(r1, "美术线") is False
-    assert is_department_active(r5, "策划线") is False
-
-    print()
-    print("🟢 部门派发路由决策演示通过")
-
-
 
 
 # ============================================================
@@ -316,12 +212,10 @@ def demo() -> None:
 def route_from_env(threshold: int = 1) -> Dict[str, Any]:
     """从 CNB 流水线环境变量读取 Issue/PR 信息，执行路由决策。
 
-    自动按触发事件区分数据源：
-      - CNB_EVENT 含 "issue" → 只读 CNB_ISSUE_TITLE / CNB_ISSUE_DESCRIPTION / CNB_ISSUE_LABELS
-      - CNB_EVENT 含 "pull_request" → 只读 CNB_PULL_REQUEST_TITLE / CNB_PULL_REQUEST_DESCRIPTION
-      - 其他情况 → 优先 Issue 变量，回退到 PR 变量
+    v2.0 变更：
+      - 不再将 CNB_ISSUE_LABELS 拼入内容参与匹配（避免状态标签误判）。
+      - 只读取标题/描述，按 %部门名 显性声明 / @部门名 点名 / 依赖解锁 触发。
     """
-    import os
     event = os.getenv("CNB_EVENT", "")
     is_issue = "issue" in event
     is_pr = "pull_request" in event or "merge" in event
@@ -329,20 +223,19 @@ def route_from_env(threshold: int = 1) -> Dict[str, Any]:
     if is_issue:
         title = os.getenv("CNB_ISSUE_TITLE", "")
         body = os.getenv("CNB_ISSUE_DESCRIPTION", "")
-        labels = os.getenv("CNB_ISSUE_LABELS", "")
     elif is_pr:
         title = os.getenv("CNB_PULL_REQUEST_TITLE", "")
         body = os.getenv("CNB_PULL_REQUEST_DESCRIPTION", "")
-        labels = os.getenv("CNB_ISSUE_LABELS", "")
     else:
         # 兜底：优先 Issue 变量，回退到 PR 变量
         title = os.getenv("CNB_ISSUE_TITLE", "") or os.getenv("CNB_PULL_REQUEST_TITLE", "")
         body = os.getenv("CNB_ISSUE_DESCRIPTION", "") or os.getenv("CNB_PULL_REQUEST_DESCRIPTION", "")
-        labels = os.getenv("CNB_ISSUE_LABELS", "")
 
-    if labels:
-        body = f"{body} {labels}".strip()
-    return route(issue_title=title, issue_body=body, pr_description="", threshold=threshold)
+    # 从环境变量读取依赖解锁信息（可选）
+    deps_str = os.getenv("CNB_DEPS_UNLOCKED", "")
+    deps = [d.strip() for d in deps_str.split(",") if d.strip()] if deps_str else None
+
+    return route(issue_title=title, issue_body=body, pr_description="", deps_unlocked=deps, threshold=threshold)
 
 
 def cli_main() -> None:
@@ -388,6 +281,59 @@ def cli_main() -> None:
 
     print(f"未知命令: {cmd}", file=sys.stderr)
     sys.exit(2)
+
+
+# ============================================================
+# 命令行演示（可直接 python routing.py 运行）
+# ============================================================
+
+def demo() -> None:
+    print("== 部门派发路由决策演示 (v2.0 显性声明机制) ==")
+    print("六大部门:", ALL_DEPARTMENTS)
+    print()
+
+    # 场景1: 显性声明 %测试线 → 触发
+    r1 = route(issue_body="请 %测试线 完成回归验证")
+    print("场景1(%测试线显性声明) 触发:", r1["active_departments"])
+    assert "测试线" in r1["active_departments"]
+
+    # 场景2: 裸提及部门名（如"测试线验收中"标签）→ 不触发
+    r2 = route(issue_title="职责明确（测试线验收中 美术线验收中）")
+    print("场景2(裸提及标签) 触发:", r2["active_departments"],
+          "| 跳过:", r2["inactive_departments"])
+    assert r2["active_departments"] == [], "裸提及部门名不应触发"
+
+    # 场景3: 明确点名 @美术线 → 必触发
+    r3 = route(issue_body="机制改动，@美术线 请协助", manually_requested=[])
+    print("场景3(@美术线点名) 触发:", r3["active_departments"])
+    assert "美术线" in r3["active_departments"]
+
+    # 场景4: 依赖解锁 → 触发下游部门
+    r4 = route(issue_body="上游验收通过", deps_unlocked=["wp_gameplay", "wp_engine"])
+    print("场景4(依赖解锁) 触发:", r4["active_departments"])
+    assert "策划线" in r4["active_departments"]
+    assert "程序线" in r4["active_departments"]
+
+    # 场景5: 完全无关 → 不触发任何部门
+    r5 = route(issue_title="环境配置说明")
+    print("场景5(无关) 触发:", r5["active_departments"],
+          "| 跳过:", r5["inactive_departments"])
+    assert r5["active_departments"] == [], "无关任务不应触发任何部门"
+
+    # 场景6: %部门名 显式声明与普通提及共存 → 只触发显式的
+    r6 = route(issue_body="美术线验收中 请 %测试线 完成回归，同时需要 @程序线 修复")
+    print("场景6(混合) 触发:", r6["active_departments"])
+    assert "测试线" in r6["active_departments"]
+    assert "程序线" in r6["active_departments"]
+    assert "美术线" not in r6["active_departments"], "裸提及美术线不应触发"
+
+    # is_department_active 校验
+    assert is_department_active(r1, "测试线") is True
+    assert is_department_active(r2, "美术线") is False
+    assert is_department_active(r5, "策划线") is False
+
+    print()
+    print("🟢 部门派发路由决策演示通过")
 
 
 if __name__ == "__main__":
