@@ -312,15 +312,12 @@ $:
       stages:
         - name: 测试信号灯
           script: |
-            # 【不全量回归】只跑核心汇总护栏 + 本 PR 变更相关的值得测的测试。
-            # 理由：开发时已做本地测试；已通过的用例不重复回归；遇到问题再触发修。
-            # 用 test_all_modules.sh 汇总入口覆盖核心模块验收，避免逐个脚本重复执行。
+            # 【变更范围感知】只跑受本次变更影响的测试脚本，
+            # 避免每次 PR 推送全量跑 31+ 测试脚本造成 CPU 浪费。
+            # 由 scripts/change-aware-test.sh 基于 git diff + TestRegistry 选择受影响测试。
             pip install -q -r game-studio-agents/api/requirements.txt
-            # 核心模块汇总验收（单入口，覆盖消息总线/调度/经理/部门/派发/引擎等）
-            bash game-studio-agents/tests/modules/test_all_modules.sh
-            # 本 PR 新增的部门路由护栏
-            bash game-studio-agents/tests/test_routing.sh
-            # API 自测（独立于模块的接口层）
+            bash scripts/change-aware-test.sh
+            # API 契约测试（独立于变更感知的轻量护栏，始终执行）
             bash game-studio-agents/api/test_api.sh
         - name: 自动分配评审人
           type: git:reviewer
@@ -917,6 +914,17 @@ $:
 #   crontab 事件必须放在具体分支名下（此处放 main）。
 #   频率: 每周一 06:00 Asia/Shanghai（已按"没变化不用跑"降低频率，可调整 cron 表达式）
 main:
+  push:
+    - name: full-regression-on-merge
+      docker:
+        image: *npc_image
+      stages:
+        - name: 全量回归兜底
+          script: |
+            # PR 合并后（main.push）执行全量回归，保证质量兜底。
+            # 变更范围感知仅在 PR 阶段做增量，合并后需全量验证。
+            pip install -q -r game-studio-agents/api/requirements.txt
+            bash scripts/change-aware-test.sh --all
   "crontab: 0 6 * * 1":
     - name: merged-confirm-sweep
       docker:
