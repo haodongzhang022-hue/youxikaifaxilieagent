@@ -21,6 +21,13 @@
 | wp_engine_adaptation_pm | ✅ DONE | 双引擎适配底座项目管理架构里程碑验收，测试线 wp_engine_adaptation_qa 验收通过后解锁，经 @分工 拆派 project_manager + release_manager 完成 |
 
 详细见：`承接报告_PR86_项目管理_wp_engine_adaptation_pm.md`
+## 二、PR #89 下游解锁 · 本轮承接记录
+
+| 工作包 | 状态 | 说明 |
+|--------|------|------|
+| wp_engine_release（发版门禁复验） | ✅ DONE | PR89 P1 修复后发版门禁复验签核（GO），程序线 wp_engine_bridge_verify 生产就绪验证通过后解锁，经 @分工 拆派 project_manager + release_manager 完成 |
+
+详细见：`承接报告_PR89_项目管理_wp_engine_release_发版门禁复验.md`
 
 ## 三、组内分工表
 

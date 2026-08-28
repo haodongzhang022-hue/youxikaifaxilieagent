@@ -45,3 +45,25 @@
 ## 五、发版决策点
 
 > 引擎桥接层为「预留基础设施 + 已接入流水线」，发版门禁 GO 后，后续真实引擎接入由程序线在真机环境验证，本项目当前以 Mock 模式完成架构闭环。
+
+---
+
+## 六、PR #89 P1 修复后发版门禁复验（release_manager 复签）
+
+**复验触发**：PR #89（`fix: 修复引擎桥接层集成P1问题（emit双重投递/execute异常路径TypeError）`）合并后，
+程序线 `wp_engine_bridge_verify` 生产就绪验证通过，项目管理对发版门禁做 P1 修复后复验签核。
+
+**复验结论：GO ✅（发版门禁维持放行）**
+
+**复验依据**：
+- `emit()` 单次投递修复验证通过（每个订阅方恰好收到 1 次事件，无双重投递）；
+- `execute()` 异常路径修复验证通过（返回携带 command 的 EngineResult，不抛 TypeError）；
+- 全量测试信号灯回归通过：
+  - `test_engine_bridge_integration.sh` 9/9、`test_engine_bridge.sh` 35/35、
+  - `test_engine_adapters.sh` 16/16、`test_engine_adaptation.sh` 17/17、
+  - `test_dept_npc_pipeline.sh` 16/16、`test_release_gate.sh` 6/6；
+- 发版门禁 `run_release_gate()` 返回 **GO / 全链路产出达标**（market_preview 3/3、ecosystem_roles 3/3、progress_pusher 4/4）。
+
+**复验签核**：project_manager（里程碑复核）+ release_manager（门禁复验 GO）✅
+
+详细见：`承接报告_PR89_项目管理_wp_engine_release_发版门禁复验.md`
