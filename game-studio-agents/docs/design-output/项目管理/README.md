@@ -1,7 +1,6 @@
 # 项目管理 · 承接产出
 
-> 场景：PR #76 合并后，测试线 wp_handler_qa 验收通过 → 游戏向经理解锁下游 → 项目管理验收评审-修复闭环与仓库处理专员职责边界。
-> 项目管理部门统一头承接，经协作工作台 @分工 留痕（group_audit），由 project_manager 执行。
+> 项目管理部门统一头承接，经协作工作台 @分工 留痕（group_audit），由 project_manager / release_manager 执行。
 
 ## 一、承接工作包
 
@@ -12,7 +11,15 @@
 | wp_release_plan | release | project_manager | wp_release_plan_发版计划.md |
 | wp_release_gate | release | release_manager | wp_release_gate_发版门禁.md |
 
-## 二、组内分工表
+## 二、PR #82 下游解锁 · 本轮承接记录
+
+| 工作包 | 状态 | 说明 |
+|--------|------|------|
+| wp_engine_adaptation_pm | ⛔ 未解锁 | 测试线 wp_engine_adaptation_qa 打回（程序线 PR#87 未合入），PM 工作包未解锁，本轮跳过 |
+
+详细见：`承接报告_PR82_跳过.md`
+
+## 三、组内分工表
 
 | 子任务 | 承接角色 | 产出物文件 |
 |--------|---------|-----------|
@@ -21,9 +28,10 @@
 | 发版计划/里程碑 | project_manager | wp_release_plan_发版计划.md |
 | 发版门禁检查 | release_manager | wp_release_gate_发版门禁.md |
 
-## 三、跨部门协作
+## 四、跨部门协作
 
 | 协作方向 | 部门 | 协作内容 | 触发时机 |
 |---------|------|---------|---------|
 | 上游消费 | 测试线/程序线/美术线 | 消费回归结论做验收依据 | 测试验收通过后 |
 | 下游解锁 | 运营线 | wp_review_ops + wp_handler_ops 对外同步 | PM 验收通过后 |
+| 前置依赖 | 程序线 | PR #87 wp_engine_adaptation_integration 合入 | 解锁 PM 工作包前置条件 |
