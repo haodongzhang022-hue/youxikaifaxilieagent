@@ -78,3 +78,45 @@
 - 与既有 8 个美术设计方案（美术风格总纲/原画/建模/动画/特效/UI/场景/音频）共同构成美术线完整承接体系。
 
 **交付建议**：wp_review_ux 验收通过后，解锁下游 → 测试线 wp_review_qa 做验收评审无推送动作/权限边界回归。
+
+---
+
+## 五、本轮新增承接（PR #79 合并后 · wp_engine_art_verification 引擎资源管线验证）
+
+**结论：✅ 通过（产出 wp_engine_art_verification）**
+
+| 工作包 | 名称 | 主责角色 | 产出物 | 状态 |
+|--------|------|----------|--------|------|
+| wp_engine_art_verification | 美术线引擎资源验证（Cocos/UE 资源管线正确性） | art_director + tech_artist | wp_engine_art_verification_引擎资源管线验证.md | ✅ DONE |
+
+> **组内协作判定**：本包聚焦引擎资源管线正确性验证（art_director 主责 + tech_artist/audio_designer 协办），
+> 经协作工作台 @分工 拆派执行。
+
+### 组内分工表
+
+| 子任务 | 承接角色 | 内容 | 状态 |
+|--------|---------|------|:---:|
+| 引擎资源规范核对 | art_director | 双引擎（Cocos/UE）资源类型/扩展名/导入路径核对 | ✅ DONE |
+| audio_resource_extension 修复验证 | tech_artist | 程序线修复后正确性验证（Cocos→.mp3 / UE→.wav） | ✅ DONE |
+| ArtDeptAgent 引擎感知产出验证 | audio_designer | audio 模块产出字段完整性验证 | ✅ DONE |
+| 回归测试 | art_director | test_engine_adapters.sh / test_art_testing.sh 全绿 | ✅ DONE |
+
+### 跨部门协作记录
+
+| 协作方向 | 部门 | 协作内容 | 状态 |
+|---------|------|---------|:---:|
+| 上游消费 | 程序线 | 消费 wp_engine_adaptation_fix（audio_resource_extension 修复） | ✅ 已消费 |
+| 上游消费 | 程序线 | 消费 engine_adapters.py 双引擎适配层 | ✅ 已消费 |
+| 下游联动 | 测试线 | 引擎适配层回归保障（test_engine_adapters.sh 16/16） | ✅ 已确认 |
+
+### REVIEW_RESULT
+
+**结论：✅ 通过**
+
+**产出物说明**：引擎资源管线验证报告（`wp_engine_art_verification_引擎资源管线验证.md`）——
+- 验证 Cocos Creator 与 Unreal Engine 双引擎美术资源管线产出正确性；
+- 验证 `audio_resource_extension` Bug 修复生效（Cocos→.mp3 / UE→.wav，不再取第一个资源规格）；
+- 验证 ArtDeptAgent 引擎感知产出字段完整（engine / engine_type / audio_resource_extension / audio_import_dir / build_command）；
+- 回归测试全绿：`test_engine_adapters.sh` 16/16、`test_art_testing.sh` 9/9。
+
+**交付建议**：引擎资源管线验证通过后，美术线引擎感知产出已正确对接双引擎适配层，可支撑后续美术资源产出与引擎集成。
