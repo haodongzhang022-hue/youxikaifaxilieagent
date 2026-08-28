@@ -348,6 +348,15 @@
       "depends_on": [],
       "cpu_cost_est": 0.6,
       "kind": "core"
+    },
+    "test_game_dev_team.sh": {
+      "covers": [
+        "game-studio-agents/config/game_dev_team.py",
+        "game-studio-agents/config/department_agents.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
     }
   }
 }

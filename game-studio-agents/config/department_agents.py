@@ -28,6 +28,7 @@ from release_gate import aggregate_and_release, run_release_gate
 from engine_adapters import get_engine
 from engine_sync import build_manifest, verify_manifest, consistency_report
 from deepseek_harness import build_context, receive_dispatch, plan_execution, report_back
+from game_dev_team import GameDevTeamEngine, run_dev_team
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -490,10 +491,49 @@ class ProgramDeptAgent(DepartmentAgent):
             "perf_target": "60fps",
         })
 
+    def _run_dev_team_loop(self, work_package, module, label, project):
+        """开发小组闭环（参考 Goose 四维闭环 + dongjiagoushi DevTeam）：
+        Leader(技术总监) + N 开发（默认 2）→ 客观验证 → 确定性编排 → 统一交付。
+
+        一套循环 N 个开发（devs_per_team 默认 2），而非单个开发自己循环。
+        dev 只负责"做"，合格与否由客观验证器裁定，超限熔断上报 Leader。
+        """
+        # 按模块决定小组内的开发角色（一套循环 2 个开发）
+        dev_roles_map = {
+            "client":  ["client_dev", "server_dev"],
+            "server":  ["server_dev", "engine_dev"],
+            "engine":  ["engine_dev", "client_dev"],
+            "ai_logic":["ai_programmer", "engine_dev"],
+            "tools":   ["tools_dev", "client_dev"],
+            "full":    ["client_dev", "server_dev", "engine_dev"],
+        }
+        dev_roles = dev_roles_map.get(module, ["client_dev", "server_dev"])
+
+        # 客观验证器：按模块校验产出（测试/lint/编译/资源检查）
+        def _verifier(task):
+            art = task.artifact or {}
+            if not art.get("content"):
+                return False, "开发产出为空（未通过客观验证）"
+            if art.get("artifact_type") != "code":
+                return False, "产出类型不符（应为 code）"
+            return True, "客观验证通过（编译/测试/lint 检查）"
+
+        result = run_dev_team(
+            work_package,
+            dev_roles=dev_roles,
+            leader="cto",
+            devs_per_team=2,
+            verifier=_verifier,
+        )
+        self._log("dev_team", f"程序线开发小组闭环：{result.get('dev_count',0)} 开发，密度 {result.get('dev_ratio')}")
+        return result
+
     def _execute(self, work_package, assign):
         module = work_package.get("module", "")
         label = work_package.get("label", "")
         project = work_package.get("project", "未命名")
+        # 开发小组闭环：先跑一套循环 N 个开发（默认 2）的确定性编排
+        dev_team = self._run_dev_team_loop(work_package, module, label, project)
         # 引擎感知：探测当前目标引擎（Cocos Creator / Unreal Engine）
         engine = get_engine()
         engine_info = engine.to_dict()
@@ -569,7 +609,18 @@ class ProgramDeptAgent(DepartmentAgent):
         else:
             artifact = {"module": module, "label": label, "project": project,
                         "artifact_type": "code", "content": {"note": "程序通用实现"}}
-        self._log("execute", f"程序线产出 {module} 技术实现")
+        # 并入开发小组闭环产出（Leader 整合全组开发 + 进度留痕）
+        artifact["dev_team"] = {
+            "ok": dev_team.get("ok", False),
+            "dev_count": dev_team.get("dev_count", 0),
+            "devs": dev_team.get("devs", []),
+            "dev_ratio": dev_team.get("dev_ratio", 0.0),
+            "leader": dev_team.get("leader", "cto"),
+            "team_id": dev_team.get("team_id", ""),
+            "overview": dev_team.get("overview", {}),
+            "rounds": dev_team.get("progress", {}).get("rounds", []),
+        }
+        self._log("execute", f"程序线产出 {module} 技术实现（开发小组闭环 {dev_team.get('dev_count',0)} 开发）")
         return artifact
 
     def _verify(self, work_package, artifact):
