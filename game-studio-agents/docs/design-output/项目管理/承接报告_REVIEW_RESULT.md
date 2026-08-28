@@ -1,41 +1,47 @@
 # 项目管理 · 承接报告（REVIEW_RESULT）
 
-> 场景：测试线验收通过后，下游解锁 → 项目管理执行发版里程碑。
-> 项目管理部门统一头（project_manager）承接并执行，全程经协作工作台 @分工 留痕（group_audit）。
+> 场景：PR #76（测试线 wp_handler_qa）合并后，游戏向经理级联解锁下游 → 项目管理验收评审-修复闭环与仓库处理专员职责边界。
+> 项目管理部门统一头承接，经协作工作台 @分工 拆派给 project_manager 执行，全程留痕可审计（group_audit）。
 
 ## 一、承接工作包领取结果
 
 从游戏向经理解锁的下游工作包中，**项目管理负责 2 个工作包**，均已领取并完成产出：
 
-| 工作包 | 模块 | 主责角色 | 产出物 | 状态 |
+| 工作包 | 名称 | 主责角色 | 产出物 | 状态 |
 |--------|------|----------|--------|------|
-| wp_release_plan | release | project_manager | 发版计划与里程碑 | ✅ DONE |
-| wp_release_gate | release | release_manager | 发版门禁检查 | ✅ DONE |
+| wp_review_pm | 评审→建议→CodeBuddy 推送闭环验收 | project_manager | wp_review_pm_评审建议CodeBuddy推送闭环验收.md | ✅ DONE |
+| wp_handler_pm | 仓库处理专员职责边界与闭环验收 | project_manager | wp_handler_pm_仓库处理专员职责边界闭环验收.md | ✅ DONE |
+
+> 两包均聚焦 **project_manager 单角色验收职责**，游戏向经理已按 role_id 直投，项目管理部门统一头经协作工作台组内 @分工 留痕后由 project_manager 承接执行。
 
 ## 二、组内分工表（经协作工作台 @分工 · group_audit）
 
-| 子任务 | 承接角色 | 产出物文件 |
-|--------|---------|-----------|
-| 发版计划/里程碑 | project_manager | wp_release_plan_发版计划.md |
-| 发版门禁检查 | release_manager | wp_release_gate_发版门禁.md |
+| 子任务 | 承接角色 | 内容 | 产出物文件 | 状态 |
+|--------|---------|------|-----------|------|
+| wp_review_pm__sub1 | project_manager | 验收评审只读→描述建议→CodeBuddy/仓库处理专员修复推送的完整闭环链路 | wp_review_pm_评审建议CodeBuddy推送闭环验收.md | ✅ DONE |
+| wp_handler_pm__sub1 | project_manager | 验收标签驱动闭环（适合合并/适合关闭/适合推送）、召唤优先级链、PR#59/#64 冲突处置 | wp_handler_pm_仓库处理专员职责边界闭环验收.md | ✅ DONE |
 
-> 分工经协作工作台（CollaborationWorkbench）`delegate` 记录，跨角色子任务留痕可审计（group_audit）。
+> 分工经 `role_collaboration.CollaborationWorkbench.delegate` 拆派，全程留痕可审计（DELEGATE SPLIT + 各角色 SUB_ACCEPT/SUB_COMPLETE）。
 
 ## 三、跨部门协作记录（request_peer）
 
-| 协作方向 | 部门 | 协作内容 | 触发时机 |
-|---------|------|---------|---------|
-| 上游消费 | 全部 | 消费全链路验收结果 | 测试验收通过后 |
-| 联动 | 运营线 | 发版前市场预演确认 | 发版计划确定后 |
+| 协作方向 | 部门 | 协作内容 | 状态 |
+|---------|------|---------|------|
+| 上游消费 | 测试线 | 消费 wp_review_qa + wp_handler_qa 回归结论做验收依据 | ✅ 已消费 |
+| 上游消费 | 程序线 | 消费 wp_handler_program 验证报告做仓库处理专员验收依据 | ✅ 已消费 |
+| 上游消费 | 美术线 | 消费 wp_review_ux 只读边界应用做评审闭环验收依据 | ✅ 已消费 |
+| 下游解锁 | 运营线 | wp_review_ops + wp_handler_ops：评审职责边界与角色变更对外同步 | ⏳ 待 PM 验收后解锁 |
 
 ## 四、REVIEW_RESULT 上报
 
-**结论：✅ 通过（发版门禁 GO）**
+**结论：✅ 通过**
 
 **产出物说明**：
-- 发版计划 + 发版门禁检查已产出，落在 `game-studio-agents/docs/design-output/项目管理/`
-- 全链路 13 个工作包全部 DONE
-- 发版门禁 GO 放行
-- 验证了项目管理部门各角色（project_manager / release_manager）在真实派发链路中可承接并 DONE
+- `wp_review_pm_评审建议CodeBuddy推送闭环验收.md` — 评审只读→建议→CodeBuddy/仓库处理专员修复推送闭环 3 项验收全部通过；
+- `wp_handler_pm_仓库处理专员职责边界闭环验收.md` — 打标签唯一执行者/标签驱动闭环/召唤优先级链/PR#59+#64 冲突处置 4 项验收全部通过；
+- 回归测试全绿：test_review_fix_loop 8/8、test_agent_identity 18/18、test_dispatch_capability 16/16、test_role_collaboration 33/33、test_dept_npc_pipeline 16/16；
+- PR #59/#64 均已 closed（is_merged=false），主线架构保留。
 
-**交付建议**：发版门禁 GO 后，提交**人类 CP 最终拍板确认**（按 FRAMEWORK_UPGRADE.md 政策，升级最终拍板归人类）。
+**交付建议**：wp_review_pm + wp_handler_pm 验收通过，级联解锁下游 → 运营线 `wp_review_ops` + `wp_handler_ops`。
+
+> 全程机制驱动（task_scheduler + message_bus）。项目管理验收通过，级联解锁运营线。
