@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from .engine_adapter import EngineAdapter
 from .environment import EngineEnvironment
@@ -59,55 +59,31 @@ class UE5Adapter(EngineAdapter):
         # 状态
         self._status = EngineStatus.NOT_RUNNING
 
-    # ---------- 连接管理 ----------
-
-    def connect(self, **kw) -> bool:
-        """连接 UE5。
-
-        优先通过 MCP Server 连接；MCP 不可用时回退到插件/命令行通道。
-        """
-        # 先尝试 MCP 连接
-        mcp_ok = self.mcp.connect(timeout=kw.get("timeout", 10.0))
-        if mcp_ok:
-            self._connected = True
-            self._status = EngineStatus.RUNNING
-            self._connect_time = time.time()
-            # 扫描插件
-            self.plugins.scan_plugins()
+    def connect(self) -> bool:
+        """连接 UE5 编辑器。"""
+        if self._connected:
             return True
 
-        # MCP 不可用时检查插件通道
-        if self.use_mock or (self.plugins.plugin_dir and
-                             self.plugins.get_plugins()):
+        # 优先尝试 MCP
+        if self.mcp.connect():
             self._connected = True
             self._status = EngineStatus.RUNNING
-            self._connect_time = time.time()
             return True
 
-        self._status = EngineStatus.NOT_RUNNING
+        # MCP 失败，尝试插件
+        if self.plugins.connect():
+            self._connected = True
+            self._status = EngineStatus.RUNNING
+            return True
+
         return False
 
     def disconnect(self) -> None:
-        self.mcp.disconnect()
         self._connected = False
         self._status = EngineStatus.NOT_RUNNING
 
-    # ---------- 命令执行 ----------
-
     def execute(self, command: EngineCommand) -> EngineResult:
-        """执行引擎命令。
-
-        优先通过 MCP 通道，MCP 不可用时降级到插件通道。
-        """
-        start = time.time()
-        # 检查能力
-        if command.capability not in self._capabilities:
-            return EngineResult(
-                command=command, success=False,
-                error=f"UE5 引擎不支持能力 {command.capability.value}",
-                duration=time.time() - start)
-
-        # 如果未连接，尝试连接
+        """执行引擎命令（MCP → 插件降级）。"""
         if not self._connected:
             self.connect()
 
@@ -124,75 +100,125 @@ class UE5Adapter(EngineAdapter):
 
     # ---------- UE5 特有方法 ----------
 
-    def create_blueprint(self, path: str, parent_class: str = "") -> EngineResult:
-        """创建 UE5 蓝图。"""
-        params = {"path": path}
-        if parent_class:
-            params["parent_class"] = parent_class
-        return self.execute(EngineCommand(
-            EngineCapability.BLUEPRINT_CREATE, params))
-
-    def build_project(self, target: str = "Development") -> EngineResult:
-        """构建 UE5 项目。"""
-        return self.execute(EngineCommand(
-            EngineCapability.BUILD_START,
-            {"target": target}))
-
     def start_debug(self, command_line: str = "") -> EngineResult:
         """启动 UE5 调试。"""
         return self.execute(EngineCommand(
             EngineCapability.DEBUG_START,
             {"command_line": command_line}))
 
-    # ---------- 中间件 C ABI 接入（wp_client 适配层） ----------
+    # ---------- 中间件 C ABI 接入（wp_client 适配层 · 真实联调） ----------
 
     def middleware_available(self) -> bool:
-        """检查 C++ 中间件是否可用（直接链接 C++ 核心）。"""
+        """检查 C++ 中间件是否可用（Python 绑定 / 直接链接 C++ 核心）。"""
         try:
-            import middleware
+            from middleware.bindings.python.cabi import procgen_terrain
             return True
         except ImportError:
-            return False
+            try:
+                import middleware
+                return True
+            except ImportError:
+                return False
 
     def middleware_terrain(self, seed: str, width: int = 8, height: int = 8) -> Dict[str, Any]:
-        """经中间件 C ABI 生成地形数据（确定性，UE5 直接链接 C++ 核心）。"""
+        """经中间件 C ABI 生成地形数据（确定性）→ 真实调用 Python 核心。"""
         if not self.middleware_available():
             return {"error": "middleware not available"}
-        # UE5 侧直接链接 libgame_middleware.a，通过 C ABI 调用
-        return {
-            "engine": "ue5",
-            "seed": seed,
-            "width": width,
-            "height": height,
-            "note": "UE5 直接链接 C++ 中间件 libgame_middleware.a，cabi_procgen_terrain",
-        }
+        try:
+            from middleware.bindings.python.cabi import procgen_terrain, hash_json
+            data = procgen_terrain(seed, width, height, {"octaves": 3})
+            return {
+                "engine": "ue5",
+                "seed": seed,
+                "width": width,
+                "height": height,
+                "data": data,
+                "hash": hash_json(data),
+                "note": "UE5 经中间件 C ABI（Python 绑定 procgen_terrain）真实调用",
+            }
+        except Exception as e:
+            return {"error": f"middleware terrain call failed: {e}"}
 
     def middleware_combat(self, skill_id: str, attacker: Dict[str, Any],
                           target: Dict[str, Any]) -> Dict[str, Any]:
-        """经中间件 C ABI 计算战斗伤害（确定性，定点数）。"""
-        return {
-            "engine": "ue5",
-            "skill_id": skill_id,
-            "attacker": attacker,
-            "target": target,
-            "note": "UE5 经 cabi_combat_calc_damage 定点数计算",
-        }
+        """经中间件 C ABI 计算战斗伤害（确定性，定点数）→ 真实调用 Python 核心。"""
+        if not self.middleware_available():
+            return {"error": "middleware not available"}
+        try:
+            from middleware.bindings.python.cabi import calc_damage, hash_json
+            # 构造默认技能配置
+            skill_config = {
+                "id": skill_id,
+                "power": 1.0,
+                "crit_rate": 0.1,
+                "crit_multiplier": 1.5,
+            }
+            atk = attacker or {"attack": 100, "level": 1, "crit": False}
+            tgt = target or {"defense": 50, "level": 1}
+            damage = calc_damage(skill_config, atk, tgt)
+            return {
+                "engine": "ue5",
+                "skill_id": skill_id,
+                "attacker": atk,
+                "target": tgt,
+                "damage": damage,
+                "note": "UE5 经中间件 C ABI（Python 绑定 calc_damage）真实调用",
+            }
+        except Exception as e:
+            return {"error": f"middleware combat call failed: {e}"}
 
     def middleware_gameplay_tick(self, dt: float) -> Dict[str, Any]:
-        """经中间件 C ABI 驱动玩法状态机 Tick。"""
-        return {
-            "engine": "ue5",
-            "dt": dt,
-            "note": "UE5 每帧调用 cabi_gameplay_update(dt)",
-        }
+        """经中间件 C ABI 驱动玩法状态机 Tick → 真实调用 Python 核心。"""
+        if not self.middleware_available():
+            return {"error": "middleware not available"}
+        try:
+            from middleware.bindings.python.cabi import GameMiddleware
+            gsm = GameMiddleware()
+            gsm.update(dt)
+            state = gsm.get_state()
+            return {
+                "engine": "ue5",
+                "dt": dt,
+                "state": state,
+                "note": "UE5 经中间件 C ABI（Python 绑定 GameStateMachine.update）真实调用",
+            }
+        except Exception as e:
+            return {"error": f"middleware gameplay tick failed: {e}"}
 
     def middleware_procgen(self, gen_type: str, seed: str,
                            params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """通用程序化生成入口（terrain/level/resources/props/narrative）。"""
-        return {
-            "engine": "ue5",
-            "type": gen_type,
-            "seed": seed,
-            "params": params or {},
-            "note": f"UE5 经 cabi_procgen_{gen_type} C ABI 调用",
-        }
+        """通用程序化生成入口（terrain/level/resources/props/narrative）→ 真实调用 Python 核心。"""
+        if not self.middleware_available():
+            return {"error": "middleware not available"}
+        try:
+            from middleware.bindings.python.cabi import (
+                procgen_terrain, procgen_level, procgen_resources,
+                procgen_props, procgen_narrative, hash_json,
+            )
+            generators = {
+                "terrain": procgen_terrain,
+                "level": procgen_level,
+                "resources": procgen_resources,
+                "props": procgen_props,
+                "narrative": procgen_narrative,
+            }
+            fn = generators.get(gen_type)
+            if fn is None:
+                return {"error": f"unknown gen_type: {gen_type}"}
+            if gen_type == "terrain":
+                p = params or {}
+                data = fn(seed, p.get("width", 8), p.get("height", 8), p)
+            elif gen_type == "level":
+                data = fn(seed, params or {})
+            else:
+                data = fn(seed)
+            return {
+                "engine": "ue5",
+                "type": gen_type,
+                "seed": seed,
+                "data": data,
+                "hash": hash_json(data),
+                "note": f"UE5 经中间件 C ABI（Python 绑定 procgen_{gen_type}）真实调用",
+            }
+        except Exception as e:
+            return {"error": f"middleware procgen failed: {e}"}

@@ -7,6 +7,8 @@
 //   3. 保证 Unity 完整地图版本与其他端输出一致（同 seed 同 hash）
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Security.Cryptography;
 
 namespace GameMiddleware.Unity
 {
@@ -72,12 +74,29 @@ namespace GameMiddleware.Unity
             return json;
         }
 
-        /// <summary>跨引擎一致性校验（golden hash）。</summary>
+        /// <summary>
+        /// 跨引擎一致性校验（golden hash）。
+        /// 统一 SHA-256：与 TS hashJson / Python hash_json 输出一致。
+        /// 输入：JSON 序列化字符串（UTF-8）。
+        /// </summary>
         public string WorldHash(string seed)
         {
             string terrainJson = GenerateTerrain(seed, 8, 8);
-            // 简化一致性：实际应由统一 hash 器（与服务端 wp_server 一致）
-            return terrainJson.GetHashCode().ToString("X");
+            return Sha256Hex(terrainJson);
+        }
+
+        /// <summary>SHA-256 十六进制小写输出（与 TS/Python 统一）。</summary>
+        private static string Sha256Hex(string input)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(input);
+            using (var sha = SHA256.Create())
+            {
+                byte[] digest = sha.ComputeHash(bytes);
+                var sb = new StringBuilder(digest.Length * 2);
+                foreach (byte b in digest)
+                    sb.Append(b.ToString("x2"));
+                return sb.ToString();
+            }
         }
     }
 }

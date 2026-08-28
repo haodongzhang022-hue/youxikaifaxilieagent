@@ -7,7 +7,7 @@
  *   2. TS 侧经 Native FFI 调用 C++（与 React WASM 调用同一核心）
  *   3. 保证 Cocos 小程序与 Web/Unity/UE 输出一致（同 seed 同 hash）
  */
-import { GameMiddleware, GameState } from "../../bindings/typescript/cabi";
+import { GameMiddleware, GameState, hashJson } from "../../bindings/typescript/cabi";
 
 export interface CocosInitOptions {
   seed?: string;
@@ -63,5 +63,11 @@ export class CocosAdapter {
   async switchWorld(seed: string): Promise<void> {
     this.worldSeed = seed;
     this.tick = 0;
+  }
+
+  /** 跨引擎一致性校验（golden hash，统一 SHA-256）。 */
+  async worldHash(seed: string): Promise<string> {
+    const terrain = await this.middleware.generateTerrain(seed, 8, 8);
+    return hashJson(terrain);
   }
 }

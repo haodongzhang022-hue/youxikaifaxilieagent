@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from .engine_adapter import EngineAdapter
 from .environment import EngineEnvironment
@@ -58,55 +58,31 @@ class CocosAdapter(EngineAdapter):
         # 状态
         self._status = EngineStatus.NOT_RUNNING
 
-    # ---------- 连接管理 ----------
-
-    def connect(self, **kw) -> bool:
-        """连接 Cocos Creator。
-
-        优先通过 MCP Server 连接；MCP 不可用时回退到插件通道。
-        """
-        # 先尝试 MCP 连接
-        mcp_ok = self.mcp.connect(timeout=kw.get("timeout", 10.0))
-        if mcp_ok:
-            self._connected = True
-            self._status = EngineStatus.RUNNING
-            self._connect_time = time.time()
-            # 扫描插件
-            self.plugins.scan_plugins()
+    def connect(self) -> bool:
+        """连接 Cocos Creator 编辑器。"""
+        if self._connected:
             return True
 
-        # MCP 不可用时检查插件通道
-        if self.use_mock or (self.plugins.plugin_dir and
-                             self.plugins.get_plugins()):
+        # 优先尝试 MCP
+        if self.mcp.connect():
             self._connected = True
             self._status = EngineStatus.RUNNING
-            self._connect_time = time.time()
             return True
 
-        self._status = EngineStatus.NOT_RUNNING
+        # MCP 失败，尝试插件
+        if self.plugins.connect():
+            self._connected = True
+            self._status = EngineStatus.RUNNING
+            return True
+
         return False
 
     def disconnect(self) -> None:
-        self.mcp.disconnect()
         self._connected = False
         self._status = EngineStatus.NOT_RUNNING
 
-    # ---------- 命令执行 ----------
-
     def execute(self, command: EngineCommand) -> EngineResult:
-        """执行引擎命令。
-
-        优先通过 MCP 通道，MCP 不可用时降级到插件通道。
-        """
-        start = time.time()
-        # 检查能力
-        if command.capability not in self._capabilities:
-            return EngineResult(
-                command=command, success=False,
-                error=f"Cocos 引擎不支持能力 {command.capability.value}",
-                duration=time.time() - start)
-
-        # 如果未连接，尝试连接
+        """执行引擎命令（MCP → 插件降级）。"""
         if not self._connected:
             self.connect()
 
@@ -135,55 +111,90 @@ class CocosAdapter(EngineAdapter):
             EngineCapability.QUERY_SCENE_GRAPH,
             {"root": path, "depth": 1}))
 
-    # ---------- 中间件 C ABI 接入（wp_client 适配层） ----------
+    # ---------- 中间件 C ABI 接入（wp_client 适配层 · 真实联调） ----------
 
     def middleware_available(self) -> bool:
-        """检查 C++ 中间件是否可用（WASM / Native Plugin 均可）。"""
+        """检查 C++ 中间件是否可用（Python 绑定 / WASM / Native Plugin）。"""
         try:
-            from middleware.bindings.typescript.cabi import GameMiddleware
+            from middleware.bindings.python.cabi import procgen_terrain
             return True
         except ImportError:
             try:
-                import middleware
+                from middleware.bindings.typescript.cabi import GameMiddleware
                 return True
             except ImportError:
-                return False
+                try:
+                    import middleware
+                    return True
+                except ImportError:
+                    return False
 
     def middleware_terrain(self, seed: str, width: int = 8, height: int = 8) -> Dict[str, Any]:
-        """经中间件 C ABI 生成地形数据（确定性）。"""
+        """经中间件 C ABI 生成地形数据（确定性）→ 真实调用 Python 核心。"""
         if not self.middleware_available():
             return {"error": "middleware not available"}
-        # Cocos 侧通过 Native Plugin 或 WASM 调用
-        return {
-            "engine": "cocos",
-            "seed": seed,
-            "width": width,
-            "height": height,
-            "note": "经 GameMiddleware.generateTerrain C ABI 调用",
-        }
+        try:
+            from middleware.bindings.python.cabi import procgen_terrain, hash_json
+            data = procgen_terrain(seed, width, height, {"octaves": 3})
+            return {
+                "engine": "cocos",
+                "seed": seed,
+                "width": width,
+                "height": height,
+                "data": data,
+                "hash": hash_json(data),
+                "note": "Cocos 经中间件 C ABI（Python 绑定 procgen_terrain）真实调用",
+            }
+        except Exception as e:
+            return {"error": f"middleware terrain call failed: {e}"}
 
     def middleware_level(self, seed: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """经中间件 C ABI 生成关卡数据（确定性）。"""
-        return {
-            "engine": "cocos",
-            "seed": seed,
-            "params": params or {},
-            "note": "经 GameMiddleware.generateLevel C ABI 调用",
-        }
+        """经中间件 C ABI 生成关卡数据（确定性）→ 真实调用 Python 核心。"""
+        if not self.middleware_available():
+            return {"error": "middleware not available"}
+        try:
+            from middleware.bindings.python.cabi import procgen_level, hash_json
+            data = procgen_level(seed, params or {})
+            return {
+                "engine": "cocos",
+                "seed": seed,
+                "data": data,
+                "hash": hash_json(data),
+                "note": "Cocos 经中间件 C ABI（Python 绑定 procgen_level）真实调用",
+            }
+        except Exception as e:
+            return {"error": f"middleware level call failed: {e}"}
 
     def middleware_narrative(self, seed: str, schema: Dict[str, Any] = None) -> Dict[str, Any]:
-        """经中间件 C ABI 生成叙事数据（确定性）。"""
-        return {
-            "engine": "cocos",
-            "seed": seed,
-            "schema": schema or {},
-            "note": "经 GameMiddleware.generateNarrative C ABI 调用",
-        }
+        """经中间件 C ABI 生成叙事数据（确定性）→ 真实调用 Python 核心。"""
+        if not self.middleware_available():
+            return {"error": "middleware not available"}
+        try:
+            from middleware.bindings.python.cabi import procgen_narrative, hash_json
+            data = procgen_narrative(seed)
+            return {
+                "engine": "cocos",
+                "seed": seed,
+                "data": data,
+                "hash": hash_json(data),
+                "note": "Cocos 经中间件 C ABI（Python 绑定 procgen_narrative）真实调用",
+            }
+        except Exception as e:
+            return {"error": f"middleware narrative call failed: {e}"}
 
     def middleware_gameplay_state(self, state: int = None) -> Dict[str, Any]:
-        """经中间件 C ABI 访问玩法状态机。"""
-        return {
-            "engine": "cocos",
-            "state": state,
-            "note": "经 GameMiddleware.setState/getState C ABI 调用",
-        }
+        """经中间件 C ABI 访问玩法状态机 → 真实调用 Python 核心。"""
+        if not self.middleware_available():
+            return {"error": "middleware not available"}
+        try:
+            from middleware.bindings.python.cabi import GameMiddleware
+            gsm = GameMiddleware()
+            if state is not None:
+                gsm.set_state(state)
+                return {"engine": "cocos", "state": state, "applied": True,
+                        "note": "Cocos 经中间件 C ABI set_state 真实调用"}
+            current = gsm.get_state()
+            return {"engine": "cocos", "state": current, "applied": False,
+                    "note": "Cocos 经中间件 C ABI get_state 真实调用"}
+        except Exception as e:
+            return {"error": f"middleware gameplay state failed: {e}"}
