@@ -46,8 +46,8 @@ print(ctx.repo_name)          # "youxikaifaxilieagent"
 mention = identity.get_codebuddy_mention()
 # "@dongdongxiaozu/youxikaifaxilieagent(CodeBuddy)"
 
-fixer = identity.get_fixer_mention()
-# "@dongdongxiaozu/youxikaifaxilieagent(仓库修复专员)"
+fixer = identity.get_handler_mention()
+# "@dongdongxiaozu/youxikaifaxilieagent(仓库处理专员)"
 
 # 3. 判断策略
 strategy = identity.decide_mention_strategy("otherorg/otherrepo")

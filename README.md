@@ -163,7 +163,7 @@ CNB 平台的 `@` 选择器只收录「已关注仓库中的 NPC」。要让角�
 | `build_mention(role, slug)` | 生成 `@owner/repo(角色名)` 召唤格式 |
 | `decide_mention_strategy()` | 判断同仓库 vs 跨仓库，给出正确策略 |
 | `get_codebuddy_mention()` | 获取本仓库 CodeBuddy 的完整召唤格式 |
-| `get_fixer_mention()` | 获取本仓库修复专员的完整召唤格式 |
+| `get_handler_mention()` | 获取本仓库处理专员的完整召唤格式 |
 
 ### 使用方式
 
