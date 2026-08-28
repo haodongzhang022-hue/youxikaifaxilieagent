@@ -12,6 +12,7 @@
 | wp_ref_learn | ops | reference_learner | 竞品参考学习报告 | ✅ DONE |
 | wp_review_ops | ops | data_analyst + game_operator | 评审职责边界对外文档同步 | ✅ DONE |
 | wp_handler_ops | ops | reference_learner + game_operator | 仓库处理专员角色变更对外同步 | ✅ DONE |
+| **wp_engine_ops** | ops | data_analyst + game_operator + reference_learner | **引擎桥接层接入对外数据同步与运营部署** | ✅ DONE |
 
 ## 二、组内分工表
 
@@ -22,6 +23,7 @@
 | 借鉴学习 | reference_learner | wp_ref_learn_借鉴学习报告.md | ✅ DONE |
 | 评审职责边界对外同步 | data_analyst + game_operator | wp_review_ops_评审职责边界对外同步.md | ✅ DONE |
 | 仓库处理专员角色变更对外同步 | reference_learner + game_operator | wp_handler_ops_仓库处理专员角色变更对外同步.md | ✅ DONE |
+| 引擎桥接层接入对外数据同步与运营部署 | data_analyst + game_operator + reference_learner | wp_engine_ops_引擎桥接层接入对外数据同步与运营部署.md | ✅ DONE |
 
 ## 三、跨部门协作
 
@@ -31,3 +33,6 @@
 | 上游消费 | 美术线 | 消费美术品质做市场预演 | art_direction 产出后 |
 | 上游消费 | 项目管理 | 消费 wp_review_pm + wp_handler_pm 验收结论做对外同步 | PM 验收通过后 |
 | 联动 | 项目管理 | 发版前市场预演确认 | 发版计划确定后 |
+| 上游消费 | 项目管理 | 消费 wp_engine_release 发版门禁 GO 做引擎桥接对外部署依据 | PR #80 合并后 |
+| 上游消费 | 测试线 | 消费 wp_engine_testing 测试结论做引擎桥接对外部署质量依据 | PR #80 合并后 |
+| 上游消费 | 程序线 | 消费 wp_engine_bridge_integration 接入验证报告做引擎桥接对外部署技术依据 | PR #80 合并后 |
