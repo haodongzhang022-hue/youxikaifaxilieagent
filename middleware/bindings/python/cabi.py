@@ -167,14 +167,34 @@ def procgen_props(seed):
 def procgen_narrative(seed):
     quests = ["hunt_wolves", "collect_herbs", "escort_caravan",
               "defend_village", "explore_dungeon"]
+    speakers = ["npc_elder", "npc_guard", "npc_merchant",
+                "npc_blacksmith", "npc_mage"]
+    texts = [
+        "Welcome, traveler. I have a task for you.",
+        "The beasts grow restless in the east woods.",
+        "Bring me the herbs, and I will reward you well.",
+        "My hammer is ready. What do you need?",
+        "The old magic stirs again. Be careful out there."
+    ]
     st = [_fnv1a_hash(seed)]
     count = 2 + _splitmix64_next(st) % 3
     out = []
     for _ in range(count):
         r = _splitmix64_next(st)
+        diff = 1 + ((r >> 8) % 5)
+        line_count = 2 + ((r >> 16) % 3)
+        dialogues = []
+        for _ in range(line_count):
+            dr = _splitmix64_next(st)
+            dialogues.append({
+                "speaker": speakers[dr % 5],
+                "text": texts[(dr >> 8) % 5],
+                "choice": (dr >> 16) % 2,
+            })
         out.append({
             "quest_id": quests[r % 5],
-            "difficulty": 1 + ((r >> 8) % 5),
+            "difficulty": diff,
+            "dialogues": dialogues,
         })
     return {"quests": out}
 

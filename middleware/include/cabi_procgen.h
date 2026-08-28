@@ -32,7 +32,13 @@ int cabi_procgen_resources(const char* seed, const char* terrain_data,
 int cabi_procgen_props(const char* seed, const char* params_json,
                        char** out_props_json);
 
-/* ---- 生成叙事（对话/任务模板） ---- */
+/* ---- 生成叙事（任务 + 对话 JSON Schema） ----
+ * 输出结构: {"quests":[{"quest_id","difficulty",
+ *   "dialogues":[{"speaker","text","choice"}]}]}
+ * speaker: npc_elder/npc_guard/npc_merchant/npc_blacksmith/npc_mage
+ * choice: 0=普通对话, 1=含分支选项
+ * 确定性：同 seed 跨引擎（C++/Python/TS/C#）输出 hash 一致
+ */
 int cabi_procgen_narrative(const char* seed, const char* narrative_schema,
                            char** out_narrative_json);
 

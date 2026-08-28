@@ -63,7 +63,7 @@ ctest   # 运行 C++ 核心自测
 | level | ✅ 一致 | 55b61ed84f88 |
 | resources | ✅ 一致 | e0468607b364 |
 | props | ✅ 一致 | 2084f4ebdb29 |
-| narrative | ✅ 一致 | c56b1a55e0a0 |
+| narrative | ✅ 一致 | bf78ceb41b2a |
 | loot | ✅ 一致 | ffd089fa98e5 |
 
 > 跨引擎一致性：各引擎（React WASM / Cocos / Unity / UE）调用同一 C ABI 核心，

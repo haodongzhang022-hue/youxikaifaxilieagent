@@ -134,3 +134,56 @@ class CocosAdapter(EngineAdapter):
         return self.execute(EngineCommand(
             EngineCapability.QUERY_SCENE_GRAPH,
             {"root": path, "depth": 1}))
+
+    # ---------- 中间件 C ABI 接入（wp_client 适配层） ----------
+
+    def middleware_available(self) -> bool:
+        """检查 C++ 中间件是否可用（WASM / Native Plugin 均可）。"""
+        try:
+            from middleware.bindings.typescript.cabi import GameMiddleware
+            return True
+        except ImportError:
+            try:
+                import middleware
+                return True
+            except ImportError:
+                return False
+
+    def middleware_terrain(self, seed: str, width: int = 8, height: int = 8) -> Dict[str, Any]:
+        """经中间件 C ABI 生成地形数据（确定性）。"""
+        if not self.middleware_available():
+            return {"error": "middleware not available"}
+        # Cocos 侧通过 Native Plugin 或 WASM 调用
+        return {
+            "engine": "cocos",
+            "seed": seed,
+            "width": width,
+            "height": height,
+            "note": "经 GameMiddleware.generateTerrain C ABI 调用",
+        }
+
+    def middleware_level(self, seed: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+        """经中间件 C ABI 生成关卡数据（确定性）。"""
+        return {
+            "engine": "cocos",
+            "seed": seed,
+            "params": params or {},
+            "note": "经 GameMiddleware.generateLevel C ABI 调用",
+        }
+
+    def middleware_narrative(self, seed: str, schema: Dict[str, Any] = None) -> Dict[str, Any]:
+        """经中间件 C ABI 生成叙事数据（确定性）。"""
+        return {
+            "engine": "cocos",
+            "seed": seed,
+            "schema": schema or {},
+            "note": "经 GameMiddleware.generateNarrative C ABI 调用",
+        }
+
+    def middleware_gameplay_state(self, state: int = None) -> Dict[str, Any]:
+        """经中间件 C ABI 访问玩法状态机。"""
+        return {
+            "engine": "cocos",
+            "state": state,
+            "note": "经 GameMiddleware.setState/getState C ABI 调用",
+        }

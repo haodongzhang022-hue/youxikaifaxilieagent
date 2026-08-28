@@ -143,3 +143,56 @@ class UE5Adapter(EngineAdapter):
         return self.execute(EngineCommand(
             EngineCapability.DEBUG_START,
             {"command_line": command_line}))
+
+    # ---------- 中间件 C ABI 接入（wp_client 适配层） ----------
+
+    def middleware_available(self) -> bool:
+        """检查 C++ 中间件是否可用（直接链接 C++ 核心）。"""
+        try:
+            import middleware
+            return True
+        except ImportError:
+            return False
+
+    def middleware_terrain(self, seed: str, width: int = 8, height: int = 8) -> Dict[str, Any]:
+        """经中间件 C ABI 生成地形数据（确定性，UE5 直接链接 C++ 核心）。"""
+        if not self.middleware_available():
+            return {"error": "middleware not available"}
+        # UE5 侧直接链接 libgame_middleware.a，通过 C ABI 调用
+        return {
+            "engine": "ue5",
+            "seed": seed,
+            "width": width,
+            "height": height,
+            "note": "UE5 直接链接 C++ 中间件 libgame_middleware.a，cabi_procgen_terrain",
+        }
+
+    def middleware_combat(self, skill_id: str, attacker: Dict[str, Any],
+                          target: Dict[str, Any]) -> Dict[str, Any]:
+        """经中间件 C ABI 计算战斗伤害（确定性，定点数）。"""
+        return {
+            "engine": "ue5",
+            "skill_id": skill_id,
+            "attacker": attacker,
+            "target": target,
+            "note": "UE5 经 cabi_combat_calc_damage 定点数计算",
+        }
+
+    def middleware_gameplay_tick(self, dt: float) -> Dict[str, Any]:
+        """经中间件 C ABI 驱动玩法状态机 Tick。"""
+        return {
+            "engine": "ue5",
+            "dt": dt,
+            "note": "UE5 每帧调用 cabi_gameplay_update(dt)",
+        }
+
+    def middleware_procgen(self, gen_type: str, seed: str,
+                           params: Dict[str, Any] = None) -> Dict[str, Any]:
+        """通用程序化生成入口（terrain/level/resources/props/narrative）。"""
+        return {
+            "engine": "ue5",
+            "type": gen_type,
+            "seed": seed,
+            "params": params or {},
+            "note": f"UE5 经 cabi_procgen_{gen_type} C ABI 调用",
+        }

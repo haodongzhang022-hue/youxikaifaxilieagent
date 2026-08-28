@@ -186,17 +186,45 @@ extern "C" int cabi_procgen_narrative(const char* seed, const char* narrative_sc
     splitmix64_state st = fnv1a_hash(seed);
     const char* quests[] = {"hunt_wolves", "collect_herbs", "escort_caravan",
                             "defend_village", "explore_dungeon"};
+    const char* speakers[] = {"npc_elder", "npc_guard", "npc_merchant",
+                              "npc_blacksmith", "npc_mage"};
+    const char* texts[] = {
+        "Welcome, traveler. I have a task for you.",
+        "The beasts grow restless in the east woods.",
+        "Bring me the herbs, and I will reward you well.",
+        "My hammer is ready. What do you need?",
+        "The old magic stirs again. Be careful out there."
+    };
     int count = 2 + (int)(splitmix64_next(&st) % 3);
-    char buf[1024];
-    int off = snprintf(buf, sizeof(buf), "{\"quests\":[");
+    // 使用动态字符串构建，避免固定 1024 缓冲区溢出风险
+    size_t cap = 4096;
+    char* buf = (char*)malloc(cap);
+    if (!buf) return CABI_ERR_NULL_PTR;
+    int off = snprintf(buf, cap, "{\"quests\":[");
     for (int i = 0; i < count; i++) {
         uint64_t r = splitmix64_next(&st);
-        off += snprintf(buf + off, sizeof(buf) - off,
-            "{\"quest_id\":\"%s\",\"difficulty\":%d}%s",
-            quests[r % 5], (int)(1 + (r >> 8) % 5), i < count - 1 ? "," : "");
+        const char* q = quests[r % 5];
+        int diff = (int)(1 + (r >> 8) % 5);
+        // 对话生成：每个任务包含对话组（speaker/text/choice）
+        int line_count = 2 + (int)((r >> 16) % 3);
+        off += snprintf(buf + off, cap - off,
+            "{\"quest_id\":\"%s\",\"difficulty\":%d,\"dialogues\":[",
+            q, diff);
+        for (int j = 0; j < line_count; j++) {
+            uint64_t dr = splitmix64_next(&st);
+            const char* sp = speakers[dr % 5];
+            const char* tx = texts[(dr >> 8) % 5];
+            // choice：可选分支（首行含选择项，后续行引用分支）
+            off += snprintf(buf + off, cap - off,
+                "{\"speaker\":\"%s\",\"text\":\"%s\",\"choice\":%d}%s",
+                sp, tx, (int)((dr >> 16) % 2),
+                j < line_count - 1 ? "," : "");
+        }
+        off += snprintf(buf + off, cap - off, "]}%s",
+                        i < count - 1 ? "," : "");
     }
-    snprintf(buf + off, sizeof(buf) - off, "]}");
-    *out_narrative_json = strdup(buf);
+    off += snprintf(buf + off, cap - off, "]}");
+    *out_narrative_json = buf;
     return CABI_OK;
 }
 
