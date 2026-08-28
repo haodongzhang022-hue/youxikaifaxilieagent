@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
-# 部门派发路由决策护栏（DepartmentRouting v2.0）
+# 部门派发路由决策护栏（DepartmentRouting）
 # 说明: 验证"路由决策"机制——解决无工作部门凑热闹问题：
-#       1. routing.py 支持 %部门名 显性声明触发；
-#       2. 裸提及部门名不触发（如"测试线验收中"标签）；
-#       3. @部门名 点名 / 依赖解锁可驱动部门触发；
+#       1. routing.py 可按工作内容关键词精确匹配部门；
+#       2. 未命中部门不触发（无关任务不凑热闹）；
+#       3. 明确点名 / 依赖解锁可驱动部门触发；
 #       4. game_producer_agent 编排时按路由只派发命中部门；
 #       5. .cnb.yml 部门 stage 含路由守卫指令（未被点名不评论）。
 # 退出码: 0 = 🟢 通过，1 = 🔴 阻塞
@@ -25,21 +25,9 @@ report() {
   fi
 }
 
-# 清理 CNB 注入的环境变量（避免 CI 平台变量污染 CLI 测试判定）
-clean_env() {
-  CNB_EVENT="${1:-issue.open}" \
-  CNB_ISSUE_TITLE="${2:-}" \
-  CNB_ISSUE_DESCRIPTION="" \
-  CNB_ISSUE_LABELS="" \
-  CNB_PULL_REQUEST_TITLE="" \
-  CNB_PULL_REQUEST_DESCRIPTION="" \
-  CNB_DEPS_UNLOCKED="" \
-  "$@"
-}
-
 echo "== 1. routing.py 演示通过 =="
 out=$($PY routing.py 2>&1)
-if echo "$out" | grep -q "🟢 部门派发路由决策演示通过"; then
+if echo "$out" | grep -q "🟢 部门派发路由决策"; then
   report "routing.py 演示通过" 0
 else
   report "routing.py 演示通过" 1
@@ -51,110 +39,78 @@ echo "== 1.5 CLI 路由决策：从环境变量读取并判断部门命中 =="
 CLI_TEST=$(
   CNB_EVENT=issue.open \
   CNB_ISSUE_TITLE="修复服务端接口并发 bug" \
-  CNB_ISSUE_DESCRIPTION="" \
-  CNB_ISSUE_LABELS="" \
-  CNB_PULL_REQUEST_TITLE="" \
-  CNB_PULL_REQUEST_DESCRIPTION="" \
+  CNB_ISSUE_DESCRIPTION="涉及 server 端接口逻辑与引擎适配" \
   $PY routing.py route 2>&1
 )
-# 纯程序 bug 任务没有 %程序线 显性声明，不触发任何部门
-if [ -z "$CLI_TEST" ] || [ "$CLI_TEST" = " " ]; then
-  report "CLI route 无显性声明不触发" 0
+if echo "$CLI_TEST" | grep -q "程序线"; then
+  report "CLI route 输出 active 部门清单" 0
 else
-  report "CLI route 无显性声明不触发" 1
-  echo "  output: '$CLI_TEST'"
+  report "CLI route 输出 active 部门清单" 1
+  echo "$CLI_TEST"
 fi
 
-# CLI route 显性声明 %测试线
-CLI_TEST2=$(
-  CNB_EVENT=issue.open \
-  CNB_ISSUE_TITLE="回归验证" \
-  CNB_ISSUE_DESCRIPTION="请 %测试线 完成回归测试" \
-  CNB_ISSUE_LABELS="" \
-  CNB_PULL_REQUEST_TITLE="" \
-  CNB_PULL_REQUEST_DESCRIPTION="" \
-  $PY routing.py route 2>&1
-)
-if echo "$CLI_TEST2" | grep -q "测试线"; then
-  report "CLI route 显性声明 %测试线 触发" 0
+# CLI check 程序线应命中（退出码 0）
+if CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py check 程序线 >/dev/null 2>&1; then
+  report "CLI check 程序线命中" 0
 else
-  report "CLI route 显性声明 %测试线 触发" 1
-  echo "  output: '$CLI_TEST2'"
+  report "CLI check 程序线命中" 1
 fi
 
-# CLI check 程序线：裸提及不触发（退出码非 0）
-if ! CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" CNB_ISSUE_DESCRIPTION="" CNB_ISSUE_LABELS="" CNB_PULL_REQUEST_TITLE="" CNB_PULL_REQUEST_DESCRIPTION="" $PY routing.py check 程序线 >/dev/null 2>&1; then
-  report "CLI check 程序线未命中（裸提及）" 0
+# CLI check 美术线不应命中（退出码非 0）
+if ! CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py check 美术线 >/dev/null 2>&1; then
+  report "CLI check 美术线未命中" 0
 else
-  report "CLI check 程序线未命中（裸提及）" 1
-fi
-
-# CLI check 测试线：显性声明 %测试线 → 命中
-if CNB_EVENT=issue.open CNB_ISSUE_TITLE="回归验证" CNB_ISSUE_DESCRIPTION="请 %测试线 完成回归" CNB_ISSUE_LABELS="" CNB_PULL_REQUEST_TITLE="" CNB_PULL_REQUEST_DESCRIPTION="" $PY routing.py check 测试线 >/dev/null 2>&1; then
-  report "CLI check 测试线命中（%显性声明）" 0
-else
-  report "CLI check 测试线命中（%显性声明）" 1
+  report "CLI check 美术线未命中" 1
 fi
 
 # CLI marker 写入文件
 MARKER_FILE="$(mktemp)"
-CNB_EVENT=issue.open CNB_ISSUE_TITLE="回归验证" CNB_ISSUE_DESCRIPTION="请 %测试线 完成回归" CNB_ISSUE_LABELS="" CNB_PULL_REQUEST_TITLE="" CNB_PULL_REQUEST_DESCRIPTION="" $PY routing.py marker "$MARKER_FILE" >/dev/null 2>&1
-if [ -f "$MARKER_FILE" ] && grep -q "测试线" "$MARKER_FILE"; then
+CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py marker "$MARKER_FILE" >/dev/null 2>&1
+if [ -f "$MARKER_FILE" ] && grep -q "程序线" "$MARKER_FILE"; then
   report "CLI marker 写入路由清单文件" 0
 else
   report "CLI marker 写入路由清单文件" 1
 fi
 rm -f "$MARKER_FILE"
 
-echo "== 2. 显性声明 vs 裸提及 =="
+echo "== 2. 按工作内容精确匹配（无关任务不凑热闹）=="
 out2=$($PY - <<'PYBLK'
 import sys; sys.path.insert(0, '.')
 from routing import route, is_department_active
 
-# 裸提及部门名（如状态标签）→ 不触发
-r = route(issue_title="职责明确（测试线验收中 美术线验收中）")
-assert r["active_departments"] == [], f"裸提及不应触发: {r['active_departments']}"
+# 纯程序 bug → 只触发程序线，美术/测试不凑热闹
+r = route(issue_title="修复服务端接口并发 bug", issue_body="server 接口与引擎适配")
+assert "程序线" in r["active_departments"]
+assert "美术线" not in r["active_departments"]
+assert "测试线" not in r["active_departments"]
 
-# 显性声明 %测试线 → 触发
-r2 = route(issue_title="回归验证", issue_body="请 %测试线 完成")
-assert "测试线" in r2["active_departments"], "显性声明应触发"
-
-# 显性声明 %美术线 → 触发
-r3 = route(issue_title="美术资源", issue_body="请 %美术线 出原画")
-assert "美术线" in r3["active_departments"], "显性声明应触发"
-
-# 混合场景：裸提及美术线不触发，但 %测试线 触发
-r4 = route(issue_title="机制改动（美术线关注）", issue_body="请 %测试线 回归验证")
-assert "美术线" not in r4["active_departments"], "裸提及美术线不应触发"
-assert "测试线" in r4["active_departments"], "%测试线显性声明应触发"
+# 纯美术任务 → 只触发美术线，程序不凑热闹
+r2 = route(issue_title="角色原画与 3D 建模规范", issue_body="美术风格 原画 建模 材质")
+assert "美术线" in r2["active_departments"]
+assert "程序线" not in r2["active_departments"]
 
 # 完全无关 → 不触发任何部门
-r5 = route(issue_title="环境变量说明文档")
-assert r5["active_departments"] == [], f"无关任务不应触发: {r5['active_departments']}"
-assert is_department_active(r5, "策划线") is False
-
+r3 = route(issue_title="环境变量说明文档")
+assert r3["active_departments"] == []
+assert is_department_active(r3, "策划线") is False
 print("ROUTE_MATCH_OK")
 PYBLK
 )
 if echo "$out2" | grep -q "ROUTE_MATCH_OK"; then
-  report "显性声明触发 + 裸提及不触发" 0
+  report "工作内容精确匹配，无关部门不触发" 0
 else
-  report "显性声明触发 + 裸提及不触发" 1
+  report "工作内容精确匹配，无关部门不触发" 1
   echo "$out2"
 fi
 
-echo "== 3. @点名 / 依赖解锁驱动触发 =="
+echo "== 3. 点名 / 依赖解锁驱动触发 =="
 out3=$($PY - <<'PYBLK'
 import sys; sys.path.insert(0, '.')
 from routing import route
 
-# @点名 → 强制触发
-r = route(issue_body="机制改动，@美术线 请协助")
+# 明确点名 → 强制触发
+r = route(issue_body="机制改动", manually_requested=["美术线"])
 assert "美术线" in r["active_departments"]
-
-# manually_requested 参数 → 强制触发
-r1 = route(issue_body="机制改动", manually_requested=["美术线"])
-assert "美术线" in r1["active_departments"]
 
 # 依赖解锁 → 触发下游部门
 r2 = route(issue_body="上游设计验收", deps_unlocked=["wp_gameplay", "wp_engine"])
@@ -164,9 +120,9 @@ print("ROUTE_DRIVE_OK")
 PYBLK
 )
 if echo "$out3" | grep -q "ROUTE_DRIVE_OK"; then
-  report "@点名/依赖解锁可驱动部门触发" 0
+  report "点名/依赖解锁可驱动部门触发" 0
 else
-  report "@点名/依赖解锁可驱动部门触发" 1
+  report "点名/依赖解锁可驱动部门触发" 1
   echo "$out3"
 fi
 
@@ -183,7 +139,7 @@ manager = GameProducerAgent(bus=bus); manager.boot()
 architecture = {
     "project": "服务端 bug 修复",
     "modules": ["server", "engine"],
-    "routing": {"title": "修复服务端接口并发 bug", "body": "请 %程序线 修复"},
+    "routing": {"title": "修复服务端接口并发 bug", "body": "server 接口与引擎适配"},
 }
 msg = build_task_assign("architect", manager.role_id, "orch_r1", {"architecture": architecture})
 bus.publish(msg); bus.process_all()
@@ -232,6 +188,126 @@ if grep -q "routing.py marker" "$PIPELINE"; then
   report ".cnb.yml 含路由决策 marker 写文件 stage" 0
 else
   report ".cnb.yml 含路由决策 marker 写文件 stage" 1
+fi
+
+
+# ============================================================
+# 三层触发引擎新增护栏（routing.py v3.0）
+# ============================================================
+echo "== 6. 显式声明（最高优先）：%部门 / @部门 / [触发:部门] =="
+out6=$($PY - <<'PYBLK'
+import sys; sys.path.insert(0, '.')
+from routing import route
+
+# %部门名 显式声明 → 即使内容无关也触发，且为高置信
+r = route(issue_body="机制改动，请 %测试线 完成回归。")
+assert "测试线" in r["active_departments"]
+assert r["confidence"]["测试线"]["confidence"] == "high"
+assert r["confidence"]["测试线"]["method"] == "explicit"
+
+# @部门名
+r2 = route(issue_body="@运营线 请分析本次上线数据。")
+assert "运营线" in r2["active_departments"]
+assert r2["confidence"]["运营线"]["method"] == "explicit"
+
+# [触发:部门名]（dongjiagoushi 风格）
+r3 = route(issue_body="[触发:美术线] 请给出 UI 视觉规范。")
+assert "美术线" in r3["active_departments"]
+assert r3["confidence"]["美术线"]["method"] == "explicit"
+print("EXPLICIT_OK")
+PYBLK
+)
+if echo "$out6" | grep -q "EXPLICIT_OK"; then
+  report "显式声明(%/@/[触发:])最高优先触发" 0
+else
+  report "显式声明(%/@/[触发:])最高优先触发" 1
+  echo "$out6"
+fi
+
+echo "== 7. 裸提及部门名（状态标签）不触发——消灭'测试线验收中'误判 =="
+out7=$($PY - <<'PYBLK'
+import sys; sys.path.insert(0, '.')
+from routing import route
+
+# 状态标签文本：裸提及部门名、无显式声明、无职责分配语境 → 不触发任何部门
+r = route(issue_body="测试线验收中、美术线验收中（状态标签，非分配工作）。")
+assert r["active_departments"] == [], r["active_departments"]
+
+# 纯无关文本
+r2 = route(issue_title="今天天气不错，吃饭了吗")
+assert r2["active_departments"] == [], r2["active_departments"]
+print("BARE_MENTION_OK")
+PYBLK
+)
+if echo "$out7" | grep -q "BARE_MENTION_OK"; then
+  report "裸提及部门名/状态标签不触发（未命中=静默）" 0
+else
+  report "裸提及部门名/状态标签不触发（未命中=静默）" 1
+  echo "$out7"
+fi
+
+echo "== 8. 语义/关键词触发带阈值下限（强职责词命中才触发） =="
+out8=$($PY - <<'PYBLK'
+import sys; sys.path.insert(0, '.')
+from routing import route
+
+# 强职责词命中 → 触发对应部门
+r = route(issue_title="角色原画与 3D 建模规范", issue_body="美术风格 原画 建模 材质")
+assert "美术线" in r["active_departments"]
+assert r["confidence"]["美术线"]["method"] in ("explicit", "semantic")
+
+# 纯程序 bug → 只触发程序线
+r2 = route(issue_title="修复服务端接口并发 bug", issue_body="server 接口与引擎适配")
+assert "程序线" in r2["active_departments"]
+assert "美术线" not in r2["active_departments"]
+assert "测试线" not in r2["active_departments"]
+print("SEMANTIC_OK")
+PYBLK
+)
+if echo "$out8" | grep -q "SEMANTIC_OK"; then
+  report "语义/关键词触发带阈值下限" 0
+else
+  report "语义/关键词触发带阈值下限" 1
+  echo "$out8"
+fi
+
+echo "== 9. route_from_env 不再拼接 CNB_ISSUE_LABELS（标签不污染路由） =="
+out9=$($PY - <<'PYBLK'
+import sys; sys.path.insert(0, '.')
+import os
+from routing import route_from_env, serialize_active
+
+# 模拟 CI 环境：labels 含"测试线验收中,美术线验收中"，标题为纯程序任务
+env = {
+    "CNB_EVENT": "issue.open",
+    "CNB_ISSUE_TITLE": "修复服务端接口并发 bug",
+    "CNB_ISSUE_DESCRIPTION": "server 接口与引擎适配",
+    "CNB_ISSUE_LABELS": "测试线验收中,美术线验收中,路由机制已落地",
+}
+old = {k: os.environ.get(k) for k in env}
+os.environ.update(env)
+try:
+    r = route_from_env()
+    active = serialize_active(r)
+finally:
+    for k, v in old.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+# labels 不再被拼接 → 测试线/美术线不被"验收中"状态标签误拉起
+assert "测试线" not in active, active
+assert "美术线" not in active, active
+assert "程序线" in active, active
+print("LABELS_ISOLATED_OK")
+PYBLK
+)
+if echo "$out9" | grep -q "LABELS_ISOLATED_OK"; then
+  report "route_from_env 不拼接 labels，状态标签不污染路由" 0
+else
+  report "route_from_env 不拼接 labels，状态标签不污染路由" 1
+  echo "$out9"
 fi
 
 echo ""

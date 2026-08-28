@@ -341,10 +341,12 @@
     "test_routing.sh": {
       "covers": [
         "game-studio-agents/config/routing.py",
-        "game-studio-agents/config/game_producer_agent.py"
+        "game-studio-agents/config/game_producer_agent.py",
+        ".cnb.yml",
+        "game-studio-agents/tests/test_routing.sh"
       ],
       "depends_on": [],
-      "cpu_cost_est": 1.0,
+      "cpu_cost_est": 0.6,
       "kind": "core"
     }
   }

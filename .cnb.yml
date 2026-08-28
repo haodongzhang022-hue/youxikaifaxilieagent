@@ -35,6 +35,8 @@
 $:
   issue.open:
     - name: game-manager-orchestrate
+      runner:
+        cpus: 2
       docker:
         image: &npc_image cnbcool/default-npc:latest
       stages:
@@ -62,10 +64,13 @@ $:
                  - 任务横跨多个角色 → 按**部门整体**派发（@当前仓库slug(部门名)）；
                  - 任务聚焦单角色 → 按 **role_id** 直投给具体角色；
               6. 在 Issue 评论中输出工作包拆分表与部门协作依赖图。
-              【路由决策·必做】只派发/只 @ 本轮**确实有工作包**的部门：
-              - 触发方式 = 显性声明：在评论/描述中用 **%部门名**（如 %测试线）显式声明触发，
-                裸提及部门名（如"测试线验收中"标签）**不触发**；
-              - 没有相关工作包的部门**一律不 @、不触发、不评论凑热闹**；
+              【路由决策·必做】只派发/只 @ 本轮**确实有工作包**的部门（三层触发引擎）：
+              - **显式声明最高优先**：Issue/评论中带 `%部门名` / `@部门名` / `[触发:部门名]`
+                显式标记的部门 → 必触发、高置信，不受关键词阈值约束；
+              - **语义匹配带阈值下限**：工作内容命中部门强职责关键词（如"原画/建模"→美术线，
+                "回归/case/断言"→测试线）才触发；**裸提及部门名**（如"美术线验收中"这类状态
+                标签文本）不含分配语境 → 不触发、静默放行；
+              - **未命中不拉起**：无显式声明且无强职责词命中 → 一律不 @、不触发、不评论凑热闹；
               - 全量六大部门流水线是历史兜底写法，**不要**为了"走流程"把无关部门也拉进来；
               - 最终在评论中明确列出【本轮应触发部门】与【本轮跳过部门】。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
@@ -260,6 +265,8 @@ $:
 # 关闭/保留等动作，而是先以 CodeBuddy 岗位职责框架审查残留工作，再据实给出处置结论。
   issue.comment@npc:
     - name: npc-issue-dispose
+      runner:
+        cpus: 2
       docker:
         image: *npc_image
       stages:
@@ -308,6 +315,8 @@ $:
 # 驱动，任何 NPC 不得尝试 push（会导致 403 错误与闭环中断）。
   pull_request:
     - name: review-fix-loop
+      runner:
+        cpus: 2
       docker:
         image: *npc_image
       stages:
@@ -574,6 +583,8 @@ $:
 #      由代码审查员 NPC 校验，只有评审通过才放行自动合并。
   pull_request.mergeable:
     - name: auto-merge
+      runner:
+        cpus: 2
       docker:
         image: *npc_image
       stages:
@@ -611,6 +622,8 @@ $:
 # ---- 事件驱动：PR 合并后 → 自动更新 Issue 并解锁下游 ----
   pull_request.merged:
     - name: post-merge-orchestrate
+      runner:
+        cpus: 2
       docker:
         image: *npc_image
       stages:
@@ -632,11 +645,11 @@ $:
                  - 任务聚焦单角色 → 按 role_id 直投给具体角色；
               3. 更新对应 Issue 状态（标注进展/下一阶段）；
               4. 在 Issue 中评论合并后的下一步协作计划。
-              【路由决策·必做】只有被本次合并真正**解锁/影响**的部门才派发、才 @：
-              - 触发方式 = 显性声明：评论/描述中用 **%部门名**（如 %美术线）显式声明触发，
-                裸提及部门名**不触发**；依赖解锁（deps_unlocked）仍有效；
-              - 未受影响/无下游工作包的部门**一律不 @、不触发、不评论凑热闹**；
-              - 不要为走完六大部门流水线而触发无关部门（尤其美术/测试常无工作凑热闹）；
+              【路由决策·必做】只有被本次合并真正**解锁/影响**的部门才派发、才 @（三层触发引擎）：
+              - **依赖解锁为主**：按上游验收解锁的下游工作包（wp_xxx）判定只派发确有工作的部门；
+              - **显式声明最高优先**：`%部门名` / `@部门名` / `[触发:部门名]` → 必触发；
+              - **未命中不拉起**：未解锁、无显式声明、无强职责词命中的部门一律不 @、不触发、
+                不评论凑热闹（尤其美术/测试常无工作凑热闹）；
               - 最终评论中明确列出【本轮应触发部门】与【本轮跳过部门】。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动，无需人工手动推进度。
@@ -822,6 +835,8 @@ $:
 # 本仓库修复闭环优先由仓库处理专员承接；CodeBuddy 仅提供建议。
   pull_request.changes_requested:
     - name: auto-fix-review
+      runner:
+        cpus: 2
       docker:
         image: *npc_image
       stages:
@@ -877,6 +892,8 @@ $:
 # 本仓库修复优先由仓库处理专员承接；CodeBuddy 仅提供建议（不执行打标签）。
   pull_request.comment@npc:
     - name: npc-manual-invoke
+      runner:
+        cpus: 2
       docker:
         image: *npc_image
       stages:
@@ -918,6 +935,8 @@ $:
 main:
   push:
     - name: full-regression-on-merge
+      runner:
+        cpus: 2
       docker:
         image: *npc_image
       stages:
@@ -929,6 +948,8 @@ main:
             bash scripts/change-aware-test.sh --all
   "crontab: 0 6 * * 1":
     - name: merged-confirm-sweep
+      runner:
+        cpus: 2
       docker:
         image: *npc_image
       stages:
