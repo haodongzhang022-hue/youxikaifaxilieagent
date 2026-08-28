@@ -114,7 +114,8 @@ class GameProducerAgent(BaseAgent):
         super().__init__(role_id or MANAGER_ROLE_ID, bus)
         self.scheduler = scheduler or Scheduler(bus=self.bus)
         self.biz_state = "IDLE"
-        self.work_packages: List[Dict[str, Any]] = []   # 已拆分的工作包
+        self.work_packages: List[Dict[str, Any]] = []
+        self.routing_result: Optional[Dict[str, Any]] = None   # 已拆分的工作包
         self.accepted: List[str] = []                    # 已验收的部门产出
         # 上游验收通过的产出缓存（wp_id -> 产出物字段）。用于把上游产出
         # （如 wp_numeric_model 的 market_simulation）注入依赖它的下游任务
@@ -322,8 +323,55 @@ class GameProducerAgent(BaseAgent):
         return self.collab.audit(wp_id)
 
     # ---------- 编排各阶段 ----------
+    def _route_departments(self, context: Optional[Dict[str, Any]] = None) -> List[str]:
+        """路由决策：依据工作内容/依赖解锁/点名，判定本轮应触发的部门。
+
+        v1.0 新增（Issue #54 职责明确）：解决"无工作部门凑热闹"——
+        不再无条件触发全部六大部门，而是按"工作内容匹配 + 依赖解锁 +
+        明确点名"规则，只路由命中本轮应派发的部门，未命中部门不跑。
+        """
+        try:
+            from routing import route
+        except Exception as exc:  # pragma: no cover
+            self._log("route", f"路由模块不可用({exc})，回退到全量派发")
+            return list(DEPT_KEY_BY_NAME.keys())
+
+        ctx = context or {}
+        result = route(
+            issue_title=ctx.get("title", ""),
+            issue_body=ctx.get("body", ""),
+            pr_description=ctx.get("description", ""),
+            changed_files=ctx.get("changed_files"),
+            deps_unlocked=ctx.get("deps_unlocked"),
+            manually_requested=ctx.get("requested"),
+        )
+        active = result["active_departments"]
+        self.routing_result = result
+        self._log(
+            "route",
+            f"路由决策 → 触发 {active or '无'} | 跳过 {result['inactive_departments']}",
+        )
+        return active
+
+    def routing_active(self, dept_name: str) -> bool:
+        """供 .cnb.yml 部门 stage if 条件判断本部门是否被路由命中。"""
+        if not getattr(self, "routing_result", None):
+            return False
+        return dept_name in self.routing_result.get("active_departments", [])
+
+    def routing_summary(self) -> Dict[str, Any]:
+        """返回本轮路由决策摘要（供编排评论输出）。"""
+        r = getattr(self, "routing_result", None)
+        if not r:
+            return {"active_departments": [], "inactive_departments": []}
+        return {
+            "active_departments": r["active_departments"],
+            "inactive_departments": r["inactive_departments"],
+            "matched": r["matched"],
+        }
+
     def _start_orchestration(self, architecture: Dict[str, Any]):
-        """收到架构蓝图 → 拆解模块 → 拆分工作包 → 分配资源 → 派发。"""
+        """收到架构蓝图 → 路由决策 → 拆解模块 → 拆分工作包 → 分配资源 → 派发。"""
         # 断言：架构蓝图必须真正被消费，避免出现未命名项目/模块静默回退
         assert architecture, ("架构蓝图为空：build_task_assign 的 inputs['architecture'] "
                               "未被 handle_task 正确读取")
@@ -352,9 +400,34 @@ class GameProducerAgent(BaseAgent):
             self._assign_resources(wp)
         self._log("resource", "已完成部门资源分配")
 
-        # 4) 事件驱动派发：工作包投递到 task_scheduler，按依赖自动解锁
+        # 4) 路由决策：按工作内容/依赖解锁/点名 + 模块拆解，只派发命中部门
+        #    ——未命中部门不派发、不凑热闹（Issue #54 职责明确）
+        self.biz_state = "ROUTING"
+        # 模块拆解本身即"内容匹配"：拆出哪些部门模块 → 就派发哪些部门。
+        # 有 routing 上下文（增量事件：PR 合并/Issue 迭代）时，叠加内容路由，
+        # 过滤出本轮真正应触发的部门，未命中部门不派发。
+        module_depts = list({wp["department"] for wp in wps})
+        route_ctx = architecture.get("routing", {}) or {}
+        content_active = self._route_departments(route_ctx)
+        if route_ctx:
+            # 增量场景：以内容路由为准，但须限定在本次拆解出的部门内
+            active_depts = set(module_depts) & set(content_active)
+            if not active_depts:
+                active_depts = set(module_depts)  # 内容未命中但模块命中 → 仍按模块
+        else:
+            # 首次完整编排：按模块拆解精确派发（等价内容匹配，无凑热闹）
+            active_depts = set(module_depts)
+        active = sorted(active_depts, key=lambda d: list(DEPT_KEY_BY_NAME.values()).index(d))
+        for wp in wps:
+            wp["routed"] = wp["department"] in active
+            if not wp["routed"]:
+                wp["status"] = "skipped"
+        routed_wps = [wp for wp in wps if wp["routed"]]
+        self._log("route", f"路由命中 {len(routed_wps)}/{len(wps)} 个工作包 → {active}")
+
+        # 5) 事件驱动派发：命中部门的工作包投递到 task_scheduler
         self.biz_state = "DISPATCH"
-        tasks = self._dispatch(wps)
+        tasks = self._dispatch(routed_wps) if routed_wps else []
         self._log("dispatch", f"已派发 {len(tasks)} 个部门任务，等待依赖解锁")
 
     def _decompose(self, project: str, modules: List[str]) -> List[Dict[str, Any]]:
