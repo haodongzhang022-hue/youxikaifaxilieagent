@@ -11,6 +11,7 @@
 | wp_perf_test | 全链路 | auto_qa | 性能测试方案 |
 | wp_regression_test | 全链路 | qa_engineer | 回归测试方案 |
 | wp_review_qa | 评审治理 | qa_engineer | 验收评审无推送权限边界回归 |
+| wp_handler_qa | 仓库处理专员回归 | qa_engineer + auto_qa | 仓库处理专员触发链路回归验证 |
 
 ## 二、组内分工表
 
@@ -20,6 +21,7 @@
 | 自动化回归 | auto_qa | wp_regression_test_自动化回归方案.md |
 | 性能验收 | auto_qa | wp_perf_test_性能验收方案.md |
 | 评审只读边界回归 | qa_engineer | wp_review_qa_验收评审无推送权限边界回归.md |
+| 仓库处理专员触发链路回归 | qa_engineer + auto_qa | wp_handler_qa_仓库处理专员触发链路回归.md |
 
 ## 三、跨部门协作
 
@@ -28,5 +30,6 @@
 | 上游消费 | 策划线 | 消费设计文档做测试依据 | 策划产出验收后 |
 | 上游消费 | 程序线 | 消费实现方案做测试依据 | 程序产出验收后 |
 | 上游消费 | 美术线 | 消费美术资产做兼容性验收 | 美术产出验收后 |
+| 上游消费 | 程序线 | 消费 wp_handler_program 验证报告做回归依据 | PR#52 合并后 |
 | 上游消费 | 程序线/美术线 | 消费评审只读边界（wp_review_role/route/ux）做权限回归 | PR#56 合并后 |
-| 下游解锁 | 项目管理 | 发版里程碑收口 | 测试验收通过后 |
+| 下游解锁 | 项目管理 | 发版里程碑收口 + 评审闭环验收 | 测试验收通过后 |
