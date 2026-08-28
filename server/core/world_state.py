@@ -79,6 +79,15 @@ class WorldState:
         # 2. 更新世界状态
         deltas = self._compute_delta(player_id, action)
 
+        # W2 修复：若存在 rejected delta，则整体 rejected
+        rejected = [d for d in deltas if d.get("op") == "rejected"]
+        if rejected:
+            return {
+                "status": "rejected",
+                "reason": rejected[0].get("reason", "action rejected"),
+                "deltas": rejected,
+            }
+
         # 3. 记录增量
         for d in deltas:
             self._deltas.append(d)
@@ -185,6 +194,59 @@ class WorldState:
                     "op": "rejected",
                     "entity_id": entity_id,
                     "reason": f"no item '{item}' in inventory",
+                    "version": self._version + 1,
+                    "timestamp": self.server_time,
+                })
+        elif action_type == "attack":
+            # W1 修复：attack 动作服务端结算伤害
+            target_id = action.get("target_id", "")
+            atk_power = action.get("attack_power", 10)
+            new_entity = dict(cur)
+            # 简单结算：对目标实体扣血
+            target_entity = self._world_state.get(target_id)
+            if target_entity is not None:
+                thp = target_entity.get("hp", 0) - atk_power
+                target_entity["hp"] = max(0, thp)
+                self._world_state[target_id] = target_entity
+                deltas.append({
+                    "op": "update",
+                    "entity_id": target_id,
+                    "field": "hp",
+                    "value": target_entity["hp"],
+                    "version": self._version + 1,
+                    "timestamp": self.server_time,
+                })
+            else:
+                deltas.append({
+                    "op": "rejected",
+                    "entity_id": entity_id,
+                    "reason": f"target '{target_id}' not found",
+                    "version": self._version + 1,
+                    "timestamp": self.server_time,
+                })
+        elif action_type == "interact":
+            # W1 修复：interact 动作服务端处理交互事件
+            target_id = action.get("target_id", "")
+            target_entity = self._world_state.get(target_id)
+            if target_entity is not None:
+                # 标记交互事件
+                target_entity["interacted"] = True
+                target_entity["interacted_by"] = player_id
+                target_entity["interacted_at"] = self.server_time
+                self._world_state[target_id] = target_entity
+                deltas.append({
+                    "op": "update",
+                    "entity_id": target_id,
+                    "field": "interacted",
+                    "value": True,
+                    "version": self._version + 1,
+                    "timestamp": self.server_time,
+                })
+            else:
+                deltas.append({
+                    "op": "rejected",
+                    "entity_id": entity_id,
+                    "reason": f"target '{target_id}' not found",
                     "version": self._version + 1,
                     "timestamp": self.server_time,
                 })

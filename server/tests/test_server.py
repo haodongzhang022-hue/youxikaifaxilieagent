@@ -343,3 +343,208 @@ class TestGateway(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ============================================================
+# 安全修复回归测试（C1/C2/C3/W1/W2/W3/W4）
+# ============================================================
+
+class TestSecurityFixC1(unittest.TestCase):
+    """C1 修复：货币复制漏洞 —— 负数金额校验"""
+
+    def setUp(self):
+        self.economy = EconomyService()
+
+    def test_negative_credit_rejected(self):
+        """负数 credit 必须被拒绝（C1）"""
+        self.economy.init_account("P1")
+        result = self.economy.credit("P1", "gold", -100, reason="hack")
+        self.assertEqual(result["status"], "error")
+        # 余额不应变化
+        balance = self.economy.get_balance("P1")
+        self.assertEqual(balance["gold"], 0)
+
+    def test_zero_credit_rejected(self):
+        """零 credit 必须被拒绝（C1）"""
+        self.economy.init_account("P1")
+        result = self.economy.credit("P1", "gold", 0)
+        self.assertEqual(result["status"], "error")
+
+    def test_negative_debit_rejected(self):
+        """负数 debit 必须被拒绝（C1）"""
+        self.economy.init_account("P1")
+        result = self.economy.debit("P1", "gold", -100)
+        self.assertEqual(result["status"], "error")
+
+    def test_negative_transfer_rejected(self):
+        """负数 transfer 必须被拒绝（C1）"""
+        self.economy.init_account("P1")
+        self.economy.init_account("P2")
+        result = self.economy.transfer("P1", "P2", "gold", -100)
+        self.assertEqual(result["status"], "error")
+
+    def test_self_transfer_rejected(self):
+        """自转必须被拒绝（C1）"""
+        self.economy.init_account("P1")
+        result = self.economy.transfer("P1", "P1", "gold", 100)
+        self.assertEqual(result["status"], "error")
+
+
+class TestSecurityFixC2(unittest.TestCase):
+    """C2 修复：战斗越权 —— 会话所有者校验"""
+
+    def setUp(self):
+        self.combat = CombatService()
+
+    def test_attack_own_session_allowed(self):
+        """自己攻击自己会话允许（C2）"""
+        session = self.combat.start_combat("P1", seed=42, monster_hp=100)
+        result = self.combat.process_attack(session.combat_id, 10, caller_player_id="P1")
+        self.assertIn("status", result)
+        self.assertNotEqual(result["status"], "error")
+
+    def test_attack_other_session_rejected(self):
+        """攻击他人会话必须被拒绝（C2）"""
+        session = self.combat.start_combat("P1", seed=42, monster_hp=100)
+        result = self.combat.process_attack(session.combat_id, 10, caller_player_id="P2")
+        self.assertEqual(result["status"], "error")
+        self.assertIn("forbidden", result["reason"])
+
+    def test_attack_no_caller_works(self):
+        """未传 caller 时行为兼容（C2 向后兼容）"""
+        session = self.combat.start_combat("P1", seed=42, monster_hp=100)
+        result = self.combat.process_attack(session.combat_id, 10)
+        self.assertIn("status", result)
+
+
+class TestSecurityFixC3(unittest.TestCase):
+    """C3 修复：跨端一致 —— _roll_loot 对齐中间件"""
+
+    def setUp(self):
+        self.combat = CombatService()
+
+    def test_loot_aligned_with_middleware(self):
+        """掉落结果必须与中间件 cabi.roll_loot 一致（C3）"""
+        from middleware.bindings.python import cabi
+
+        # 服务端 _roll_loot 与中间件 roll_loot 应产生一致物品集合
+        server_loot = self.combat._roll_loot(42)
+        middleware_loot = cabi.roll_loot(self.combat.LOOT_TABLE_ID, 42)
+
+        middleware_items = middleware_loot.get("items", [])
+        self.assertEqual(len(server_loot), len(middleware_items))
+
+        # 逐项比对（服务端转换为 {"item", "amount"} 格式）
+        for s_item, m_item in zip(server_loot, middleware_items):
+            self.assertEqual(s_item["item"], m_item["id"])
+            self.assertEqual(s_item["amount"], m_item["qty"])
+
+    def test_loot_items_from_middleware_table(self):
+        """掉落物品必须来自中间件掉落表（C3）"""
+        server_loot = self.combat._roll_loot(42)
+        allowed = {"coin", "potion", "gem", "ore", "rune"}
+        for item in server_loot:
+            self.assertIn(item["item"], allowed)
+
+    def test_loot_deterministic_same_seed(self):
+        """同 seed 掉落确定性（C3）"""
+        loot1 = self.combat._roll_loot(12345)
+        loot2 = self.combat._roll_loot(12345)
+        self.assertEqual(loot1, loot2)
+
+
+class TestWorldStateFixW1W2(unittest.TestCase):
+    """W1/W2 修复：attack/interact 结算 + rejected 传播"""
+
+    def setUp(self):
+        self.world = WorldState()
+
+    def test_attack_action_settles(self):
+        """attack 动作有服务端结算逻辑（W1）"""
+        self.world.set_entity("player_1", {"player_id": "1", "hp": 100})
+        self.world.set_entity("enemy_1", {"hp": 100})
+
+        result = self.world.apply_action(
+            "1", {"type": "attack", "target_id": "enemy_1", "attack_power": 30}
+        )
+        self.assertEqual(result["status"], "accepted")
+        enemy = self.world.get_entity("enemy_1")
+        self.assertEqual(enemy["hp"], 70)
+
+    def test_attack_missing_target_rejected(self):
+        """attack 目标不存在应返回 rejected（W1/W2）"""
+        self.world.set_entity("player_1", {"player_id": "1", "hp": 100})
+        result = self.world.apply_action(
+            "1", {"type": "attack", "target_id": "nobody", "attack_power": 30}
+        )
+        self.assertEqual(result["status"], "rejected")
+
+    def test_interact_action_settles(self):
+        """interact 动作有服务端结算逻辑（W1）"""
+        self.world.set_entity("player_1", {"player_id": "1", "hp": 100})
+        self.world.set_entity("npc_1", {"name": "Blacksmith"})
+
+        result = self.world.apply_action(
+            "1", {"type": "interact", "target_id": "npc_1"}
+        )
+        self.assertEqual(result["status"], "accepted")
+        npc = self.world.get_entity("npc_1")
+        self.assertTrue(npc.get("interacted", False))
+        self.assertEqual(npc.get("interacted_by"), "1")
+
+    def test_use_item_missing_item_rejected(self):
+        """使用不存在的物品应返回 rejected（W2 传播）"""
+        self.world.set_entity("player_1", {"player_id": "1", "inventory": {}})
+        result = self.world.apply_action(
+            "1", {"type": "use_item", "item": "potion"}
+        )
+        self.assertEqual(result["status"], "rejected")
+
+
+class TestGameplayServiceW4(unittest.TestCase):
+    """W4 修复：GameplayService 接入 Gateway 路由"""
+
+    def setUp(self):
+        self.gateway = Gateway()
+        # 登录获取 token
+        req = GameRequest.create(
+            "temp", "login",
+            {"token": "token_abcdefg", "device_id": "dev_gw_w4"},
+            platform="web",
+        )
+        resp = self.gateway.handle(req)
+        self.player_id = resp.payload["player"]["player_id"]
+        self.token = resp.payload["session_token"]
+
+    def test_gameplay_with_scene(self):
+        """带 scene_id 的玩法动作经 GameplayService 路由（W4）"""
+        req = GameRequest.create(
+            self.player_id, "gameplay_action",
+            {"session_token": self.token, "scene_id": "LVL_001",
+             "action": {"type": "move", "x": 5, "z": 8}},
+        )
+        resp = self.gateway.handle(req)
+        self.assertEqual(resp.status, 0)
+        self.assertEqual(resp.payload["status"], "accepted")
+
+    def test_invalid_scene_rejected(self):
+        """不存在的场景应被拒绝（W4）"""
+        req = GameRequest.create(
+            self.player_id, "gameplay_action",
+            {"session_token": self.token, "scene_id": "NOT_A_SCENE",
+             "action": {"type": "move", "x": 5, "z": 8}},
+        )
+        resp = self.gateway.handle(req)
+        self.assertEqual(resp.status, 0)
+        self.assertEqual(resp.payload["status"], "rejected")
+        self.assertIn("not found", resp.payload["reason"])
+
+    def test_get_scene_config(self):
+        """场景配置可查询（W4）"""
+        config = self.gateway.gameplay.get_scene_config("LVL_001")
+        self.assertIsNotNone(config)
+        self.assertEqual(config["procedural_seed"], 42)
+
+
+if __name__ == "__main__":
+    unittest.main()

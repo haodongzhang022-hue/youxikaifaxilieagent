@@ -16,6 +16,7 @@ from server.proto.messages import (
 from server.core.auth_service import AuthService
 from server.core.world_state import WorldState
 from server.core.combat_service import CombatService, EconomyService
+from server.core.gameplay_service import GameplayService
 
 
 class Gateway:
@@ -33,6 +34,7 @@ class Gateway:
         self.world = WorldState()
         self.combat = CombatService()
         self.economy = EconomyService()
+        self.gameplay = GameplayService(self.world)
 
     # ============================================================
     # 主入口
@@ -60,7 +62,7 @@ class Gateway:
         elif msg_type == MSG_GAMEPLAY_SNAPSHOT:
             return self._handle_snapshot(request)
         elif msg_type == MSG_COMBAT_RESULT:
-            return self._handle_combat(request)
+            return self._handle_combat(request, player_id)
         elif msg_type == MSG_QUEST_UPDATE:
             return self._handle_quest(request)
         elif msg_type == MSG_ECONOMY_TRANSFER:
@@ -103,7 +105,14 @@ class Gateway:
     def _handle_gameplay_action(self, request: GameRequest) -> GameResponse:
         """处理玩法动作（服务端权威）"""
         action = request.payload.get("action", {})
-        result = self.world.apply_action(request.player_id, action)
+        scene_id = request.payload.get("scene_id", "")
+
+        # W4 修复：GameplayService 已接入 Gateway 路由，带场景上下文
+        if scene_id:
+            result = self.gameplay.player_action(request.player_id, scene_id, action)
+        else:
+            result = self.world.apply_action(request.player_id, action)
+
         return GameResponse.ok(request.request_id, result)
 
     def _handle_snapshot(self, request: GameRequest) -> GameResponse:
@@ -111,10 +120,9 @@ class Gateway:
         snap = self.world.snapshot()
         return GameResponse.ok(request.request_id, {"snapshot": snap})
 
-    def _handle_combat(self, request: GameRequest) -> GameResponse:
+    def _handle_combat(self, request: GameRequest, player_id: str) -> GameResponse:
         """处理战斗请求"""
         action = request.payload.get("action", "start")
-        player_id = request.player_id
 
         if action == "start":
             seed = request.payload.get("seed", 42)
@@ -127,16 +135,17 @@ class Gateway:
         elif action == "attack":
             combat_id = request.payload.get("combat_id", "")
             attack_power = request.payload.get("attack_power", 10)
-            result = self.combat.process_attack(combat_id, attack_power)
+            # C2 修复：将 player_id 传给 combat_service 做越权校验
+            result = self.combat.process_attack(combat_id, attack_power, player_id)
             # 战斗胜利后自动发放奖励到经济账户
             if result.get("status") == "victory":
                 for reward in result.get("rewards", []):
                     item = reward["item"]
                     amount = reward["amount"]
-                    if item == "gold":
+                    if item == "gold" or item == "coin":
                         self.economy.credit(player_id, "gold", amount,
                                             reason="combat reward")
-                    elif item == "star_shard":
+                    elif item == "star_shard" or item == "gem" or item == "rune":
                         self.economy.credit(player_id, "star_core", amount,
                                             reason="combat reward")
             return GameResponse.ok(request.request_id, result)

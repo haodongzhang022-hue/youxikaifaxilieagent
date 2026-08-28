@@ -5,6 +5,7 @@ combat_service.py - 战斗服务
 - 战斗帧率固定 30Hz（与客户端 Tick 对齐）
 - 伤害计算使用定点数（保证多端一致）
 - 掉落表驱动 + 统一随机种子管理
+- 对齐中间件 C ABI：cabi.calc_damage / cabi.roll_loot
 """
 
 import hashlib
@@ -44,6 +45,7 @@ class CombatService:
     """战斗服务：服务端权威结算"""
 
     FIXED_TICK_RATE = 30  # 30Hz 固定 Tick
+    LOOT_TABLE_ID = 1     # 掉落表 ID（对齐中间件）
 
     def __init__(self):
         self._sessions: Dict[str, CombatSession] = {}
@@ -64,23 +66,32 @@ class CombatService:
         self._sessions[combat_id] = session
         return session
 
-    def process_attack(self, combat_id: str, attack_power: int) -> Dict:
+    def process_attack(self, combat_id: str, attack_power: int,
+                       caller_player_id: Optional[str] = None) -> Dict:
         """
         处理攻击动作（服务端权威结算）。
         使用定点数保证多端伤害计算一致。
+
+        caller_player_id: 发起攻击的玩家 ID。若提供，校验其是否为会话所有者。
         """
         session = self._sessions.get(combat_id)
         if not session or session.finished:
             return {"status": "error", "reason": "combat not found or finished"}
 
+        # C2 修复：校验攻击者是否为此战斗会话的所有者
+        if caller_player_id is not None and caller_player_id != session.player_id:
+            return {
+                "status": "error",
+                "reason": "forbidden: not your combat session",
+            }
+
         session.tick += 1
 
-        # 定点数伤害计算（对齐中间件 FixedPoint）
-        # 伤害 = attack_power * 1.0 定点数乘法，保证跨端一致
-        fp_power = cabi.fp_from_int(attack_power)
-        fp_scale = cabi.fp_from_float(1.0)
-        fp_damage = cabi.fp_mul(fp_power, fp_scale)
-        damage = cabi.fp_to_float(fp_damage)
+        # W3 修复：使用中间件 cabi.calc_damage() 计算伤害（定点数、跨端一致）
+        skill_config = {"base_power": attack_power}
+        attacker_stats = {"atk": 100}
+        target_stats = {"def": 50}
+        damage = cabi.calc_damage(skill_config, attacker_stats, target_stats)
 
         # 应用伤害
         session.monster_hp = max(0, session.monster_hp - int(damage))
@@ -117,25 +128,24 @@ class CombatService:
         return result
 
     # ============================================================
-    # 掉落表（确定性：同 seed 同掉落）
+    # 掉落表（确定性：同 seed 同掉落，对齐中间件 cabi.roll_loot）
     # ============================================================
     def _roll_loot(self, seed: int) -> List[Dict]:
-        """确定性掉落（与中间件 procgen_loot 对齐）"""
-        item_types = ["gold", "iron_ore", "herb", "potion", "star_shard"]
-        st = [cabi._fnv1a_hash(str(seed))]
-
-        count = 1 + cabi._splitmix64_next(st) % 3
+        """确定性掉落（与中间件 cabi.roll_loot 对齐，C3 修复）"""
+        result = cabi.roll_loot(self.LOOT_TABLE_ID, seed)
+        # 中间件返回 {"items": [{"id": "...", "qty": n}, ...]}
+        # 映射到服务端通用格式 {"item": ..., "amount": ...}
+        items = result.get("items", [])
         loot = []
-        for _ in range(count):
-            r = cabi._splitmix64_next(st)
-            item = item_types[r % len(item_types)]
-            amount = 1 + ((r >> 8) % 10)
-            loot.append({"item": item, "amount": amount})
+        for it in items:
+            loot.append({"item": it.get("id", ""), "amount": it.get("qty", 1)})
         return loot
 
 
 class EconomyService:
     """经济服务：统一账本 + 防作弊"""
+
+    VALID_CURRENCIES = ("gold", "star_core", "eroding_stone")
 
     def __init__(self):
         self._ledger: Dict[str, Dict[str, int]] = {}  # player_id -> {currency: amount}
@@ -153,6 +163,10 @@ class EconomyService:
     def credit(self, player_id: str, currency: str, amount: int,
                reason: str = "") -> Dict:
         """入账（服务端权威）"""
+        # C1 修复：校验金额合法性，防止负数反向入账
+        if amount <= 0:
+            return {"status": "error", "reason": "amount must be positive"}
+
         self.init_account(player_id)
         if currency not in self._ledger[player_id]:
             return {"status": "error", "reason": f"invalid currency '{currency}'"}
@@ -171,6 +185,10 @@ class EconomyService:
     def debit(self, player_id: str, currency: str, amount: int,
               reason: str = "") -> Dict:
         """出账（服务端权威，防作弊校验余额）"""
+        # C1 修复：校验金额合法性，防止负数反向入账
+        if amount <= 0:
+            return {"status": "error", "reason": "amount must be positive"}
+
         self.init_account(player_id)
         if currency not in self._ledger[player_id]:
             return {"status": "error", "reason": f"invalid currency '{currency}'"}
@@ -197,6 +215,11 @@ class EconomyService:
     def transfer(self, from_id: str, to_id: str,
                  currency: str, amount: int) -> Dict:
         """跨玩家转账（统一账本）"""
+        # C1 修复：校验金额合法性 + 校验转入/转出非同一人
+        if amount <= 0:
+            return {"status": "error", "reason": "amount must be positive"}
+        if from_id == to_id:
+            return {"status": "error", "reason": "cannot transfer to self"}
         result = self.debit(from_id, currency, amount, reason=f"transfer to {to_id}")
         if result["status"] != "ok":
             return result
