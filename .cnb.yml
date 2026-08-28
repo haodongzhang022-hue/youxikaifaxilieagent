@@ -38,6 +38,10 @@ $:
       docker:
         image: &npc_image cnbcool/default-npc:latest
       stages:
+        - name: 路由决策·部门派发
+          script: |
+            python3 game-studio-agents/config/routing.py marker ${CNB_BUILD_WORKSPACE}/.routing_active.txt
+            cat ${CNB_BUILD_WORKSPACE}/.routing_active.txt
         - name: 游戏向经理自动拆解
           type: npc:go
           options:
@@ -68,6 +72,8 @@ $:
 
 
         - name: 策划线执行
+          if: |
+            grep -q "策划线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 策划线
@@ -96,6 +102,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 程序线执行
+          if: |
+            grep -q "程序线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 程序线
@@ -124,6 +132,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 美术线执行
+          if: |
+            grep -q "美术线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 美术线
@@ -152,6 +162,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 测试线执行
+          if: |
+            grep -q "测试线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 测试线
@@ -180,6 +192,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 项目管理执行
+          if: |
+            grep -q "项目管理" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 项目管理
@@ -208,6 +222,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 运营线执行
+          if: |
+            grep -q "运营线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 运营线
@@ -627,6 +643,10 @@ $:
       docker:
         image: *npc_image
       stages:
+        - name: 路由决策·部门派发
+          script: |
+            python3 game-studio-agents/config/routing.py marker ${CNB_BUILD_WORKSPACE}/.routing_active.txt
+            cat ${CNB_BUILD_WORKSPACE}/.routing_active.txt
         - name: 合并后联动
           type: npc:go
           options:
@@ -650,6 +670,8 @@ $:
               全程机制驱动，无需人工手动推进度。
 
         - name: 策划线执行(下游解锁)
+          if: |
+            grep -q "策划线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 策划线
@@ -677,6 +699,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 程序线执行(下游解锁)
+          if: |
+            grep -q "程序线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 程序线
@@ -704,6 +728,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 美术线执行(下游解锁)
+          if: |
+            grep -q "美术线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 美术线
@@ -731,6 +757,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 测试线执行(下游解锁)
+          if: |
+            grep -q "测试线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 测试线
@@ -758,6 +786,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 项目管理执行(下游解锁)
+          if: |
+            grep -q "项目管理" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 项目管理
@@ -785,6 +815,8 @@ $:
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 运营线执行(下游解锁)
+          if: |
+            grep -q "运营线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 运营线

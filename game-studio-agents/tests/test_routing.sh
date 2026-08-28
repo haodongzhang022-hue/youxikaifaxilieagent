@@ -34,6 +34,45 @@ else
   echo "$out"
 fi
 
+
+echo "== 1.5 CLI 路由决策：从环境变量读取并判断部门命中 =="
+CLI_TEST=$(
+  CNB_EVENT=issue.open \
+  CNB_ISSUE_TITLE="修复服务端接口并发 bug" \
+  CNB_ISSUE_DESCRIPTION="涉及 server 端接口逻辑与引擎适配" \
+  $PY routing.py route 2>&1
+)
+if echo "$CLI_TEST" | grep -q "程序线"; then
+  report "CLI route 输出 active 部门清单" 0
+else
+  report "CLI route 输出 active 部门清单" 1
+  echo "$CLI_TEST"
+fi
+
+# CLI check 程序线应命中（退出码 0）
+if CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py check 程序线 >/dev/null 2>&1; then
+  report "CLI check 程序线命中" 0
+else
+  report "CLI check 程序线命中" 1
+fi
+
+# CLI check 美术线不应命中（退出码非 0）
+if ! CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py check 美术线 >/dev/null 2>&1; then
+  report "CLI check 美术线未命中" 0
+else
+  report "CLI check 美术线未命中" 1
+fi
+
+# CLI marker 写入文件
+MARKER_FILE="$(mktemp)"
+CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py marker "$MARKER_FILE" >/dev/null 2>&1
+if [ -f "$MARKER_FILE" ] && grep -q "程序线" "$MARKER_FILE"; then
+  report "CLI marker 写入路由清单文件" 0
+else
+  report "CLI marker 写入路由清单文件" 1
+fi
+rm -f "$MARKER_FILE"
+
 echo "== 2. 按工作内容精确匹配（无关任务不凑热闹）=="
 out2=$($PY - <<'PYBLK'
 import sys; sys.path.insert(0, '.')
@@ -134,6 +173,21 @@ if grep -q "只派发/只 @ 本轮" "$PIPELINE" && grep -q "本轮应触发部�
   report "游戏向经理编排含路由决策指令" 0
 else
   report "游戏向经理编排含路由决策指令" 1
+fi
+
+# 新增：验证 .cnb.yml 中部门 stage 含 if 路由守卫（条件不满足时跳过，不消耗资源）
+if_guard=$(grep -c "grep -q" "$PIPELINE" || true)
+if [ "$if_guard" -ge 12 ]; then
+  report ".cnb.yml 部门 stage 含 if 条件拦截（${if_guard} 处）" 0
+else
+  report ".cnb.yml 部门 stage 含 if 条件拦截（${if_guard} 处，期望>=12）" 1
+fi
+
+# 新增：验证路由决策 stage 已写入流水线
+if grep -q "routing.py marker" "$PIPELINE"; then
+  report ".cnb.yml 含路由决策 marker 写文件 stage" 0
+else
+  report ".cnb.yml 含路由决策 marker 写文件 stage" 1
 fi
 
 echo ""

@@ -307,5 +307,88 @@ def demo() -> None:
     print("🟢 部门派发路由决策演示通过")
 
 
+
+
+# ============================================================
+# CLI 入口：供 .cnb.yml 流水线 stage if 条件调用
+# ============================================================
+
+def route_from_env(threshold: int = 1) -> Dict[str, Any]:
+    """从 CNB 流水线环境变量读取 Issue/PR 信息，执行路由决策。
+
+    自动按触发事件区分数据源：
+      - CNB_EVENT 含 "issue" → 只读 CNB_ISSUE_TITLE / CNB_ISSUE_DESCRIPTION / CNB_ISSUE_LABELS
+      - CNB_EVENT 含 "pull_request" → 只读 CNB_PULL_REQUEST_TITLE / CNB_PULL_REQUEST_DESCRIPTION
+      - 其他情况 → 优先 Issue 变量，回退到 PR 变量
+    """
+    import os
+    event = os.getenv("CNB_EVENT", "")
+    is_issue = "issue" in event
+    is_pr = "pull_request" in event or "merge" in event
+
+    if is_issue:
+        title = os.getenv("CNB_ISSUE_TITLE", "")
+        body = os.getenv("CNB_ISSUE_DESCRIPTION", "")
+        labels = os.getenv("CNB_ISSUE_LABELS", "")
+    elif is_pr:
+        title = os.getenv("CNB_PULL_REQUEST_TITLE", "")
+        body = os.getenv("CNB_PULL_REQUEST_DESCRIPTION", "")
+        labels = os.getenv("CNB_ISSUE_LABELS", "")
+    else:
+        # 兜底：优先 Issue 变量，回退到 PR 变量
+        title = os.getenv("CNB_ISSUE_TITLE", "") or os.getenv("CNB_PULL_REQUEST_TITLE", "")
+        body = os.getenv("CNB_ISSUE_DESCRIPTION", "") or os.getenv("CNB_PULL_REQUEST_DESCRIPTION", "")
+        labels = os.getenv("CNB_ISSUE_LABELS", "")
+
+    if labels:
+        body = f"{body} {labels}".strip()
+    return route(issue_title=title, issue_body=body, pr_description="", threshold=threshold)
+
+
+def cli_main() -> None:
+    """命令行入口。用法：
+      python routing.py route                 # 输出 active 部门清单（空格分隔）
+      python routing.py check 策划线          # 检查某部门是否命中（退出码 0/1）
+      python routing.py marker <path>         # 写路由结果到 marker 文件
+      python routing.py demo                  # 运行演示（默认）
+    """
+    import sys
+    args = sys.argv[1:]
+    cmd = args[0] if args else "demo"
+
+    if cmd == "demo":
+        demo()
+        return
+
+    if cmd == "route":
+        result = route_from_env()
+        print(serialize_active(result))
+        return
+
+    if cmd == "check":
+        if len(args) < 2:
+            print("用法: python routing.py check <部门名>", file=sys.stderr)
+            sys.exit(2)
+        dept = args[1]
+        result = route_from_env()
+        active = is_department_active(result, dept)
+        if active:
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
+    if cmd == "marker":
+        if len(args) < 2:
+            print("用法: python routing.py marker <文件路径>", file=sys.stderr)
+            sys.exit(2)
+        result = route_from_env()
+        content = active_to_marker_file(result, args[1])
+        print(f"路由标记已写入 {args[1]}: {content}")
+        return
+
+    print(f"未知命令: {cmd}", file=sys.stderr)
+    sys.exit(2)
+
+
 if __name__ == "__main__":
-    demo()
+    cli_main()
