@@ -612,6 +612,7 @@ class ProgramDeptAgent(DepartmentAgent):
         # 并入开发小组闭环产出（Leader 整合全组开发 + 进度留痕）
         artifact["dev_team"] = {
             "ok": dev_team.get("ok", False),
+            "reason": dev_team.get("reason", ""),
             "dev_count": dev_team.get("dev_count", 0),
             "devs": dev_team.get("devs", []),
             "dev_ratio": dev_team.get("dev_ratio", 0.0),
@@ -626,6 +627,11 @@ class ProgramDeptAgent(DepartmentAgent):
     def _verify(self, work_package, artifact):
         if not artifact.get("content"):
             return False, "程序产出为空"
+        # 开发小组闭环失败透传：dev_team.ok=False 时验收不通过
+        dev_team = artifact.get("dev_team", {})
+        if dev_team and dev_team.get("ok") is False:
+            reason = dev_team.get("reason", "开发小组熔断/异常")
+            return False, f"开发小组闭环失败：{reason}"
         return True, "程序产出自检通过"
 
 

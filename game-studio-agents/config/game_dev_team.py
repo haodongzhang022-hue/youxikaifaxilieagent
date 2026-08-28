@@ -207,9 +207,7 @@ class GameDevTeamEngine:
             self._log("熔断：总迭代次数超 max_iterations")
             raise RuntimeError(f"开发小组熔断：迭代超过 {self.max_iterations} 次")
         r = DevRound(round_no=round_no)
-        pending = [t.dev_role for t in self.team.tasks.values()
-                   if not t.is_done() and t.status != "PENDING"] or \
-                  [t.dev_role for t in self.team.tasks.values() if not t.is_done()]
+        pending = [t.dev_role for t in self.team.tasks.values() if not t.is_done()]
         for role in pending:
             task = self.team.tasks[role]
             # 硬性熔断：单个开发重做超上限 → 上报 Leader 换方案
@@ -236,7 +234,7 @@ class GameDevTeamEngine:
         all_done = all(t.is_done() for t in self.team.tasks.values())
         if all_done:
             fused = self._fuse()
-            r.fused = list(fused.keys())
+            r.fused = list(fused.get("integrated", {}).keys())
         self.team.rounds.append(r)
         return r
 
@@ -244,7 +242,7 @@ class GameDevTeamEngine:
         """小组长整合全组开发产出为统一交付物（Leader 收尾整合）。"""
         modules = {}
         for role, task in self.team.tasks.items():
-            if task.artifact:
+            if task.artifact is not None:
                 modules[role] = task.artifact
                 task.status = "FUSED"
         self.fused_artifact = {
