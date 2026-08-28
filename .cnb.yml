@@ -279,42 +279,13 @@ $:
       stages:
         - name: 测试信号灯
           script: |
-            bash game-studio-agents/tests/test_producer_agent.sh
-            bash game-studio-agents/tests/test_instantiator.sh
-            bash game-studio-agents/tests/test_end_to_end.sh
-            bash game-studio-agents/tests/test_progress_pusher.sh
-            bash game-studio-agents/tests/test_instantiated_e2e.sh
-            bash game-studio-agents/tests/test_review_fix_loop.sh
-            bash game-studio-agents/tests/test_market_input_bridge.sh
-            bash game-studio-agents/tests/test_ecosystem_roles.sh
-            bash game-studio-agents/tests/test_art_direction.sh
-            bash game-studio-agents/tests/test_ui_ux.sh
-            bash game-studio-agents/tests/test_audio.sh
-            bash game-studio-agents/tests/test_art_testing.sh
-            bash game-studio-agents/tests/test_engine_adapters.sh
-            bash game-studio-agents/tests/test_data_ops_diagnosis.sh
-            bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
-            bash game-studio-agents/tests/test_release_gate.sh
-            bash game-studio-agents/tests/test_merged_confirm_agent.sh
-            bash game-studio-agents/tests/test_dispatch_capability.sh
-
-            bash game-studio-agents/tests/test_role_collaboration.sh
-            bash game-studio-agents/tests/test_dept_group_collaboration.sh
-            bash game-studio-agents/tests/test_dept_npc_pipeline.sh
-            bash game-studio-agents/tests/test_framework_upgrade.sh
-            bash game-studio-agents/tests/test_framework_upgrade_ops.sh
-            bash game-studio-agents/tests/test_framework_upgrade_acceptance.sh
-            bash game-studio-agents/tests/test_design_roles.sh
-            bash game-studio-agents/tests/test_agent_identity.sh
-            bash game-studio-agents/tests/test_engine_adaptation.sh
-            bash game-studio-agents/tests/test_role_inventory.sh
-            bash game-studio-agents/tests/test_role_inventory_handlers.sh
-            bash game-studio-agents/tests/test_engine_bridge.sh
-            bash game-studio-agents/tests/test_engine_bridge_integration.sh
+            # 【变更范围感知】只跑受本次变更影响的测试脚本，
+            # 避免每次 PR 推送全量跑 31+ 测试脚本造成 CPU 浪费。
+            # 由 scripts/change-aware-test.sh 基于 git diff + TestRegistry 选择受影响测试。
             pip install -q -r game-studio-agents/api/requirements.txt
+            bash scripts/change-aware-test.sh
+            # API 契约测试（独立于变更感知的轻量护栏，始终执行）
             bash game-studio-agents/api/test_api.sh
-            # 功能模块验收测试（以功能模块为单位，每个模块独立脚本+断言）
-            bash game-studio-agents/tests/modules/test_all_modules.sh
         - name: 自动分配评审人
           type: git:reviewer
           options:
@@ -877,6 +848,17 @@ $:
 #   crontab 事件必须放在具体分支名下（此处放 main）。
 #   频率: 每天 06:00 Asia/Shanghai（可调整 cron 表达式）
 main:
+  push:
+    - name: full-regression-on-merge
+      docker:
+        image: *npc_image
+      stages:
+        - name: 全量回归兜底
+          script: |
+            # PR 合并后（main.push）执行全量回归，保证质量兜底。
+            # 变更范围感知仅在 PR 阶段做增量，合并后需全量验证。
+            pip install -q -r game-studio-agents/api/requirements.txt
+            bash scripts/change-aware-test.sh --all
   "crontab: 0 6 * * *":
     - name: merged-confirm-sweep
       docker:

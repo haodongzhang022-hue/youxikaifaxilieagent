@@ -1,0 +1,342 @@
+{
+  "tests": {
+    "test_producer_agent.sh": {
+      "covers": [
+        "game-studio-agents/config/game_producer_agent.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
+    "test_instantiator.sh": {
+      "covers": [
+        "game-studio-agents/config/preset_instantiator.py",
+        "game-studio-agents/config/role_presets.yaml",
+        "game-studio-agents/config/project_type_presets.yaml",
+        "game-studio-agents/config/roles.yaml"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_end_to_end.sh": {
+      "covers": [
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/run_end_to_end.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 2.0,
+      "kind": "integration"
+    },
+    "test_progress_pusher.sh": {
+      "covers": [
+        "game-studio-agents/config/progress_pusher.py",
+        "game-studio-agents/config/collaboration_support.py",
+        "game-studio-agents/config/task_scheduler.py",
+        "game-studio-agents/config/game_producer_agent.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
+    "test_instantiated_e2e.sh": {
+      "covers": [
+        "game-studio-agents/config/run_end_to_end_instantiated.py",
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/release_gate.py",
+        "game-studio-agents/config/game_producer_agent.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [
+        "test_end_to_end.sh",
+        "test_release_gate.sh"
+      ],
+      "cpu_cost_est": 2.5,
+      "kind": "integration"
+    },
+    "test_review_fix_loop.sh": {
+      "covers": [
+        "game-studio-agents/config/review_fix_router.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_market_input_bridge.sh": {
+      "covers": [
+        "game-studio-agents/config/market_input_bridge.py",
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_ecosystem_roles.sh": {
+      "covers": [
+        "game-studio-agents/config/ecosystem_role_registry.py",
+        "game-studio-agents/config/run_end_to_end_instantiated.py"
+      ],
+      "depends_on": [
+        "test_role_inventory.sh"
+      ],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
+    "test_art_direction.sh": {
+      "covers": [
+        "game-studio-agents/config/ecosystem_role_registry.py",
+        "game-studio-agents/config/market_input_bridge.py",
+        "game-studio-agents/config/market_simulator.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_ui_ux.sh": {
+      "covers": [
+        "game-studio-agents/config/ecosystem_role_registry.py",
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/task_scheduler.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_audio.sh": {
+      "covers": [
+        "game-studio-agents/config/market_input_bridge.py",
+        "game-studio-agents/config/market_simulator.py",
+        "game-studio-agents/config/ecosystem_role_registry.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_art_testing.sh": {
+      "covers": [
+        "game-studio-agents/config/market_simulator.py",
+        "game-studio-agents/config/dispatch_capability.py",
+        "game-studio-agents/config/ecosystem_role_registry.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_engine_adapters.sh": {
+      "covers": [
+        "game-studio-agents/config/engine_adapters.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_data_ops_diagnosis.sh": {
+      "covers": [
+        "game-studio-agents/config/data_ops_diagnosis.py",
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
+    "test_progress_pusher_fullchain.sh": {
+      "covers": [
+        "game-studio-agents/config/progress_pusher_fullchain.py"
+      ],
+      "depends_on": [
+        "test_progress_pusher.sh"
+      ],
+      "cpu_cost_est": 2.0,
+      "kind": "integration"
+    },
+    "test_release_gate.sh": {
+      "covers": [
+        "game-studio-agents/config/release_gate.py",
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_merged_confirm_agent.sh": {
+      "covers": [
+        "game-studio-agents/config/merged_confirm_agent.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_dispatch_capability.sh": {
+      "covers": [
+        "game-studio-agents/config/dispatch_capability.py",
+        "game-studio-agents/config/agent_core.py",
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/game_producer_agent.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
+    "test_role_collaboration.sh": {
+      "covers": [
+        "game-studio-agents/config/role_collaboration.py",
+        "game-studio-agents/config/game_producer_agent.py",
+        "game-studio-agents/config/message_bus.py",
+        "game-studio-agents/config/agent_behavior.py",
+        "game-studio-agents/config/department_agents.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
+    "test_dept_group_collaboration.sh": {
+      "covers": [
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/dispatch_capability.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [
+        "test_role_collaboration.sh"
+      ],
+      "cpu_cost_est": 2.0,
+      "kind": "integration"
+    },
+    "test_dept_npc_pipeline.sh": {
+      "covers": [
+        ".cnb/settings.yml",
+        ".cnb.yml"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "config"
+    },
+    "test_framework_upgrade.sh": {
+      "covers": [
+        "game-studio-agents/config/framework_upgrade_memory.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_framework_upgrade_ops.sh": {
+      "covers": [
+        "game-studio-agents/config/framework_upgrade_ops.py",
+        "game-studio-agents/config/framework_upgrade_memory.py",
+        "game-studio-agents/config/department_agents.py"
+      ],
+      "depends_on": [
+        "test_framework_upgrade.sh"
+      ],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
+    "test_framework_upgrade_acceptance.sh": {
+      "covers": [
+        "game-studio-agents/config/framework_upgrade_memory.py",
+        "game-studio-agents/config/role_collaboration.py"
+      ],
+      "depends_on": [
+        "test_framework_upgrade.sh",
+        "test_framework_upgrade_ops.sh"
+      ],
+      "cpu_cost_est": 1.5,
+      "kind": "integration"
+    },
+    "test_design_roles.sh": {
+      "covers": [
+        "game-studio-agents/config/role_inventory.py",
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/game_producer_agent.py",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_agent_identity.sh": {
+      "covers": [
+        "game-studio-agents/config/agent_identity.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_engine_adaptation.sh": {
+      "covers": [
+        "game-studio-agents/config/engine_adapters.py",
+        "game-studio-agents/config/engine_sync.py",
+        "game-studio-agents/config/deepseek_harness.py",
+        "game-studio-agents/config/department_agents.py"
+      ],
+      "depends_on": [
+        "test_engine_adapters.sh"
+      ],
+      "cpu_cost_est": 2.0,
+      "kind": "integration"
+    },
+    "test_role_inventory.sh": {
+      "covers": [
+        "game-studio-agents/config/role_inventory.py",
+        "game-studio-agents/config/run_end_to_end_instantiated.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_role_inventory_handlers.sh": {
+      "covers": [
+        "game-studio-agents/config/role_inventory.py",
+        "game-studio-agents/config/ecosystem_handlers.py",
+        "game-studio-agents/config/run_end_to_end_instantiated.py"
+      ],
+      "depends_on": [
+        "test_role_inventory.sh",
+        "test_ecosystem_roles.sh"
+      ],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
+    "test_engine_bridge.sh": {
+      "covers": [
+        "game-studio-agents/config/engine_bridge/",
+        "game-studio-agents/config/engine_bridge/bridge.py",
+        "game-studio-agents/config/engine_bridge/engine_adapter.py",
+        "game-studio-agents/config/engine_bridge/environment.py",
+        "game-studio-agents/config/engine_bridge/mcp_client.py",
+        "game-studio-agents/config/engine_bridge/plugin_adapter.py",
+        "game-studio-agents/config/engine_bridge/protocol.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 2.0,
+      "kind": "core"
+    },
+    "test_engine_bridge_integration.sh": {
+      "covers": [
+        "game-studio-agents/config/engine_integration.py",
+        "game-studio-agents/config/engine_bridge/",
+        "game-studio-agents/config/message_bus.py"
+      ],
+      "depends_on": [
+        "test_engine_bridge.sh"
+      ],
+      "cpu_cost_est": 2.5,
+      "kind": "integration"
+    },
+    "modules/test_all_modules.sh": {
+      "covers": [
+        "game-studio-agents/tests/modules/"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 8.0,
+      "kind": "full"
+    }
+  }
+}
