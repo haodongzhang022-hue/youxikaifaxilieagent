@@ -12,6 +12,8 @@
 | wp_ref_learn | ops | reference_learner | 竞品参考学习报告 | ✅ DONE |
 | wp_review_ops | ops | data_analyst + game_operator | 评审职责边界对外文档同步 | ✅ DONE |
 | wp_handler_ops | ops | reference_learner + game_operator | 仓库处理专员角色变更对外同步 | ✅ DONE |
+| wp_engine_ops | ops | data_analyst + game_operator + reference_learner | 引擎桥接层接入对外数据同步与运营部署 | ✅ DONE |
+| wp_engine_adaptation_ops | ops | data_analyst + game_operator + reference_learner | 双引擎适配底座接入对外数据同步与运营部署 | ✅ DONE |
 
 ## 二、组内分工表
 
@@ -22,6 +24,8 @@
 | 借鉴学习 | reference_learner | wp_ref_learn_借鉴学习报告.md | ✅ DONE |
 | 评审职责边界对外同步 | data_analyst + game_operator | wp_review_ops_评审职责边界对外同步.md | ✅ DONE |
 | 仓库处理专员角色变更对外同步 | reference_learner + game_operator | wp_handler_ops_仓库处理专员角色变更对外同步.md | ✅ DONE |
+| 引擎桥接层对外同步 | data_analyst + game_operator + reference_learner | wp_engine_ops_引擎桥接层接入对外数据同步与运营部署.md | ✅ DONE |
+| 双引擎适配底座对外同步 | data_analyst + game_operator + reference_learner | wp_engine_adaptation_ops_双引擎适配底座接入对外数据同步与运营部署.md | ✅ DONE |
 
 ## 三、跨部门协作
 
@@ -30,4 +34,5 @@
 | 上游消费 | 策划线 | 消费数值模型做市场预演 | numeric_model 产出后 |
 | 上游消费 | 美术线 | 消费美术品质做市场预演 | art_direction 产出后 |
 | 上游消费 | 项目管理 | 消费 wp_review_pm + wp_handler_pm 验收结论做对外同步 | PM 验收通过后 |
+| 上游消费 | 项目管理 | 消费 wp_engine_adaptation_pm 验收结论做双引擎适配底座对外部署依据 | PR #86 下游解锁后 |
 | 联动 | 项目管理 | 发版前市场预演确认 | 发版计划确定后 |
