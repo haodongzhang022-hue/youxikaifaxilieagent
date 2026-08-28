@@ -68,3 +68,36 @@ ctest   # 运行 C++ 核心自测
 
 > 跨引擎一致性：各引擎（React WASM / Cocos / Unity / UE）调用同一 C ABI 核心，
 > 对同 seed 产出相同 hash，即为「换渲染器」的迁移根基。
+
+## 四引擎适配器（middleware/adapters）
+
+在核心之上，为四个引擎各建一层**适配器**，让各引擎真正消费 C++ 核心：
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  C++ 中间件核心 (C ABI)              │
+│   玩法 / 战斗 / 数值 / 程序化生成（引擎无关）          │
+└──────────────────────┬──────────────────────────────┘
+                       │ 统一 C ABI 契约
+     ┌─────────┬───────┴───────┬──────────┐
+     ▼         ▼               ▼          ▼
+ React(WASM) Cocos(Native)  Unity(P/Invoke) Unreal(原生C++)
+  web 引流    小程序分享       完整地图        护城河高保真
+```
+
+| 适配器 | 语言 | 集成方式 | 职责 |
+|--------|------|---------|------|
+| `adapters/react/reactAdapter.ts` | TS | Emscripten WASM | 网页端逻辑玩法 + 引流 |
+| `adapters/cocos/cocosAdapter.ts` | TS | Native Plugin FFI | 小程序快速分享/轻量 |
+| `adapters/unity/UnityAdapter.cs` | C# | P/Invoke Native Plugin | 完整地图 App 客户端 |
+| `adapters/unreal/UnrealAdapter.h` | C++ | 原生源码集成 | 最高质量/护城河 |
+
+**核心原则**：各引擎只做「渲染」，逻辑全部走中间件 C++ 核心 → 迁移即换渲染器。
+
+## 四引擎一致性测试
+
+```bash
+PYTHONPATH=. python3 middleware/adapters/tests/test_adapters.py
+```
+
+验证：种子确定性 / 跨种子差异 / golden hash 基准 / 四适配器契约。
