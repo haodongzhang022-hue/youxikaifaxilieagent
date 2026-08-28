@@ -214,12 +214,13 @@ bash game-studio-agents/tests/test_agent_identity.sh
 | 9 | 进度督导 | `tests/modules/test_mod_progress_pusher.sh` | 9 |
 | 10 | 发版质量门禁 | `tests/modules/test_mod_release_gate.sh` | 7 |
 | 11 | 生态角色 | `tests/modules/test_mod_ecosystem_roles.sh` | 6 |
-| 12 | 预设实例化 | `tests/modules/test_mod_instantiator.sh` | 6 |
-| 13 | 合并确认 | `tests/modules/test_mod_merged_confirm.sh` | 7 |
-| 14 | 借鉴学习 | `tests/modules/test_mod_reference_learner.sh` | 4 |
-| 15 | 端到端联动 | `tests/modules/test_mod_end_to_end.sh` | 6 |
+| 12 | 美术线生态角色 | `tests/modules/test_mod_art_ecosystem.sh` | 16 |
+| 13 | 预设实例化 | `tests/modules/test_mod_instantiator.sh` | 6 |
+| 14 | 合并确认 | `tests/modules/test_mod_merged_confirm.sh` | 7 |
+| 15 | 借鉴学习 | `tests/modules/test_mod_reference_learner.sh` | 4 |
+| 16 | 端到端联动 | `tests/modules/test_mod_end_to_end.sh` | 6 |
 
-**合计：15 个功能模块，112 项断言。**
+**合计：16 个功能模块，128 项断言。**
 
 ### 运行方式
 
