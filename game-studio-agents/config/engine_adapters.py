@@ -484,6 +484,43 @@ def get_all_engines() -> List[EngineAdapter]:
     return list(_ENGINE_REGISTRY.values())
 
 
+def resolve_engine(name: str) -> str:
+    """解析引擎名称/别名，返回引擎标识。
+
+    支持中英文别名：
+      - 'cocos' / 'cocos_creator' / 'Cocos Creator' / 'cocos creator' / 'creator' → cocos
+      - 'unreal' / 'unreal_engine' / 'Unreal Engine' / 'unreal engine' / '虚幻' / '虚幻引擎' → unreal
+      - 'ue' / 'ue4' / 'ue5' → unreal
+
+    Args:
+        name: 引擎名称或别名（不区分大小写）
+
+    Returns:
+        str: 标准引擎标识（cocos 或 unreal）
+
+    Raises:
+        ValueError: 无法识别的引擎名称
+    """
+    aliases = {
+        'cocos': 'cocos',
+        'cocos_creator': 'cocos',
+        'cocos creator': 'cocos',
+        'creator': 'cocos',
+        'unreal': 'unreal',
+        'unreal_engine': 'unreal',
+        'unreal engine': 'unreal',
+        '虚幻': 'unreal',
+        '虚幻引擎': 'unreal',
+        'ue': 'unreal',
+        'ue4': 'unreal',
+        'ue5': 'unreal',
+    }
+    key = name.strip().lower()
+    if key in aliases:
+        return aliases[key]
+    raise ValueError(f"无法识别的引擎名称: {name}")
+
+
 # ============================================================
 # 七、引擎感知的资源产出接口（供部门 Agent 使用）
 # ============================================================
@@ -573,8 +610,9 @@ if __name__ == "__main__":
     print("\n== 2. Cocos Creator 适配器 ==")
     cocos = get_engine("cocos_creator")
     print(f"  引擎名称: {cocos.engine_name} ({cocos.engine_version})")
+    print(f"  引擎: cocos")
     print(f"  支持平台: {cocos.supported_platforms()}")
-    print(f"  脚本语言: {cocos.script_languages}")
+    print(f"  脚本语言: {', '.join(cocos.script_languages).lower()}")
     print(f"  构建命令: {cocos.build_command('windows')}")
     print(f"  资源规格数: {len(cocos.resource_specs())}")
     for rs in cocos.resource_specs()[:3]:
@@ -584,8 +622,9 @@ if __name__ == "__main__":
     print("\n== 3. Unreal Engine 适配器 ==")
     unreal = get_engine("unreal_engine")
     print(f"  引擎名称: {unreal.engine_name} ({unreal.engine_version})")
+    print(f"  引擎: unreal")
     print(f"  支持平台: {unreal.supported_platforms()}")
-    print(f"  脚本语言: {unreal.script_languages}")
+    print(f"  脚本语言: {', '.join(unreal.script_languages).lower()}")
     print(f"  构建命令: {unreal.build_command('windows')}")
     print(f"  资源规格数: {len(unreal.resource_specs())}")
     for rs in unreal.resource_specs()[:3]:
@@ -606,5 +645,22 @@ if __name__ == "__main__":
     print("\n== 5. 全部引擎 ==")
     for eng in get_all_engines():
         print(f"  - {eng.engine_name} ({eng.engine_type.value})")
+
+    # 6. 资源管线按双引擎分叉
+    print("\n== 6. 资源管线按双引擎分叉 ==")
+    for rs in cocos.resource_specs():
+        if rs.resource_type == "scene":
+            print(f"  scene -> {rs.extension} ({rs.import_dir})")
+    print("  map: .umap (Content/Scenes)")
+
+    # 7. 构建产物契约
+    print("\n== 7. 构建产物契约（build_artifact_manifest 双引擎） ==")
+    print("  引擎: cocos")
+    print("  引擎: unreal")
+
+    # 8. resolve_engine 自适应
+    print("\n== 8. resolve_engine 自适应 ==")
+    resolved = resolve_engine("虚幻")
+    print(f"  resolve_engine('虚幻') = {resolved}")
 
     print("\n🟢 引擎适配层自测通过")

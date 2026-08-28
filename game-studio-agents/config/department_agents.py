@@ -936,6 +936,58 @@ class OpsDeptAgent(DepartmentAgent):
 # 部门 Agent 工厂
 # ============================================================
 
+def _engine_resource_hint(engine_info: Dict[str, Any], resource_type: str) -> Dict[str, str]:
+    """根据引擎信息与资源类型，返回该引擎的资源格式提示。
+
+    部门 Agent 通过本函数感知目标引擎的资源格式差异：
+      - Cocos: scene → .scene, audio → .mp3/.ogg, sprite → .png
+      - Unreal: map → .umap, audio → .wav/.ogg, material → .uasset
+
+    Args:
+        engine_info: 引擎信息字典，需包含 'engine' 键（cocos / unreal / cocos_creator / unreal_engine）
+        resource_type: 资源类型（如 scene / audio / sprite / map 等）
+
+    Returns:
+        Dict[str, str]: 含 engine / format 键的提示信息
+    """
+    engine = engine_info.get('engine', 'cocos')
+    # 归一化引擎标识
+    engine_lower = str(engine).lower()
+    if 'unreal' in engine_lower or engine_lower in ('ue', 'ue4', 'ue5', '虚幻', '虚幻引擎'):
+        engine_key = 'unreal'
+    else:
+        engine_key = 'cocos'
+
+    # 资源格式映射表（按引擎分叉）
+    if engine_key == 'cocos':
+        format_map = {
+            'scene': '.scene',
+            'prefab': '.prefab',
+            'sprite': '.png',
+            'audio': '.mp3',
+            'animation': '.anim',
+            'script': '.ts',
+            'map': '.scene',
+        }
+    else:  # unreal
+        format_map = {
+            'scene': '.umap',
+            'map': '.umap',
+            'mesh': '.fbx',
+            'material': '.uasset',
+            'audio': '.wav',
+            'blueprint': '.uasset',
+            'animation': '.uasset',
+            'script': '.cpp',
+            'prefab': '.uasset',
+        }
+
+    return {
+        'engine': engine_key,
+        'format': format_map.get(resource_type, '.unknown'),
+    }
+
+
 def build_department_agents(bus: MessageBus) -> Dict[str, DepartmentAgent]:
     """创建六大部门 Agent 实例，返回 {部门键: agent}。
 
