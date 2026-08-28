@@ -1,228 +1,610 @@
 # ============================================================
-# 双引擎适配层 (Engine Adapters)
+# 游戏引擎适配层 (Game Engine Adapter Layer)
 # 版本: v1.0
-# 说明: 面向「Windows + Cocos Creator + Unreal Engine」本地引擎环境，
-#       为两类引擎提供**统一抽象**——技术栈、资源目录、构建命令、
-#       资源类型契约、构建产物清单。让云端编排（task_scheduler / message_bus
-#       / 六大部门）能按目标引擎把派单落到正确引擎上，产出可验收。
+# 说明: 为 Cocos Creator 与 Unreal Engine 提供统一的引擎抽象。
+#       目标环境: Windows + Cocos + 虚幻引擎。
+#       - 引擎无关的资源规范、构建管线、平台适配通过本层解耦；
+#       - 部门 Agent（程序线/美术线）通过本层感知当前目标引擎，
+#         产出与引擎挂钩的代码/资源/构建指令；
+#       - 未来新增引擎只需实现 EngineAdapter 接口。
 #
-#   对齐架构师建议（wp_engine_adaptation）：
-#     P1-1 双引擎技术栈落地到岗位/流水线 → 本模块定义引擎技术栈 + 构建产物契约
-#     P2-5 资源管线按双引擎分叉        → Cocos .prefab/.scene vs UE .uasset/.umap
-#
-#   核心能力：
-#     1. get_engine_spec(engine)：返回指定引擎的完整技术栈契约（脚本语言/资源
-#        目录/构建命令/资源类型/产物目录/版本）；
-#     2. resolve_engine()：从 CNB_ENGINE 环境变量 / 参数解析目标引擎，
-#        默认识别 cocos / unreal；
-#     3. build_artifact_manifest(engine, modules)：按引擎生成**构建产物清单**
-#        （要产出哪些资源/代码，供验收）；
-#     4. artifact_contract(engine, kind)：查询某资源类型在指定引擎的落地格式。
-#
-# 语言: Python 3 (可运行，无需外部依赖)
+# 设计原则:
+#   - 单一接口: 所有引擎实现统一的 EngineAdapter 基类；
+#   - 引擎感知: 各 Agent 通过 get_engine() 获取当前目标引擎；
+#   - 资源绑定: 资源格式/命名/路径规范与引擎深度挂钩；
+#   - 跨平台: Windows 环境为首要目标，同时预留 macOS/Linux 扩展。
+# 语言: Python 3 (可运行)
 # ============================================================
 from __future__ import annotations
-import os
+
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 # ============================================================
-# 引擎技术栈契约
+# 一、引擎枚举与常量
+# ============================================================
+
+class EngineType(str, Enum):
+    """支持的游戏引擎类型"""
+    COCOS_CREATOR = "cocos_creator"      # Cocos Creator（2D/3D 轻量游戏）
+    UNREAL_ENGINE = "unreal_engine"      # Unreal Engine（3D 重度游戏）
+    CUSTOM = "custom"                    # 自定义/其他引擎
+
+
+# 引擎标识（可在环境变量 CNB_ENGINE 中指定，默认自动探测）
+DEFAULT_ENGINE = EngineType.COCOS_CREATOR
+
+
+# ============================================================
+# 二、资源类型定义（与引擎挂钩）
 # ============================================================
 
 @dataclass
-class EngineSpec:
-    """一种游戏引擎的完整技术栈契约"""
-    engine: str                                # 引擎标识: cocos / unreal
-    display_name: str                          # 显示名: Cocos Creator / Unreal Engine
-    script_langs: List[str] = field(default_factory=list)   # 脚本语言
-    resource_dir: str = ""                     # 资源根目录
-    build_cmd: str = ""                        # 构建命令模板
-    build_output_dir: str = ""                 # 构建产物输出目录
-    resource_types: Dict[str, str] = field(default_factory=dict)  # 资源类型 -> 落地格式
-    default_version: str = ""                  # 默认引擎版本
-    tool_chain: List[str] = field(default_factory=list)          # 工具链
+class ResourceSpec:
+    """引擎资源规范定义"""
+    engine: EngineType
+    resource_type: str                     # 资源类型（如 sprite / model / audio / scene）
+    extension: str                         # 文件扩展名
+    import_dir: str                        # 引擎导入目录
+    export_dir: str                        # 引擎导出目录
+    build_tool: str                        # 构建工具命令
+    max_size_mb: float = 100.0             # 单资源体积上限(MB)
+    notes: str = ""                        # 备注
 
 
-# 引擎注册表
-_ENGINE_SPECS: Dict[str, EngineSpec] = {
-    "cocos": EngineSpec(
-        engine="cocos",
-        display_name="Cocos Creator",
-        script_langs=["typescript", "javascript"],
-        resource_dir="assets",
-        build_cmd="cocos build --platform {platform}",
-        build_output_dir="build",
-        resource_types={
-            "sprite": ".png/.jpg",
-            "prefab": ".prefab",
-            "scene": ".scene",
-            "animation": ".anim",
-            "audio": ".mp3/.ogg/.wav",
-            "script": ".ts/.js",
-            "material": ".mtl",
-            "effect": ".effect",
-            "texture": ".png",
-        },
-        default_version="3.x",
-        tool_chain=["Cocos Creator 编辑器", "cocos 命令行", "TypeScript 编译器"],
-    ),
-    "unreal": EngineSpec(
-        engine="unreal",
-        display_name="Unreal Engine",
-        script_langs=["cpp", "blueprint"],
-        resource_dir="Content",
-        build_cmd="RunUAT BuildCookRun -platform={platform} -project={project}",
-        build_output_dir="Saved/Build",
-        resource_types={
-            "mesh": ".uasset",
-            "material": ".uasset",
-            "texture": ".uasset",
-            "audio": ".uasset",
-            "animation": ".uasset",
-            "blueprint": ".uasset",
-            "map": ".umap",
-            "data_asset": ".uasset",
-            "script": ".cpp/.h",
-            "fx": ".uasset",
-        },
-        default_version="UE 5.x",
-        tool_chain=["Unreal Editor", "RunUAT", "Visual Studio", "C++ 编译器"],
-    ),
+# ============================================================
+# 三、引擎适配器接口（抽象基类）
+# ============================================================
+
+class EngineAdapter:
+    """引擎适配器基类——所有引擎实现需继承本类并实现全部方法。
+
+    各部门 Agent 通过本适配器获取引擎相关能力：
+      - 程序线: 获取引擎构建指令/版本/平台设置
+      - 美术线: 获取资源格式/导入路径/命名规范
+      - 项目管理: 获取构建/发版命令
+      - 测试线: 获取引擎启动命令/自动化测试入口
+    """
+
+    # ---- 引擎基本信息 ----
+    @property
+    def engine_type(self) -> EngineType:
+        raise NotImplementedError
+
+    @property
+    def engine_name(self) -> str:
+        """引擎显示名称"""
+        raise NotImplementedError
+
+    @property
+    def engine_version(self) -> str:
+        """引擎版本"""
+        raise NotImplementedError
+
+    # ---- 构建与平台 ----
+    def build_command(self, target_platform: str = "windows") -> str:
+        """获取引擎构建命令"""
+        raise NotImplementedError
+
+    def run_command(self, project_path: str = "") -> str:
+        """获取引擎运行/启动命令"""
+        raise NotImplementedError
+
+    def supported_platforms(self) -> List[str]:
+        """支持的目标平台列表"""
+        raise NotImplementedError
+
+    # ---- 资源管理 ----
+    def resource_specs(self) -> List[ResourceSpec]:
+        """获取引擎支持的资源类型规范"""
+        raise NotImplementedError
+
+    def resource_import_path(self, resource_type: str) -> str:
+        """获取指定类型资源的导入路径"""
+        raise NotImplementedError
+
+    def resource_export_path(self, resource_type: str) -> str:
+        """获取指定类型资源的导出路径"""
+        raise NotImplementedError
+
+    # ---- 项目结构 ----
+    def project_structure(self) -> Dict[str, str]:
+        """获取引擎项目目录结构"""
+        raise NotImplementedError
+
+    # ---- 脚本语言 ----
+    @property
+    def script_languages(self) -> List[str]:
+        """引擎支持的脚本语言"""
+        raise NotImplementedError
+
+    # ---- 序列化 ----
+    def to_dict(self) -> Dict[str, Any]:
+        """将适配器序列化为可传输的 dict"""
+        return {
+            "engine_type": self.engine_type.value,
+            "engine_name": self.engine_name,
+            "engine_version": self.engine_version,
+            "supported_platforms": self.supported_platforms(),
+            "script_languages": self.script_languages,
+            "project_structure": self.project_structure(),
+            "resource_specs": [
+                {
+                    "resource_type": r.resource_type,
+                    "extension": r.extension,
+                    "import_dir": r.import_dir,
+                    "export_dir": r.export_dir,
+                }
+                for r in self.resource_specs()
+            ],
+        }
+
+
+# ============================================================
+# 四、Cocos Creator 适配器
+# ============================================================
+
+class CocosCreatorAdapter(EngineAdapter):
+    """Cocos Creator 引擎适配器。
+
+    Cocos Creator 特性:
+      - 轻量级 2D/3D 游戏开发
+      - TypeScript 脚本语言
+      - 资源直接拖拽导入（.png/.jpg/.mp3/.fbx 等）
+      - 支持 Web/iOS/Android/Windows/Mac 多平台发布
+    """
+
+    @property
+    def engine_type(self) -> EngineType:
+        return EngineType.COCOS_CREATOR
+
+    @property
+    def engine_name(self) -> str:
+        return "Cocos Creator"
+
+    @property
+    def engine_version(self) -> str:
+        return "3.8.x"
+
+    def build_command(self, target_platform: str = "windows") -> str:
+        """Cocos Creator 构建命令"""
+        return f"cocos build --platform {target_platform}"
+
+    def run_command(self, project_path: str = "") -> str:
+        """Cocos Creator 运行命令"""
+        if project_path:
+            return f"cocos run -p {project_path} --platform windows"
+        return "cocos run --platform windows"
+
+    def supported_platforms(self) -> List[str]:
+        return ["windows", "web", "android", "ios", "mac"]
+
+    def resource_specs(self) -> List[ResourceSpec]:
+        return [
+            ResourceSpec(
+                engine=EngineType.COCOS_CREATOR,
+                resource_type="sprite",
+                extension=".png",
+                import_dir="assets/textures",
+                export_dir="build/",
+                build_tool="cocos build",
+                max_size_mb=10.0,
+                notes="2D 精灵图资源（TexturePacker 打包）",
+            ),
+            ResourceSpec(
+                engine=EngineType.COCOS_CREATOR,
+                resource_type="audio",
+                extension=".mp3",
+                import_dir="assets/audio",
+                export_dir="build/",
+                build_tool="cocos build",
+                max_size_mb=20.0,
+                notes="背景音乐/音效资源（.ogg/.mp3 均可）",
+            ),
+            ResourceSpec(
+                engine=EngineType.COCOS_CREATOR,
+                resource_type="animation",
+                extension=".anim",
+                import_dir="assets/animations",
+                export_dir="build/",
+                build_tool="cocos build",
+                max_size_mb=50.0,
+                notes="动画资源（Cocos Creator 内部动画格式）",
+            ),
+            ResourceSpec(
+                engine=EngineType.COCOS_CREATOR,
+                resource_type="prefab",
+                extension=".prefab",
+                import_dir="assets/prefabs",
+                export_dir="build/",
+                build_tool="cocos build",
+                max_size_mb=30.0,
+                notes="预制体资源（场景组件/UI 复用）",
+            ),
+            ResourceSpec(
+                engine=EngineType.COCOS_CREATOR,
+                resource_type="scene",
+                extension=".scene",
+                import_dir="assets/scenes",
+                export_dir="build/",
+                build_tool="cocos build",
+                max_size_mb=100.0,
+                notes="场景资源（关卡/UI 场景）",
+            ),
+            ResourceSpec(
+                engine=EngineType.COCOS_CREATOR,
+                resource_type="script",
+                extension=".ts",
+                import_dir="assets/scripts",
+                export_dir="build/",
+                build_tool="cocos build",
+                max_size_mb=5.0,
+                notes="TypeScript 脚本资源",
+            ),
+        ]
+
+    def resource_import_path(self, resource_type: str) -> str:
+        mapping = {
+            "sprite": "assets/textures",
+            "audio": "assets/audio",
+            "animation": "assets/animations",
+            "prefab": "assets/prefabs",
+            "scene": "assets/scenes",
+            "script": "assets/scripts",
+        }
+        return mapping.get(resource_type, "assets/")
+
+    def resource_export_path(self, resource_type: str) -> str:
+        return "build/"
+
+    def project_structure(self) -> Dict[str, str]:
+        return {
+            "assets": "资源目录（scripts/textures/audio/prefabs/scenes）",
+            "build": "构建产物目录",
+            "settings": "项目设置",
+            "library": "导入缓存",
+            "temp": "临时文件",
+            "profiles": "构建配置",
+        }
+
+    @property
+    def script_languages(self) -> List[str]:
+        return ["TypeScript", "JavaScript"]
+
+
+# ============================================================
+# 五、Unreal Engine 适配器
+# ============================================================
+
+class UnrealEngineAdapter(EngineAdapter):
+    """Unreal Engine 适配器。
+
+    Unreal Engine 特性:
+      - 重度 3D 游戏/影视开发
+      - C++ + Blueprint 双脚本体系
+      - 资源丰富（网格/材质/动画/物理资产）
+      - 原生支持 Windows 平台构建（.exe 打包）
+    """
+
+    @property
+    def engine_type(self) -> EngineType:
+        return EngineType.UNREAL_ENGINE
+
+    @property
+    def engine_name(self) -> str:
+        return "Unreal Engine"
+
+    @property
+    def engine_version(self) -> str:
+        return "5.x"
+
+    def build_command(self, target_platform: str = "windows") -> str:
+        """Unreal Engine 构建命令"""
+        return f"RunUAT BuildCookRun -platform={target_platform} -project=Game.uproject"
+
+    def run_command(self, project_path: str = "") -> str:
+        """Unreal Engine 运行命令"""
+        return "Game.uproject"
+
+    def supported_platforms(self) -> List[str]:
+        return ["windows", "mac", "linux", "android", "ios"]
+
+    def resource_specs(self) -> List[ResourceSpec]:
+        return [
+            ResourceSpec(
+                engine=EngineType.UNREAL_ENGINE,
+                resource_type="mesh",
+                extension=".fbx",
+                import_dir="Content/Models",
+                export_dir="Saved/Cooked/",
+                build_tool="RunUAT BuildCookRun",
+                max_size_mb=200.0,
+                notes="3D 模型资源（.fbx/.obj）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNREAL_ENGINE,
+                resource_type="material",
+                extension=".uasset",
+                import_dir="Content/Materials",
+                export_dir="Saved/Cooked/",
+                build_tool="RunUAT BuildCookRun",
+                max_size_mb=100.0,
+                notes="材质资源（PBR 材质/Shader）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNREAL_ENGINE,
+                resource_type="audio",
+                extension=".wav",
+                import_dir="Content/Audio",
+                export_dir="Saved/Cooked/",
+                build_tool="RunUAT BuildCookRun",
+                max_size_mb=50.0,
+                notes="音频资源（.wav/.ogg 格式）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNREAL_ENGINE,
+                resource_type="animation",
+                extension=".uasset",
+                import_dir="Content/Animations",
+                export_dir="Saved/Cooked/",
+                build_tool="RunUAT BuildCookRun",
+                max_size_mb=100.0,
+                notes="动画序列/动画蓝图",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNREAL_ENGINE,
+                resource_type="blueprint",
+                extension=".uasset",
+                import_dir="Content/Blueprints",
+                export_dir="Saved/Cooked/",
+                build_tool="RunUAT BuildCookRun",
+                max_size_mb=50.0,
+                notes="蓝图资产（可视化脚本）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNREAL_ENGINE,
+                resource_type="script",
+                extension=".cpp",
+                import_dir="Source/",
+                export_dir="Saved/Cooked/",
+                build_tool="RunUAT BuildCookRun",
+                max_size_mb=5.0,
+                notes="C++ 源码（模块/类）",
+            ),
+        ]
+
+    def resource_import_path(self, resource_type: str) -> str:
+        mapping = {
+            "mesh": "Content/Models",
+            "material": "Content/Materials",
+            "audio": "Content/Audio",
+            "animation": "Content/Animations",
+            "blueprint": "Content/Blueprints",
+            "script": "Source/",
+        }
+        return mapping.get(resource_type, "Content/")
+
+    def resource_export_path(self, resource_type: str) -> str:
+        return "Saved/Cooked/"
+
+    def project_structure(self) -> Dict[str, str]:
+        return {
+            "Content": "游戏资源（Models/Materials/Audio/Blueprints）",
+            "Source": "C++ 源码",
+            "Config": "项目配置",
+            "Saved": "构建缓存与输出",
+            "Plugins": "引擎插件",
+        }
+
+    @property
+    def script_languages(self) -> List[str]:
+        return ["C++", "Blueprint"]
+
+
+# ============================================================
+# 六、引擎工厂与探测
+# ============================================================
+
+_ENGINE_REGISTRY: Dict[str, EngineAdapter] = {
+    EngineType.COCOS_CREATOR.value: CocosCreatorAdapter(),
+    EngineType.UNREAL_ENGINE.value: UnrealEngineAdapter(),
 }
 
 
-def get_engine_spec(engine: str) -> Optional[EngineSpec]:
-    """返回指定引擎的技术栈契约；引擎不存在返回 None。"""
-    key = (engine or "").strip().lower()
-    return _ENGINE_SPECS.get(key)
+def get_engine(engine_type: str = None) -> EngineAdapter:
+    """获取指定引擎的适配器实例。
+
+    Args:
+        engine_type: 引擎类型标识（cocos_creator / unreal_engine / custom）。
+                     为 None 时从环境变量 CNB_ENGINE 探测，默认 cocos_creator。
+
+    Returns:
+        EngineAdapter: 引擎适配器实例。
+
+    Raises:
+        ValueError: 引擎类型不支持。
+    """
+    if engine_type is None:
+        import os
+        engine_type = os.environ.get("CNB_ENGINE", DEFAULT_ENGINE.value)
+
+    if engine_type not in _ENGINE_REGISTRY:
+        raise ValueError(
+            f"不支持的引擎类型: {engine_type}。支持: {list(_ENGINE_REGISTRY.keys())}"
+        )
+    return _ENGINE_REGISTRY[engine_type]
 
 
-def list_engines() -> List[str]:
-    """列出已注册的引擎。"""
-    return list(_ENGINE_SPECS.keys())
+def detect_engine_from_project(project_path: str = "") -> EngineType:
+    """根据项目文件探测使用的引擎类型。
+
+    通过检查项目目录中的特征文件判断引擎:
+      - Cocos Creator: project.json / package.json (cocos 依赖)
+      - Unreal Engine: .uproject 文件
+      - 默认返回 cocos_creator
+
+    Args:
+        project_path: 项目目录路径（可为空，默认检查当前目录）
+
+    Returns:
+        EngineType: 探测到的引擎类型
+    """
+    import os
+    from pathlib import Path
+
+    root = Path(project_path) if project_path else Path(".")
+    if not root.exists():
+        return DEFAULT_ENGINE
+
+    # 检查 Unreal Engine 标志文件 (.uproject)
+    for f in root.glob("*.uproject"):
+        return EngineType.UNREAL_ENGINE
+
+    # 检查 Cocos Creator 标志文件 (project.json)
+    if (root / "project.json").exists() or (root / "package.json").exists():
+        try:
+            import json
+            if (root / "package.json").exists():
+                with open(root / "package.json") as f:
+                    pkg = json.load(f)
+                if "cocos" in pkg.get("dependencies", {}) or \
+                   "creator" in pkg.get("dependencies", {}):
+                    return EngineType.COCOS_CREATOR
+        except Exception:
+            pass
+        return EngineType.COCOS_CREATOR
+
+    return DEFAULT_ENGINE
 
 
-def resolve_engine(hint: Optional[str] = None) -> str:
-    """解析目标引擎：优先参数，其次 CNB_ENGINE 环境变量，最后默认 cocos。"""
-    candidate = (hint or os.environ.get("CNB_ENGINE", "") or "").strip().lower()
-    if candidate in _ENGINE_SPECS:
-        return candidate
-    # 别名归一
-    if "cocos" in candidate:
-        return "cocos"
-    if "unreal" in candidate or "ue" in candidate or "虚幻" in candidate:
-        return "unreal"
-    return "cocos"
+def get_all_engines() -> List[EngineAdapter]:
+    """获取所有已注册的引擎适配器"""
+    return list(_ENGINE_REGISTRY.values())
 
 
 # ============================================================
-
-def _safe_format(cmd: str, **kwargs) -> str:
-    """容错格式化：只替换存在的占位符，缺失占位符保留原样。"""
-    return cmd.format(**{k: v for k, v in kwargs.items() if "{%s}" % k in cmd})
-
-
-# 构建产物契约（P1-1）
+# 七、引擎感知的资源产出接口（供部门 Agent 使用）
 # ============================================================
 
 @dataclass
-class ArtifactItem:
-    """构建产物清单中的一项"""
-    kind: str            # 资源/代码类型，如 prefab / blueprint / scene
-    engine_format: str   # 该类型在目标引擎的落地格式
-    required: bool = True
-    path_hint: str = ""  # 建议落地路径
+class EngineAwareArtifact:
+    """引擎感知的产出物——部门 Agent 产出时标注引擎信息"""
+    engine: EngineType
+    artifact_type: str
+    content: Dict[str, Any] = field(default_factory=dict)
+    resource_specs: List[ResourceSpec] = field(default_factory=list)
+    build_command: str = ""
+    platform: str = "windows"
+    notes: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "engine": self.engine.value,
+            "artifact_type": self.artifact_type,
+            "content": self.content,
+            "resource_specs": [
+                {
+                    "resource_type": r.resource_type,
+                    "extension": r.extension,
+                    "import_dir": r.import_dir,
+                    "export_dir": r.export_dir,
+                }
+                for r in self.resource_specs
+            ],
+            "build_command": self.build_command,
+            "platform": self.platform,
+            "notes": self.notes,
+        }
 
 
-def build_artifact_manifest(engine: str, modules: List[str]) -> Dict[str, Any]:
-    """按引擎生成构建产物清单（面向验收）。
+def build_engine_aware_artifact(
+    engine_type: str,
+    artifact_type: str,
+    content: Dict[str, Any],
+    platform: str = "windows",
+    notes: str = "",
+) -> EngineAwareArtifact:
+    """构建引擎感知的产出物。
 
-    modules: 工作包要产出的模块类型，如 ["scene", "ui", "audio", "blueprint"]。
-    返回: {"engine", "display_name", "resource_dir", "artifacts": [...]}
+    根据引擎类型获取对应的资源规范与构建命令，
+    生成带引擎信息的产出物（供各部门 Agent 消费）。
+
+    Args:
+        engine_type: 引擎类型（cocos_creator / unreal_engine）
+        artifact_type: 产出物类型（如 art_asset / code / test_report）
+        content: 产出内容
+        platform: 目标平台（默认 windows）
+        notes: 备注
+
+    Returns:
+        EngineAwareArtifact: 引擎感知产出物
     """
-    spec = get_engine_spec(engine) or get_engine_spec("cocos")
-    artifacts = []
-    for mod in modules:
-        fmt = spec.resource_types.get(mod, f".{mod}")
-        artifacts.append({
-            "kind": mod,
-            "engine_format": fmt,
-            "resource_dir": spec.resource_dir,
-            "path_hint": f"{spec.resource_dir}/{mod}",
-        })
-    return {
-        "engine": spec.engine,
-        "display_name": spec.display_name,
-        "resource_dir": spec.resource_dir,
-        "build_cmd": _safe_format(spec.build_cmd, platform="windows", project="Game"),
-        "artifacts": artifacts,
-    }
+    engine = get_engine(engine_type)
+    resource_specs = engine.resource_specs()
+    build_cmd = engine.build_command(platform)
 
-
-def artifact_contract(engine: str, kind: str) -> str:
-    """查询某资源类型在指定引擎的落地格式（如 .prefab / .umap）。"""
-    spec = get_engine_spec(engine) or get_engine_spec("cocos")
-    return spec.resource_types.get(kind, f".{kind}")
+    return EngineAwareArtifact(
+        engine=engine.engine_type,
+        artifact_type=artifact_type,
+        content=content,
+        resource_specs=resource_specs,
+        build_command=build_cmd,
+        platform=platform,
+        notes=notes,
+    )
 
 
 # ============================================================
-# 部门适配（程序线 / 美术线按引擎落地）
+# 八、自测
 # ============================================================
-
-def engine_aware_artifact(engine: str, dept: str, work_package: Dict[str, Any]) -> Dict[str, Any]:
-    """按目标引擎把部门工作包产出标注为可验收的引擎契约。
-
-    dept: 部门标识，如 "程序线" / "美术线"。
-    返回带 engine / display_name / build_cmd / resource_dir 的标注产出。
-    """
-    spec = get_engine_spec(engine) or get_engine_spec("cocos")
-    module = work_package.get("module", "generic")
-    fmt = spec.resource_types.get(module, f".{module}")
-    return {
-        "module": module,
-        "engine": spec.engine,
-        "display_name": spec.display_name,
-        "script_langs": spec.script_langs,
-        "resource_dir": spec.resource_dir,
-        "build_cmd": _safe_format(spec.build_cmd, platform="windows", project="Game"),
-        "resource_format": fmt,
-        "dept": dept,
-    }
-
-
-def _demo():
-    print("=" * 60)
-    print("双引擎适配层自测")
-    print("=" * 60)
-    for eng in list_engines():
-        spec = get_engine_spec(eng)
-        print(f"\n[{spec.display_name}]")
-        print(f"  脚本语言: {', '.join(spec.script_langs)}")
-        print(f"  资源目录: {spec.resource_dir}")
-        print(f"  构建命令: {_safe_format(spec.build_cmd, platform='windows', project='Game')}")
-        print(f"  资源类型: scene -> {spec.resource_types.get('scene', 'N/A')}, "
-              f"blueprint -> {spec.resource_types.get('blueprint', 'N/A')}, "
-              f"audio -> {spec.resource_types.get('audio', 'N/A')}")
-
-    print("\n[构建产物契约示例]")
-    manifest = build_artifact_manifest("cocos", ["scene", "ui", "audio"])
-    print(f"  引擎: {manifest['engine']} / 资源目录: {manifest['resource_dir']}")
-    for a in manifest["artifacts"]:
-        print(f"    - {a['kind']}: {a['engine_format']} @ {a['path_hint']}")
-
-    manifest2 = build_artifact_manifest("unreal", ["map", "blueprint", "audio"])
-    print(f"  引擎: {manifest2['engine']} / 资源目录: {manifest2['resource_dir']}")
-    for a in manifest2["artifacts"]:
-        print(f"    - {a['kind']}: {a['engine_format']} @ {a['path_hint']}")
-
-    print("\n[引擎感知产出示例]")
-    print(f"  resolve_engine() = {resolve_engine()}")
-    print(f"  resolve_engine('虚幻') = {resolve_engine('虚幻')}")
-    print(f"  engine_aware_artifact('unreal','程序线',{{'module':'blueprint'}}) = "
-          f"{engine_aware_artifact('unreal','程序线',{'module':'blueprint'})}")
-
 
 if __name__ == "__main__":
-    _demo()
+    print("=== 游戏引擎适配层自测 ===")
+    print()
+
+    # 1. 探测默认引擎
+    print("== 1. 默认引擎探测 ==")
+    default = detect_engine_from_project()
+    print(f"  当前项目探测引擎: {default.value}")
+
+    # 2. Cocos Creator 适配器
+    print("\n== 2. Cocos Creator 适配器 ==")
+    cocos = get_engine("cocos_creator")
+    print(f"  引擎名称: {cocos.engine_name} ({cocos.engine_version})")
+    print(f"  支持平台: {cocos.supported_platforms()}")
+    print(f"  脚本语言: {cocos.script_languages}")
+    print(f"  构建命令: {cocos.build_command('windows')}")
+    print(f"  资源规格数: {len(cocos.resource_specs())}")
+    for rs in cocos.resource_specs()[:3]:
+        print(f"    - {rs.resource_type} ({rs.extension}) → {rs.import_dir}")
+
+    # 3. Unreal Engine 适配器
+    print("\n== 3. Unreal Engine 适配器 ==")
+    unreal = get_engine("unreal_engine")
+    print(f"  引擎名称: {unreal.engine_name} ({unreal.engine_version})")
+    print(f"  支持平台: {unreal.supported_platforms()}")
+    print(f"  脚本语言: {unreal.script_languages}")
+    print(f"  构建命令: {unreal.build_command('windows')}")
+    print(f"  资源规格数: {len(unreal.resource_specs())}")
+    for rs in unreal.resource_specs()[:3]:
+        print(f"    - {rs.resource_type} ({rs.extension}) → {rs.import_dir}")
+
+    # 4. 引擎感知产出物
+    print("\n== 4. 引擎感知产出物 ==")
+    artifact = build_engine_aware_artifact(
+        "cocos_creator",
+        "art_asset",
+        {"style": "卡通渲染", "texture_scale": "512x512"},
+    )
+    print(f"  引擎: {artifact.engine.value}")
+    print(f"  构建命令: {artifact.build_command}")
+    print(f"  资源规格数: {len(artifact.resource_specs)}")
+
+    # 5. 全部引擎
+    print("\n== 5. 全部引擎 ==")
+    for eng in get_all_engines():
+        print(f"  - {eng.engine_name} ({eng.engine_type.value})")
+
+    print("\n🟢 引擎适配层自测通过")
