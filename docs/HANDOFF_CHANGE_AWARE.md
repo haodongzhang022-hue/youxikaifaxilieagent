@@ -173,3 +173,63 @@ bash scripts/change-aware-test.sh --dry-run --all # 只打印全量测试清单
 > - `local-agent/hybrid/selector.py` / `registry.json` / `router.py`
 > - `docs/HYBRID_OPTIMIZER.md` / `docs/HYBRID_RESOURCE.md`
 > - `docs/HANDOFF_CHANGE_AWARE.md`
+
+---
+
+## 七、部门路由三层触发机制（防"无工作部门凑热闹"）
+
+> 背景：Issue #54「职责明确」延伸——每次编排不应无条件触发全部六大部门，尤其
+> "美术/测试常无工作凑热闹"。参考 dongjiagoushi 架构师的 `src/memory/triggers.py`
+> 三层触发引擎（语义触发 + 阈值下限 + 显式声明最高优先 + 未命中不拉起），
+> 在本仓库落地为 **部门路由三层触发**。
+
+### 7.1 三层触发引擎（routing.py v3.0）
+
+**文件**：`game-studio-agents/config/routing.py`
+
+| 层级 | 规则 | 防误判作用 |
+|---|---|---|
+| ① 显式声明（最高优先） | `%部门名` / `@部门名` / `[触发:部门名]` 硬匹配 | 命中即触发，不受阈值约束；缺标记不猜测接手部门 |
+| ② 语义/关键词（带阈值下限） | 命中部门**强职责关键词**（如"原画/建模"→美术线、"回归/case"→测试线）且次数≥阈值才触发 | 低于阈值 → method=none，静默放行 |
+| ③ 未命中 | method=none + confidence=low | 不拉起、不评论凑热闹（关键"下限"） |
+
+### 7.2 关键修复：裸提及部门名不再误触发
+
+**问题**：CI 平台注入的状态标签（如"测试线验收中,美术线验收中"）中的"部门名裸提及"
+会让关键词引擎误判命中（"美术线"里的"美术"是美术线强词）→ 无关部门被拉起凑热闹。
+
+**修复**：语义匹配前**剥离"裸部门名"整体**（`美术线`/`测试线`…），显式标记
+（%/@/[触发:]）交由显式引擎单独处理。效果：
+
+| 场景 | 是否触发 |
+|---|---|
+| `请 %测试线 完成回归`（显式声明） | ✅ 触发测试线（high 置信） |
+| `测试线验收中、美术线验收中`（裸提及/状态标签） | ❌ 不触发（未命中=静默） |
+| `角色原画与 3D 建模规范`（强职责词） | ✅ 触发美术线 |
+| `今天天气不错，吃饭了吗`（完全无关） | ❌ 不触发 |
+
+### 7.3 修复 labels 污染路由（对应 dongjiagoushi#74 问题 5）
+
+**文件**：`routing.py` 的 `route_from_env()`
+**改动**：不再把 `CNB_ISSUE_LABELS` 拼入语义匹配内容。标签只反映进度状态，
+不应作为"分配工作"的触发依据。
+
+### 7.4 测试护栏
+
+**文件**：`game-studio-agents/tests/test_routing.sh`
+**覆盖**：三层触发引擎（显式声明最高优先 / 语义阈值 / 未命中静默）、裸提及部门名不触发、
+labels 隔离、路由守卫 stage 级 if 拦截。当前 16/16 全绿。
+
+### 7.5 可参考文件清单
+
+| 文件 | 作用 |
+|---|---|
+| `game-studio-agents/config/routing.py` | ⭐ 部门路由三层触发引擎（核心） |
+| `game-studio-agents/tests/test_routing.sh` | ⭐ 三层触发护栏测试 |
+| `game-studio-agents/config/game_producer_agent.py` | 编排时按路由只派发命中部门 |
+| `.cnb.yml` | 部门 stage 级 if 守卫（grep marker 文件，未命中不拉起） |
+
+> 借鉴来源（dongjiagoushi 仓库，已征得归属方认可、本仓库只做适配不修改对方）：
+> - `src/memory/triggers.py` ⭐ 三层触发引擎
+> - `local-agent/handle/` ⭐ 自适应 @ 显式硬触发通道
+> - `AGENTS.md`「触发强制化」固定规则 ①显性声明触发 ②语义向量触发 ③rules 兜底

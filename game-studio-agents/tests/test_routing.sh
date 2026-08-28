@@ -27,7 +27,7 @@ report() {
 
 echo "== 1. routing.py 演示通过 =="
 out=$($PY routing.py 2>&1)
-if echo "$out" | grep -q "🟢 部门派发路由决策演示通过"; then
+if echo "$out" | grep -q "🟢 部门派发路由决策"; then
   report "routing.py 演示通过" 0
 else
   report "routing.py 演示通过" 1
@@ -188,6 +188,126 @@ if grep -q "routing.py marker" "$PIPELINE"; then
   report ".cnb.yml 含路由决策 marker 写文件 stage" 0
 else
   report ".cnb.yml 含路由决策 marker 写文件 stage" 1
+fi
+
+
+# ============================================================
+# 三层触发引擎新增护栏（routing.py v3.0）
+# ============================================================
+echo "== 6. 显式声明（最高优先）：%部门 / @部门 / [触发:部门] =="
+out6=$($PY - <<'PYBLK'
+import sys; sys.path.insert(0, '.')
+from routing import route
+
+# %部门名 显式声明 → 即使内容无关也触发，且为高置信
+r = route(issue_body="机制改动，请 %测试线 完成回归。")
+assert "测试线" in r["active_departments"]
+assert r["confidence"]["测试线"]["confidence"] == "high"
+assert r["confidence"]["测试线"]["method"] == "explicit"
+
+# @部门名
+r2 = route(issue_body="@运营线 请分析本次上线数据。")
+assert "运营线" in r2["active_departments"]
+assert r2["confidence"]["运营线"]["method"] == "explicit"
+
+# [触发:部门名]（dongjiagoushi 风格）
+r3 = route(issue_body="[触发:美术线] 请给出 UI 视觉规范。")
+assert "美术线" in r3["active_departments"]
+assert r3["confidence"]["美术线"]["method"] == "explicit"
+print("EXPLICIT_OK")
+PYBLK
+)
+if echo "$out6" | grep -q "EXPLICIT_OK"; then
+  report "显式声明(%/@/[触发:])最高优先触发" 0
+else
+  report "显式声明(%/@/[触发:])最高优先触发" 1
+  echo "$out6"
+fi
+
+echo "== 7. 裸提及部门名（状态标签）不触发——消灭'测试线验收中'误判 =="
+out7=$($PY - <<'PYBLK'
+import sys; sys.path.insert(0, '.')
+from routing import route
+
+# 状态标签文本：裸提及部门名、无显式声明、无职责分配语境 → 不触发任何部门
+r = route(issue_body="测试线验收中、美术线验收中（状态标签，非分配工作）。")
+assert r["active_departments"] == [], r["active_departments"]
+
+# 纯无关文本
+r2 = route(issue_title="今天天气不错，吃饭了吗")
+assert r2["active_departments"] == [], r2["active_departments"]
+print("BARE_MENTION_OK")
+PYBLK
+)
+if echo "$out7" | grep -q "BARE_MENTION_OK"; then
+  report "裸提及部门名/状态标签不触发（未命中=静默）" 0
+else
+  report "裸提及部门名/状态标签不触发（未命中=静默）" 1
+  echo "$out7"
+fi
+
+echo "== 8. 语义/关键词触发带阈值下限（强职责词命中才触发） =="
+out8=$($PY - <<'PYBLK'
+import sys; sys.path.insert(0, '.')
+from routing import route
+
+# 强职责词命中 → 触发对应部门
+r = route(issue_title="角色原画与 3D 建模规范", issue_body="美术风格 原画 建模 材质")
+assert "美术线" in r["active_departments"]
+assert r["confidence"]["美术线"]["method"] in ("explicit", "semantic")
+
+# 纯程序 bug → 只触发程序线
+r2 = route(issue_title="修复服务端接口并发 bug", issue_body="server 接口与引擎适配")
+assert "程序线" in r2["active_departments"]
+assert "美术线" not in r2["active_departments"]
+assert "测试线" not in r2["active_departments"]
+print("SEMANTIC_OK")
+PYBLK
+)
+if echo "$out8" | grep -q "SEMANTIC_OK"; then
+  report "语义/关键词触发带阈值下限" 0
+else
+  report "语义/关键词触发带阈值下限" 1
+  echo "$out8"
+fi
+
+echo "== 9. route_from_env 不再拼接 CNB_ISSUE_LABELS（标签不污染路由） =="
+out9=$($PY - <<'PYBLK'
+import sys; sys.path.insert(0, '.')
+import os
+from routing import route_from_env, serialize_active
+
+# 模拟 CI 环境：labels 含"测试线验收中,美术线验收中"，标题为纯程序任务
+env = {
+    "CNB_EVENT": "issue.open",
+    "CNB_ISSUE_TITLE": "修复服务端接口并发 bug",
+    "CNB_ISSUE_DESCRIPTION": "server 接口与引擎适配",
+    "CNB_ISSUE_LABELS": "测试线验收中,美术线验收中,路由机制已落地",
+}
+old = {k: os.environ.get(k) for k in env}
+os.environ.update(env)
+try:
+    r = route_from_env()
+    active = serialize_active(r)
+finally:
+    for k, v in old.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+# labels 不再被拼接 → 测试线/美术线不被"验收中"状态标签误拉起
+assert "测试线" not in active, active
+assert "美术线" not in active, active
+assert "程序线" in active, active
+print("LABELS_ISOLATED_OK")
+PYBLK
+)
+if echo "$out9" | grep -q "LABELS_ISOLATED_OK"; then
+  report "route_from_env 不拼接 labels，状态标签不污染路由" 0
+else
+  report "route_from_env 不拼接 labels，状态标签不污染路由" 1
+  echo "$out9"
 fi
 
 echo ""
