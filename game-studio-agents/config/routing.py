@@ -502,7 +502,11 @@ def route_from_env(threshold: int = DEFAULT_SEMANTIC_THRESHOLD) -> Dict[str, Any
         title = os.getenv("CNB_ISSUE_TITLE", "") or os.getenv("CNB_PULL_REQUEST_TITLE", "")
         body = os.getenv("CNB_ISSUE_DESCRIPTION", "") or os.getenv("CNB_PULL_REQUEST_DESCRIPTION", "")
 
-    return route(issue_title=title, issue_body=body, pr_description="", threshold=threshold)
+    # 从环境变量读取依赖解锁信息（可选）
+    deps_str = os.getenv("CNB_DEPS_UNLOCKED", "")
+    deps = [d.strip() for d in deps_str.split(",") if d.strip()] if deps_str else None
+
+    return route(issue_title=title, issue_body=body, pr_description="", deps_unlocked=deps, threshold=threshold)
 
 
 def cli_main() -> None:
