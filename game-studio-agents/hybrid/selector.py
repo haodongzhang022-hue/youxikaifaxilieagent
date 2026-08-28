@@ -51,7 +51,7 @@ class IncrementalSelector(object):
         也支持 base='origin/main' 等任意 git 引用。
         返回值：变更文件路径 list（新增/修改/删除）。
         """
-        cmd = ["git", "diff", "--name-only", base, head]
+        cmd = ["git", "-c", "core.quotepath=false", "diff", "--name-only", base, head]
         proc = subprocess.run(
             cmd, capture_output=True, text=True,
             cwd=self.root_dir, timeout=30,
@@ -63,8 +63,8 @@ class IncrementalSelector(object):
     def changed_files_workdir(self):
         """获取工作区未提交的变更文件清单（含暂存区）。"""
         files = []
-        for args in (["git", "diff", "--name-only"],
-                     ["git", "diff", "--cached", "--name-only"]):
+        for args in (["git", "-c", "core.quotepath=false", "diff", "--name-only"],
+                     ["git", "-c", "core.quotepath=false", "diff", "--cached", "--name-only"]):
             proc = subprocess.run(
                 args, capture_output=True, text=True,
                 cwd=self.root_dir, timeout=30,
