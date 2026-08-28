@@ -290,6 +290,8 @@ $:
             bash game-studio-agents/tests/test_art_direction.sh
             bash game-studio-agents/tests/test_ui_ux.sh
             bash game-studio-agents/tests/test_audio.sh
+            bash game-studio-agents/tests/test_art_testing.sh
+            bash game-studio-agents/tests/test_engine_adapters.sh
             bash game-studio-agents/tests/test_data_ops_diagnosis.sh
             bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
             bash game-studio-agents/tests/test_release_gate.sh
@@ -304,8 +306,10 @@ $:
             bash game-studio-agents/tests/test_framework_upgrade_acceptance.sh
             bash game-studio-agents/tests/test_design_roles.sh
             bash game-studio-agents/tests/test_agent_identity.sh
+            bash game-studio-agents/tests/test_engine_adaptation.sh
             bash game-studio-agents/tests/test_role_inventory.sh
             bash game-studio-agents/tests/test_role_inventory_handlers.sh
+            bash game-studio-agents/tests/test_engine_bridge.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
             # 功能模块验收测试（以功能模块为单位，每个模块独立脚本+断言）

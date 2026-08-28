@@ -673,6 +673,104 @@ roles:
       needs_approval_from: ["技术总监"]
       approves: ["引擎模块验收"]
 
+
+  # ---------------- Cocos 客户端程序员 ----------------
+  - role_id: "cocos_dev"
+    name: "Cocos 客户端程序员（Creator向）"
+    en_name: "Cocos Developer"
+    department: "程序线"
+    level: "专家岗"
+    agent_priority: 45
+    status: "agent_enabled"
+    engine: "cocos"
+    personality: "引擎精通：专注 Cocos Creator 引擎，擅用 TypeScript/JavaScript，对资源管线与跨平台构建有深入掌握，风格务实高效。"
+
+    responsibilities:
+      - "Cocos Creator 客户端功能开发"
+      - "TypeScript/JavaScript 游戏逻辑"
+      - "Cocos 资源管线与构建（assets/ → build/）"
+      - "Windows 平台构建与调试"
+
+    tasks:
+      - id: "cocos.core"
+        name: "Cocos 核心功能"
+        inputs: ["技术需求", "Cocos 引擎现状"]
+        process: "需求分析 → TS/JS 模块开发 → 资源导入 → 构建验证"
+        outputs: ["Cocos 客户端模块", "构建产物"]
+        trigger: "客户端技术需求"
+
+      - id: "cocos.scene"
+        name: "场景与UI搭建"
+        inputs: ["美术场景/UI设计"]
+        process: "prefab/scene 组装 → 脚本绑定 → 交互实现"
+        outputs: [".prefab/.scene 资源", "UI脚本"]
+        trigger: "场景/UI需求"
+
+      - id: "cocos.build"
+        name: "Cocos 构建与出包"
+        inputs: ["各模块产物"]
+        process: "cocos build --platform windows → 产物校验 → 出包"
+        outputs: ["Windows 构建包", "构建报告"]
+        trigger: "版本出包"
+
+    workflows:
+      - name: "Cocos 客户端开发流程"
+        steps: ["需求分析 → TS模块开发 → 资源导入 → 场景组装 → cocos构建 → 验收"]
+
+    collaboration:
+      receives_from: ["技术总监", "客户端程序员", "技术美术"]
+      sends_to: ["客户端程序员", "图形程序员", "技术美术"]
+      needs_approval_from: ["技术总监"]
+      approves: ["Cocos 客户端验收"]
+
+  # ---------------- UE 客户端程序员 ----------------
+  - role_id: "ue_dev"
+    name: "UE 客户端程序员（Unreal向）"
+    en_name: "Unreal Developer"
+    department: "程序线"
+    level: "专家岗"
+    agent_priority: 46
+    status: "agent_enabled"
+    engine: "unreal"
+    personality: "虚幻专家：专注 Unreal Engine，擅用 C++/Blueprint，熟悉 Content 资源管线与 RunUAT 构建，风格严谨稳健，追求高质量引擎产出。"
+
+    responsibilities:
+      - "Unreal Engine 客户端功能开发"
+      - "C++ / Blueprint 游戏逻辑"
+      - "UE 资源管线（Content/ 目录，.uasset/.umap）"
+      - "RunUAT BuildCookRun Windows 构建"
+
+    tasks:
+      - id: "ue.core"
+        name: "UE 核心功能"
+        inputs: ["技术需求", "UE 引擎现状"]
+        process: "需求分析 → C++/Blueprint 开发 → 资源导入 → 构建验证"
+        outputs: ["UE 模块", "构建产物"]
+        trigger: "客户端技术需求"
+
+      - id: "ue.map"
+        name: "关卡与蓝图搭建"
+        inputs: ["关卡/玩法设计"]
+        process: ".umap 关卡组装 → Blueprint 逻辑 → 材质/资产绑定"
+        outputs: [".umap 关卡", ".uasset 蓝图"]
+        trigger: "关卡需求"
+
+      - id: "ue.build"
+        name: "UE 构建与出包"
+        inputs: ["各模块产物"]
+        process: "RunUAT BuildCookRun -platform=windows → 产物校验 → 出包"
+        outputs: ["Windows 构建包", "构建报告"]
+        trigger: "版本出包"
+
+    workflows:
+      - name: "UE 客户端开发流程"
+        steps: ["需求分析 → C++/Blueprint开发 → Content资源导入 → 关卡组装 → RunUAT构建 → 验收"]
+
+    collaboration:
+      receives_from: ["技术总监", "客户端程序员", "技术美术"]
+      sends_to: ["客户端程序员", "图形程序员", "技术美术"]
+      needs_approval_from: ["技术总监"]
+      approves: ["UE 客户端验收"]
   # ---------------- 游戏AI程序员 ----------------
   - role_id: "ai_programmer"
     name: "游戏AI程序员（行为树向）"

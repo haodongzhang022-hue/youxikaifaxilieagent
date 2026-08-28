@@ -2,7 +2,7 @@
 # ============================================================
 # 角色-实现差距护栏（Role Inventory Gap Guard）
 # 说明: WP-05 产出——验证「声明≠实现」差距不回退。
-#   - role_inventory.yaml 覆盖全部声明角色（roles.yaml 58 + ecosystem_roles.yaml 21）
+#   - role_inventory.yaml 覆盖全部声明角色（roles.yaml 60 + ecosystem_roles.yaml 21）
 #   - role_inventory.py --gap 输出差距索引（declared_only / registered_only / implemented）
 #   - 断言已实体化角色（implemented）不回退，差距数不劣化
 # 退出码: 0 = 🟢 通过，1 = 🔴 阻塞
@@ -26,18 +26,18 @@ report() {
 
 echo "== 1. role_inventory.yaml 结构完整性 =="
 
-# 1. roles_inventory 覆盖 58 个角色
+# 1. roles_inventory 覆盖 60 个角色
 if $PY -c "
 import yaml
 with open('role_inventory.yaml', encoding='utf-8') as f:
     data = yaml.safe_load(f)
 roles = data.get('roles_inventory', [])
-assert len(roles) == 58, f'expected 58, got {len(roles)}'
+assert len(roles) == 60, f'expected 60, got {len(roles)}'
 print('OK')
 " >/dev/null 2>&1; then
-  report "roles_inventory 覆盖 58 个角色" 0
+  report "roles_inventory 覆盖 60 个角色" 0
 else
-  report "roles_inventory 覆盖 58 个角色" 1
+  report "roles_inventory 覆盖 60 个角色" 1
 fi
 
 # 2. ecosystem_roles_inventory 覆盖 21 个生态角色

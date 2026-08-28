@@ -1,7 +1,7 @@
 project:
   name: Game Studio Agents
   version: 1.0.0
-  description: 角色-实现映射索引，覆盖 roles.yaml(58) + ecosystem_roles.yaml(21)
+  description: 角色-实现映射索引，覆盖 roles.yaml(60) + ecosystem_roles.yaml(21)
 fact_sources:
   roles_yaml: roles.yaml
   ecosystem_roles_yaml: ecosystem_roles.yaml
@@ -151,6 +151,22 @@ roles_inventory:
   impl_status: implemented
   impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ProgramDeptAgent
   note: 专属 handler 挂接到总线（engine_dev 独立承接）+ 部门 Agent 双路径承接
+- role_id: cocos_dev
+  name: Cocos 客户端程序员（Creator向）
+  department: 程序线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ProgramDeptAgent
+  note: Cocos Creator 专属岗位（engine=cocos），经 ProgramDeptAgent 引擎感知承接
+- role_id: ue_dev
+  name: UE 客户端程序员（Unreal向）
+  department: 程序线
+  source: roles.yaml
+  variant: base
+  impl_status: implemented
+  impl_ref: config/ecosystem_handlers.py + config/department_agents.py::ProgramDeptAgent
+  note: Unreal Engine 专属岗位（engine=unreal），经 ProgramDeptAgent 引擎感知承接
 - role_id: ai_programmer
   name: 游戏AI程序员（行为树向）
   department: 程序线
@@ -624,13 +640,13 @@ preset_standby_roles:
   instantiator_ref: config/preset_instantiator.py::PresetInstantiator
   assembly_ref: config/run_end_to_end_instantiated.py::InstantiatedTeamOrchestrator
 statistics:
-  roles_yaml_count: 58
+  roles_yaml_count: 60
   ecosystem_roles_yaml_count: 21
-  total_declared: 79
-  implemented: 79
+  total_declared: 81
+  implemented: 81
   registered_only: 0
   declared_only: 0
-  unique_roles: 78
-  note: 全量实体化收口后：79 个角色全部 implemented，18 个部门 base 角色补齐独立 handler，
+  unique_roles: 80
+  note: 全量实体化收口后：81 个角色全部 implemented，18 个部门 base 角色补齐独立 handler，
     registered_only / declared_only 双双归零，实现覆盖率 100%
   version: 角色补完（18 部门 base 角色实体化）后快照
