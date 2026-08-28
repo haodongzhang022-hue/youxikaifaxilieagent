@@ -26,6 +26,8 @@ from framework_upgrade_ops import run_data_ops_upgrade
 from shared_memory import SharedMemory
 from release_gate import aggregate_and_release, run_release_gate
 from engine_adapters import get_engine
+from engine_sync import build_manifest, verify_manifest, consistency_report
+from deepseek_harness import build_context, receive_dispatch, plan_execution, report_back
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -33,6 +35,38 @@ _DEPT_KEY_BY_NAME = {
     "策划线": "design", "程序线": "program", "美术线": "art",
     "测试线": "qa", "项目管理": "pm", "运营线": "ops",
 }
+
+def _engine_resource_hint(engine_ctx, resource_type):
+    """引擎资源格式提示（wp_engine_adaptation_integration 新增）。
+
+    engine_ctx: 引擎上下文 dict（如 {'engine': 'unreal'} 或 {'engine': 'cocos'}）
+    resource_type: 资源类型（如 'audio' / 'scene' / 'sprite' / 'map'）
+
+    返回: {"engine": "<engine_name>", "format": "<extension>"}
+    """
+    engine_name = engine_ctx.get("engine", "cocos")
+    # 统一别名
+    if engine_name in ("unreal", "ue", "ue5", "unreal_engine"):
+        engine_name = "unreal"
+    elif engine_name in ("cocos", "cocos_creator"):
+        engine_name = "cocos"
+
+    # 资源类型 → 扩展名 映射（对齐 engine_adapters.ResourceSpec）
+    _EXT_MAP = {
+        "cocos": {
+            "sprite": ".png", "audio": ".mp3", "animation": ".anim",
+            "prefab": ".prefab", "scene": ".scene", "script": ".ts",
+            "map": ".scene",
+        },
+        "unreal": {
+            "mesh": ".fbx", "material": ".uasset", "audio": ".wav",
+            "scene": ".umap", "map": ".umap", "blueprint": ".uasset",
+            "uasset": ".uasset",
+        },
+    }
+    ext = _EXT_MAP.get(engine_name, {}).get(resource_type, "")
+    return {"engine": engine_name, "format": ext}
+
 
 
 # ============================================================
@@ -463,6 +497,16 @@ class ProgramDeptAgent(DepartmentAgent):
         # 引擎感知：探测当前目标引擎（Cocos Creator / Unreal Engine）
         engine = get_engine()
         engine_info = engine.to_dict()
+        engine_name = engine_info["engine_name"]
+        engine_key = "cocos" if "cocos" in str(engine_info["engine_type"]).lower() else "unreal"
+        # 构建本地上下文（DeepSeek harness 集成）
+        ctx = build_context(
+            agent_role=assign.get("role", "cto"),
+            engine=engine_key,
+            workspace="/tmp/game-workspace",
+        )
+        # 本地执行计划（引擎工具链）
+        plan = plan_execution(ctx, work_package)
 
         if module == "client":
             artifact = {
@@ -477,6 +521,14 @@ class ProgramDeptAgent(DepartmentAgent):
                     "script_languages": engine_info["script_languages"],
                     "build_command": engine.build_command("windows"),
                     "supported_platforms": engine_info["supported_platforms"],
+                    # 双环境同步：产物清单 + 同源校验（engine_sync 集成）
+                    "manifest": build_manifest(engine_key, "/tmp/game-workspace", ["src/main.ts"]),
+                },
+                "deepseek_harness": {
+                    "context_role": ctx.agent_role,
+                    "engine": ctx.engine,
+                    "plan_tools": plan.get("tools", []),
+                    "sync_required": True,
                 },
             }
         elif module == "server":
@@ -498,6 +550,14 @@ class ProgramDeptAgent(DepartmentAgent):
                     "build_command": engine.build_command("windows"),
                     "script_languages": engine_info["script_languages"],
                     "project_structure": engine_info["project_structure"],
+                    # 双环境同步：产物清单 + 同源校验（engine_sync 集成）
+                    "manifest": build_manifest(engine_key, "/tmp/game-workspace", ["Content/Scenes/Game.umap"]),
+                },
+                "deepseek_harness": {
+                    "context_role": ctx.agent_role,
+                    "engine": ctx.engine,
+                    "plan_tools": plan.get("tools", []),
+                    "sync_required": True,
                 },
             }
         elif module == "ai_logic":
@@ -662,10 +722,7 @@ class ArtDeptAgent(DepartmentAgent):
                     # 引擎感知：音频资源格式与目标引擎挂钩
                     "engine": engine_name,
                     "engine_type": engine_type,
-                    "audio_resource_extension": next(
-                        (rs.extension for rs in engine.resource_specs() if rs.resource_type == "audio"),
-                        ""
-                    ),
+                    "audio_resource_extension": next((r.extension for r in engine.resource_specs() if r.resource_type == "audio"), ""),
                     "audio_import_dir": engine.resource_import_path("audio"),
                     "build_command": engine.build_command("windows"),
                 },

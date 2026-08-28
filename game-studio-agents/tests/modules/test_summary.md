@@ -21,15 +21,16 @@
 | 6 | 统一派发能力 (DispatchCapability) | test_mod_dispatch.sh | 8 | 🟢 |
 | 7 | 游戏向经理 (GameProducerAgent) | test_mod_game_producer.sh | 9 | 🟢 |
 | 8 | 部门 Agent (DepartmentAgents) | test_mod_department_agents.sh | 11 | 🟢 |
-| 9 | 进度督导 (ProgressPusher) | test_mod_progress_pusher.sh | 9 | 🟢 |
-| 10 | 发版质量门禁 (ReleaseGate) | test_mod_release_gate.sh | 7 | 🟢 |
-| 11 | 生态角色 (EcosystemRoleRegistry) | test_mod_ecosystem_roles.sh | 6 | 🟢 |
-| 12 | 预设实例化 (PresetInstantiator) | test_mod_instantiator.sh | 6 | 🟢 |
-| 13 | 合并确认 (MergedConfirmAgent) | test_mod_merged_confirm.sh | 7 | 🟢 |
-| 14 | 借鉴学习 (ReferenceLearnerAgent) | test_mod_reference_learner.sh | 4 | 🟢 |
-| 15 | 端到端联动 (EndToEnd) | test_mod_end_to_end.sh | 6 | 🟢 |
+| 9 | 双引擎适配集成 (EngineAdaptation) | test_mod_engine_adaptation.sh | 6 | 🟢 |
+| 10 | 进度督导 (ProgressPusher) | test_mod_progress_pusher.sh | 9 | 🟢 |
+| 11 | 发版质量门禁 (ReleaseGate) | test_mod_release_gate.sh | 7 | 🟢 |
+| 12 | 生态角色 (EcosystemRoleRegistry) | test_mod_ecosystem_roles.sh | 6 | 🟢 |
+| 13 | 预设实例化 (PresetInstantiator) | test_mod_instantiator.sh | 6 | 🟢 |
+| 14 | 合并确认 (MergedConfirmAgent) | test_mod_merged_confirm.sh | 7 | 🟢 |
+| 15 | 借鉴学习 (ReferenceLearnerAgent) | test_mod_reference_learner.sh | 4 | 🟢 |
+| 16 | 端到端联动 (EndToEnd) | test_mod_end_to_end.sh | 6 | 🟢 |
 
-**合计：15 个功能模块，112 项断言，全部通过。**
+**合计：16 个功能模块，118 项断言，全部通过。**
 
 ## 模块验收明细
 
@@ -116,7 +117,15 @@
 - 部门 Agent 部门名映射正确
 - 部门 Agent 组内协作拆派记录完整
 
-### 9. 进度督导 (ProgressPusher) — 9 项断言
+### 9. 双引擎适配集成 (EngineAdaptation) — 6 项断言
+- _engine_resource_hint 引擎资源格式感知
+- engine_sync 产物清单 + 同源校验集成
+- deepseek_harness 本地运行时接入
+- department_agents 音频资源扩展名按类型筛选
+- department_agents 未使用导入已清理
+- engine_adapters 双引擎资源管线分叉
+
+### 10. 进度督导 (ProgressPusher) — 9 项断言
 - 策略声明化配置加载正确
 - 正常任务→WATCH（不打扰）
 - 逾期任务→PUSH（催办）
@@ -189,5 +198,5 @@ bash game-studio-agents/tests/modules/test_mod_task_scheduler.sh
 
 ## 验收结论
 
-✅ **15/15 个功能模块全部验收通过（112 项断言）**，每个模块的确认均以实际测试
+✅ **16/16 个功能模块全部验收通过（118 项断言）**，每个模块的确认均以实际测试
 结果为支撑，可运行、可复现、可证明、可反驳。

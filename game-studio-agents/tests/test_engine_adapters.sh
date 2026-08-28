@@ -148,7 +148,7 @@ else
 fi
 
 # 10. Unreal 资源类型
-if echo "$out2" | grep -q "UNREAL_TYPES=animation,audio,blueprint,material,mesh,script"; then
+if echo "$out2" | grep -q "UNREAL_TYPES=animation,audio,blueprint,map,material,mesh,script"; then
   report "Unreal Engine 资源类型齐全" 0
 else
   report "Unreal Engine 资源类型齐全" 1
