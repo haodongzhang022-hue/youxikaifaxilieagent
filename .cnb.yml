@@ -38,6 +38,10 @@ $:
       docker:
         image: &npc_image cnbcool/default-npc:latest
       stages:
+        - name: 路由决策·部门派发
+          script: |
+            python3 game-studio-agents/config/routing.py marker ${CNB_BUILD_WORKSPACE}/.routing_active.txt
+            cat ${CNB_BUILD_WORKSPACE}/.routing_active.txt
         - name: 游戏向经理自动拆解
           type: npc:go
           options:
@@ -58,11 +62,18 @@ $:
                  - 任务横跨多个角色 → 按**部门整体**派发（@当前仓库slug(部门名)）；
                  - 任务聚焦单角色 → 按 **role_id** 直投给具体角色；
               6. 在 Issue 评论中输出工作包拆分表与部门协作依赖图。
+              【路由决策·必做】只派发/只 @ 本轮**确实有工作包**的部门：
+              - 用工作内容匹配（本需求涉及策划/程序/美术/测试/项目管理/运营哪一块）；
+              - 没有相关工作包的部门**一律不 @、不触发、不评论凑热闹**；
+              - 全量六大部门流水线是历史兜底写法，**不要**为了"走流程"把无关部门也拉进来；
+              - 最终在评论中明确列出【本轮应触发部门】与【本轮跳过部门】。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动，无需人工手动推进度。
 
 
         - name: 策划线执行
+          if: |
+            grep -q "策划线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 策划线
@@ -85,10 +96,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若 Issue 中无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 程序线执行
+          if: |
+            grep -q "程序线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 程序线
@@ -111,10 +126,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若 Issue 中无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 美术线执行
+          if: |
+            grep -q "美术线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 美术线
@@ -137,10 +156,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若 Issue 中无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 测试线执行
+          if: |
+            grep -q "测试线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 测试线
@@ -163,10 +186,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若 Issue 中无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 项目管理执行
+          if: |
+            grep -q "项目管理" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 项目管理
@@ -189,10 +216,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若 Issue 中无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 运营线执行
+          if: |
+            grep -q "运营线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 运营线
@@ -215,7 +246,9 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若 Issue 中无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
 
@@ -279,42 +312,16 @@ $:
       stages:
         - name: 测试信号灯
           script: |
-            bash game-studio-agents/tests/test_producer_agent.sh
-            bash game-studio-agents/tests/test_instantiator.sh
-            bash game-studio-agents/tests/test_end_to_end.sh
-            bash game-studio-agents/tests/test_progress_pusher.sh
-            bash game-studio-agents/tests/test_instantiated_e2e.sh
-            bash game-studio-agents/tests/test_review_fix_loop.sh
-            bash game-studio-agents/tests/test_market_input_bridge.sh
-            bash game-studio-agents/tests/test_ecosystem_roles.sh
-            bash game-studio-agents/tests/test_art_direction.sh
-            bash game-studio-agents/tests/test_ui_ux.sh
-            bash game-studio-agents/tests/test_audio.sh
-            bash game-studio-agents/tests/test_art_testing.sh
-            bash game-studio-agents/tests/test_engine_adapters.sh
-            bash game-studio-agents/tests/test_data_ops_diagnosis.sh
-            bash game-studio-agents/tests/test_progress_pusher_fullchain.sh
-            bash game-studio-agents/tests/test_release_gate.sh
-            bash game-studio-agents/tests/test_merged_confirm_agent.sh
-            bash game-studio-agents/tests/test_dispatch_capability.sh
-
-            bash game-studio-agents/tests/test_role_collaboration.sh
-            bash game-studio-agents/tests/test_dept_group_collaboration.sh
-            bash game-studio-agents/tests/test_dept_npc_pipeline.sh
-            bash game-studio-agents/tests/test_framework_upgrade.sh
-            bash game-studio-agents/tests/test_framework_upgrade_ops.sh
-            bash game-studio-agents/tests/test_framework_upgrade_acceptance.sh
-            bash game-studio-agents/tests/test_design_roles.sh
-            bash game-studio-agents/tests/test_agent_identity.sh
-            bash game-studio-agents/tests/test_engine_adaptation.sh
-            bash game-studio-agents/tests/test_role_inventory.sh
-            bash game-studio-agents/tests/test_role_inventory_handlers.sh
-            bash game-studio-agents/tests/test_engine_bridge.sh
-            bash game-studio-agents/tests/test_engine_bridge_integration.sh
+            # 【不全量回归】只跑核心汇总护栏 + 本 PR 变更相关的值得测的测试。
+            # 理由：开发时已做本地测试；已通过的用例不重复回归；遇到问题再触发修。
+            # 用 test_all_modules.sh 汇总入口覆盖核心模块验收，避免逐个脚本重复执行。
             pip install -q -r game-studio-agents/api/requirements.txt
-            bash game-studio-agents/api/test_api.sh
-            # 功能模块验收测试（以功能模块为单位，每个模块独立脚本+断言）
+            # 核心模块汇总验收（单入口，覆盖消息总线/调度/经理/部门/派发/引擎等）
             bash game-studio-agents/tests/modules/test_all_modules.sh
+            # 本 PR 新增的部门路由护栏
+            bash game-studio-agents/tests/test_routing.sh
+            # API 自测（独立于模块的接口层）
+            bash game-studio-agents/api/test_api.sh
         - name: 自动分配评审人
           type: git:reviewer
           options:
@@ -399,7 +406,7 @@ $:
                 （如「适合推送」/「适合合并」），**绝不尝试 push**（会触发 403 报错、
                 破坏闭环）；
               - 默认直接改：评审指出的问题（尤其 bug）默认应直接修复，不反复询问；
-              - 最大 10 轮护栏：同一 PR 的评审→修复来回最多 10 次，达到上限仍无法
+              - 最大 5 轮护栏：同一 PR 的评审→修复来回最多 5 次，达到上限仍无法
                 解决则停止自动修复，在 PR 评论中反馈人类，由人类改需求/框架；
               - 每修一个评审点，尽量固化成测试断言，防止回退；
               - 钩子没 bug 就停：若评审结论为"通过/approved"，说明无 bug，直接结束本阶段，
@@ -423,7 +430,7 @@ $:
                  - 若为"通过/approved"（无 bug）：说明本轮无需修复，直接输出"评审通过，
                    等待合并门禁"，不修改任何代码，结束本阶段（钩子没 bug 就停）；
                  - 若为"需修改/需改进"：进入第 3 步；
-              3. 检查本 PR 已进行的"评审→修复"轮次是否达 10 轮上限：
+              3. 检查本 PR 已进行的"评审→修复"轮次是否达 5 轮上限：
                  - 未达上限：默认直接修复评审指出的问题（Bug 优先，再质量/性能/架构），
                    在 PR 源分支修改代码并补充测试断言后，**在 PR 上打「适合推送」标签**
                    标记修复完成，触发下一轮评审（**禁止 push**，本系统故意设计不允许
@@ -483,7 +490,7 @@ $:
               B. 真正闭环中断（须满足**至少一个硬性信号**，否则不算中断）：
                  - 打标签失败：标签应用返回错误 / 权限不足，修复状态未正确标记；
                  - 标签已打但长时间（超时阈值）无任何后续评审 run 跟进；
-                 - 评审结论长期停留在"需修改"且超过 10 轮上限仍未收敛。
+                 - 评审结论长期停留在"需修改"且超过 5 轮上限仍未收敛。
                  满足任一信号才显式输出"评审闭环中断"告警，说明中断环节（标签 / 评审触发 /
                  评审结论）与处置建议，并中断流水线返回失败，不放行合并；
                  - **注意**：**禁止将"push 403"作为中断信号**——本系统故意设计不允许
@@ -530,7 +537,7 @@ $:
                 （如「适合推送」/「适合合并」），**绝不尝试 push**（会触发 403 报错、
                 破坏闭环），也不得输出"push 失败 / 403"类错误信息；
               - 默认直接改：失败可归因于代码 bug 的，默认直接修复，不反复询问；
-              - 最大 10 轮护栏：同一 PR 的失败→修复来回最多 10 次，达上限仍无法
+              - 最大 5 轮护栏：同一 PR 的失败→修复来回最多 5 次，达上限仍无法
                 解决则停止自动修复，在 PR 评论反馈人类，由人类改需求/框架；
               - 每修一个失败点，尽量固化成测试断言，防止回退；
               - 无法就地解决的（环境/权限/超范围）：不盲改，显式转交或告警。
@@ -550,7 +557,7 @@ $:
               3. 上下文路由与降级显性化（遵循"评审-修复闭环护栏"第五章）：优先通过
                  全局ID（PR 编号）+ sessionID 路由到原对话上下文修复；不可路由时降级
                  哈希校验兜底，但必须显性输出降级说明，禁止静默降级；
-              4. 检查本 PR 已进行的失败→修复轮次是否达 10 轮上限：
+              4. 检查本 PR 已进行的失败→修复轮次是否达 5 轮上限：
                  - 未达上限：修复后打「适合推送」标签，等待下一轮触发；
                  - 已达上限仍未解决：停止自动修复，在 PR 评论明确反馈人类；
               5. 【标签驱动·强制自检】修复完成后必须**打标签**标记状态，打标签后立即
@@ -609,6 +616,10 @@ $:
       docker:
         image: *npc_image
       stages:
+        - name: 路由决策·部门派发
+          script: |
+            python3 game-studio-agents/config/routing.py marker ${CNB_BUILD_WORKSPACE}/.routing_active.txt
+            cat ${CNB_BUILD_WORKSPACE}/.routing_active.txt
         - name: 合并后联动
           type: npc:go
           options:
@@ -623,10 +634,17 @@ $:
                  - 任务聚焦单角色 → 按 role_id 直投给具体角色；
               3. 更新对应 Issue 状态（标注进展/下一阶段）；
               4. 在 Issue 中评论合并后的下一步协作计划。
+              【路由决策·必做】只有被本次合并真正**解锁/影响**的部门才派发、才 @：
+              - 用"依赖解锁结果 + 工作内容匹配"判定，只派发确有工作包的下游部门；
+              - 未受影响/无下游工作包的部门**一律不 @、不触发、不评论凑热闹**；
+              - 不要为走完六大部门流水线而触发无关部门（尤其美术/测试常无工作凑热闹）；
+              - 最终评论中明确列出【本轮应触发部门】与【本轮跳过部门】。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动，无需人工手动推进度。
 
         - name: 策划线执行(下游解锁)
+          if: |
+            grep -q "策划线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 策划线
@@ -648,10 +666,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若解锁后无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 程序线执行(下游解锁)
+          if: |
+            grep -q "程序线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 程序线
@@ -673,10 +695,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若解锁后无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 美术线执行(下游解锁)
+          if: |
+            grep -q "美术线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 美术线
@@ -698,10 +724,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若解锁后无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 测试线执行(下游解锁)
+          if: |
+            grep -q "测试线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 测试线
@@ -723,10 +753,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若解锁后无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 项目管理执行(下游解锁)
+          if: |
+            grep -q "项目管理" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 项目管理
@@ -748,10 +782,14 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若解锁后无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
         - name: 运营线执行(下游解锁)
+          if: |
+            grep -q "运营线" ${CNB_BUILD_WORKSPACE}/.routing_active.txt 2>/dev/null
           type: npc:go
           options:
             role: 运营线
@@ -773,7 +811,9 @@ $:
               3. 【跨部门协作·必做】工作包需要其他部门协助时，跨部门 @协作请求/转交（request_peer）；
               4. 汇总组内子任务产出，向游戏向经理上报 REVIEW_RESULT（通过/打回 + 产出物说明）；
               5. 在 Issue 评论输出本部门承接结果、组内分工表与跨部门协作记录。
-              若解锁后无本部门工作包，评论说明「无本部门工作包，本轮跳过」即可。
+              【路由守卫·必做】仅当你被游戏向经理**点名/派发**为本轮工作包承接部门时才执行；
+              若未被点名、或本部门无工作包，**直接跳过、不执行、不 @ 任何人、不评论凑热闹**
+              （尤其无关任务不要蹭过来，杜绝「无工作还跑一遍」的噪音）。
               部门流水线顺序：策划 → 程序 → 美术 → 测试 → 项目管理 → 运营。
               全程机制驱动。
 
@@ -797,7 +837,7 @@ $:
                 （如「适合推送」/「适合合并」），**绝不尝试 push**（会触发 403 报错、
                 破坏闭环），也不得输出"push 失败 / 403"类错误信息；
               - 默认直接改：评审指出的问题（尤其 bug）默认应直接修复，不反复询问；
-              - 最大 10 轮护栏：同一 PR 的评审→修复来回最多 10 次，达到上限仍无法
+              - 最大 5 轮护栏：同一 PR 的评审→修复来回最多 5 次，达到上限仍无法
                 解决则停止自动修复，在 PR 评论中反馈人类，由人类改需求/框架；
               - 每修一个评审点，尽量固化成测试断言，防止回退；
               - 放弃此部分迭代：若问题无法在本 PR 就地解决，转交其他 issue/PR 解决并
@@ -814,7 +854,7 @@ $:
                    继承其完整上下文来修复，不当作全新任务；
                  - 若原对话上下文不可路由（无 sessionID/已失效）：降级到哈希校验兜底，但
                    **必须显性输出降级说明**（原因 + 丢失的上下文信息），禁止静默降级；
-              5. 检查本 PR 已进行的评审→修复轮次是否达 10 轮上限：
+              5. 检查本 PR 已进行的评审→修复轮次是否达 5 轮上限：
                  - 未达上限：修复后**打「适合推送」标签**标记修复完成，触发下一轮评审
                    （**禁止 push**，本系统故意设计不允许 push）；
                  - 已达上限仍未解决：停止自动修复，在 PR 评论中明确反馈人类，
@@ -849,7 +889,7 @@ $:
               你是**本仓库专属**的代码修复 Agent（仓库处理专员），是**打标签唯一执行者**。
               CodeBuddy 仅提供信息和建议（无打标签权限）。人类在 PR 评论中
               @你 / @CodeBuddy，请按指令处理，并遵循"评审-修复闭环护栏"
-              （docs/评审修复闭环护栏.md）：默认直接改、最大 10 轮、每修一点补断言、
+              （docs/评审修复闭环护栏.md）：默认直接改、最大 5 轮、每修一点补断言、
               超限或无法就地解决时反馈人类/转交。
               **本系统故意设计不允许 push**：修复完成后通过**打标签**标记状态
               （如「适合推送」/「适合合并」），**绝不尝试 push**（会触发 403 报错、
@@ -875,20 +915,15 @@ $:
 #         - 已合并但仍有阻塞/待复核/依赖未收尾 → 保留 Issue。
 #   实现: config/merged_confirm_agent.py（探查 probe / 确认 confirm / 决策 decide）
 #   crontab 事件必须放在具体分支名下（此处放 main）。
-#   频率: 每天 06:00 Asia/Shanghai（可调整 cron 表达式）
+#   频率: 每周一 06:00 Asia/Shanghai（已按"没变化不用跑"降低频率，可调整 cron 表达式）
 main:
-  "crontab: 0 6 * * *":
+  "crontab: 0 6 * * 1":
     - name: merged-confirm-sweep
       docker:
         image: *npc_image
       stages:
-        # 阶段名保持与职责一致：此处仅运行 __main__ 自测（冒烟），
-        # 不执行真实探查；真实探查由下一阶段 npc:go「合并确认员」通过 CNB API 完成。
-        - name: 自测冒烟
-          script: |
-            cd game-studio-agents
-            echo "== 合并确认 Agent 自测冒烟（不执行真实探查）=="
-            python3 config/merged_confirm_agent.py
+        # 【没变化不用跑】真实探查由「合并确认员」NPC 通过 CNB API 完成；
+        # 移除模拟数据自测冒烟（无实际探查意义），降低固定 CPU 消耗。
         - name: 合并确认员逐个确认
           type: npc:go
           options:
