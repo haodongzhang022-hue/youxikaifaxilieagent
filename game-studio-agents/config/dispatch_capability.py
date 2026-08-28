@@ -40,6 +40,7 @@ from typing import Any, Dict, List, Optional
 
 from message_bus import Message, MessageBus
 from task_scheduler import Scheduler, Task, TaskState
+from squad_pool import SquadPool, Squad, create_default_squad_pool, SQUAD_IDLE, SQUAD_BUSY
 
 
 # ============================================================
@@ -126,17 +127,20 @@ class DispatchCapability:
     """
 
     def __init__(self, caller_role: str, bus: Optional[MessageBus] = None,
-                 scheduler: Optional[Scheduler] = None):
+                 scheduler: Optional[Scheduler] = None,
+                 squad_pool: Optional[SquadPool] = None):
         """初始化派发能力。
 
         Args:
             caller_role: 调用者 role_id（用于标注消息来源）
             bus: 消息总线（缺省时新建）
             scheduler: 任务调度器（缺省时新建，与 bus 关联）
+            squad_pool: 可调配小组池（缺省时新建）
         """
         self.caller_role = caller_role
         self.bus = bus or MessageBus()
         self.scheduler = scheduler or Scheduler(bus=self.bus)
+        self.squad_pool = squad_pool or SquadPool()
         self.dispatch_log: List[DispatchResult] = []
 
     # ---------- 核心派发 API ----------
@@ -298,6 +302,123 @@ class DispatchCapability:
         if peer_collabs:
             wp["peer_collabs"] = peer_collabs
         return self.dispatch_work_package(wp)
+
+    def dispatch_to_squad(self, squad_id: str, work_package: Dict[str, Any],
+                          department: str = "") -> DispatchResult:
+        """派发工作包给一个「可调配小组」（独立于部门的共享资源）。
+
+        小组独立于部门存在，可通过 SquadPool 调配执行任务：
+          - 调配：SquadPool.acquire() 将小组标记为 BUSY，并关联调配方；
+          - 执行：工作包派发给小组长（leader），经 message_bus 投递；
+          - 归还：工作完成后 SquadPool.release() 将小组释放回池（可重复调用）。
+
+        Args:
+            squad_id: 目标小组 id（须已在 SquadPool 注册）
+            work_package: 标准工作包
+            department: 调配方部门名（用于调配记录）
+
+        Returns:
+            DispatchResult
+        """
+        squad = self.squad_pool.get(squad_id)
+        if squad is None:
+            return DispatchResult(
+                task_id=work_package.get("id", "?"),
+                owner=squad_id,
+                task_name=work_package.get("label", "?"),
+                priority=work_package.get("priority", "NORMAL"),
+                dispatched=False,
+                reason=f"小组 {squad_id} 未注册到 SquadPool，拒绝派发",
+            )
+
+        # 若小组尚未被调配（仍 IDLE），先调配进入 BUSY；
+        # 若已被调配（BUSY）且是本调配方调度的，直接复用（避免重复 acquire）
+        caller = department or self.caller_role
+        task_id = work_package.get("id", "")
+        if squad.status == SQUAD_IDLE:
+            acquire_result = self.squad_pool.acquire(
+                domain=squad.domain,
+                department=caller,
+                task_id=task_id,
+            )
+            if not acquire_result.get("ok"):
+                return DispatchResult(
+                    task_id=task_id or "?",
+                    owner=squad.squad_id,
+                    task_name=work_package.get("label", "?"),
+                    priority=work_package.get("priority", "NORMAL"),
+                    dispatched=False,
+                    reason=acquire_result.get("reason", "小组不可调配"),
+                )
+            squad = acquire_result["squad"]
+        elif squad.status == SQUAD_BUSY and squad.owner_department != caller:
+            # 已被其他部门占用，不可重复调配（除非释放）
+            return DispatchResult(
+                task_id=task_id or "?",
+                owner=squad.squad_id,
+                task_name=work_package.get("label", "?"),
+                priority=work_package.get("priority", "NORMAL"),
+                dispatched=False,
+                reason=f"小组 {squad.name} 已被 {squad.owner_department} 占用，无法调配",
+            )
+
+        # 派发给小组长（leader）
+        wp = dict(work_package)
+        wp.setdefault("owner", squad.leader)
+        wp.setdefault("squad_id", squad.squad_id)
+        wp.setdefault("department", caller)
+        result = self.dispatch_work_package(wp)
+        # 派发失败则释放小组
+        if not result.dispatched:
+            self.squad_pool.release(squad.squad_id)
+        return result
+
+    def dispatch_to_squad_by_domain(self, domain: str, work_package: Dict[str, Any],
+                                    department: str = "") -> DispatchResult:
+        """按领域调配一个可调配小组并派发工作包。
+
+        在 SquadPool 中按 domain/skill 自动匹配空闲小组，调配并派发。
+
+        Args:
+            domain: 领域或技能（如 "client_dev" / "ai_dev"）
+            work_package: 标准工作包
+            department: 调配方部门名
+
+        Returns:
+            DispatchResult
+        """
+        acquire_result = self.squad_pool.acquire(
+            domain=domain,
+            department=department or self.caller_role,
+            task_id=work_package.get("id", ""),
+        )
+        if not acquire_result.get("ok"):
+            return DispatchResult(
+                task_id=work_package.get("id", "?"),
+                owner="",
+                task_name=work_package.get("label", "?"),
+                priority=work_package.get("priority", "NORMAL"),
+                dispatched=False,
+                reason=acquire_result.get("reason", "无匹配可调配小组"),
+            )
+        squad = acquire_result["squad"]
+        return self.dispatch_to_squad(squad.squad_id, work_package, department)
+
+    def release_squad(self, squad_id: str) -> Dict[str, Any]:
+        """释放小组回池（任务完成后归还，可被重复调用）。"""
+        return self.squad_pool.release(squad_id)
+
+    def release_squads_by_department(self, department: str) -> List[str]:
+        """释放某部门占用的全部小组。"""
+        return self.squad_pool.release_by_department(department)
+
+    def list_squads(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """列出全部可调配小组。"""
+        return self.squad_pool.list_squads(status=status)
+
+    def squad_summary(self) -> Dict[str, Any]:
+        """可调配小组池总览。"""
+        return self.squad_pool.summary()
 
     def dispatch_batch(self, work_packages: List[Dict[str, Any]]) -> List[DispatchResult]:
         """批量派发多个工作包（含依赖关系自动处理）。
