@@ -25,6 +25,7 @@ from data_ops_diagnosis import run_data_ops
 from framework_upgrade_ops import run_data_ops_upgrade
 from shared_memory import SharedMemory
 from release_gate import aggregate_and_release, run_release_gate
+from engine_adapters import get_engine, detect_engine_from_project, build_engine_aware_artifact, EngineType
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -459,11 +460,24 @@ class ProgramDeptAgent(DepartmentAgent):
         module = work_package.get("module", "")
         label = work_package.get("label", "")
         project = work_package.get("project", "未命名")
+        # 引擎感知：探测当前目标引擎（Cocos Creator / Unreal Engine）
+        engine = get_engine()
+        engine_info = engine.to_dict()
+
         if module == "client":
             artifact = {
                 "module": "client", "label": label, "project": project,
                 "artifact_type": "code",
-                "content": {"render_pipeline": "客户端渲染管线", "ui_binding": "UI 绑定"},
+                "content": {
+                    "render_pipeline": "客户端渲染管线",
+                    "ui_binding": "UI 绑定",
+                    # 引擎感知：标注目标引擎信息（Cocos/Unreal）
+                    "engine": engine_info["engine_name"],
+                    "engine_type": engine_info["engine_type"],
+                    "script_languages": engine_info["script_languages"],
+                    "build_command": engine.build_command("windows"),
+                    "supported_platforms": engine_info["supported_platforms"],
+                },
             }
         elif module == "server":
             artifact = {
@@ -475,7 +489,16 @@ class ProgramDeptAgent(DepartmentAgent):
             artifact = {
                 "module": "engine", "label": label, "project": project,
                 "artifact_type": "code",
-                "content": {"core": "引擎核心", "perf": "性能优化"},
+                "content": {
+                    "core": "引擎核心",
+                    "perf": "性能优化",
+                    # 引擎感知：标注引擎适配信息
+                    "engine": engine_info["engine_name"],
+                    "engine_type": engine_info["engine_type"],
+                    "build_command": engine.build_command("windows"),
+                    "script_languages": engine_info["script_languages"],
+                    "project_structure": engine_info["project_structure"],
+                },
             }
         elif module == "ai_logic":
             artifact = {
@@ -520,6 +543,13 @@ class ArtDeptAgent(DepartmentAgent):
         module = work_package.get("module", "")
         label = work_package.get("label", "")
         project = work_package.get("project", "未命名")
+        # 引擎感知：探测当前目标引擎，美术资源规范与引擎挂钩
+        engine = get_engine()
+        engine_info = engine.to_dict()
+        engine_name = engine_info["engine_name"]
+        engine_type = engine_info["engine_type"]
+        # 获取当前引擎的资源规范（Cocos: sprite/audio/prefab; Unreal: mesh/material/audio）
+        resource_types = [r["resource_type"] for r in engine_info["resource_specs"]]
         if module == "art_direction":
             # wp_art_direction：把美术风格/品质基准接入生态角色体系，
             # 让美术品质进入市场预演的美术质量维度博弈。
@@ -545,7 +575,13 @@ class ArtDeptAgent(DepartmentAgent):
                 "module": "art_direction", "label": label, "project": project,
                 "artifact_type": "style_guide",
                 "content": {"style": "美术风格定义", "palette": "配色方案",
-                              "art_quality": numeric_model["art_quality"]},
+                              "art_quality": numeric_model["art_quality"],
+                              # 引擎感知：美术资源与目标引擎挂钩
+                              "engine": engine_name,
+                              "engine_type": engine_type,
+                              "resource_types": resource_types,
+                              "resource_import_dir": engine.resource_import_path("sprite"),
+                              "build_command": engine.build_command("windows")},
                 # 美术品质接入市场预演：玩家圈对美术品质的偏好生效
                 "market_input": {
                     "context": market_input.context,
@@ -623,6 +659,12 @@ class ArtDeptAgent(DepartmentAgent):
                     },
                     "audio_quality": numeric_model_audio["audio_quality"],
                     "audio_immersion": market_result["metrics"]["audio_immersion"],
+                    # 引擎感知：音频资源格式与目标引擎挂钩
+                    "engine": engine_name,
+                    "engine_type": engine_type,
+                    "audio_resource_extension": engine.resource_specs()[0].extension if engine.resource_specs() else "",
+                    "audio_import_dir": engine.resource_import_path("audio"),
+                    "build_command": engine.build_command("windows"),
                 },
                 "market_input": {
                     "context": market_input.context,
