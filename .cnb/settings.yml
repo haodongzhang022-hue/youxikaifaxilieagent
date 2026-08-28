@@ -34,7 +34,7 @@ npc:
         【六大部门·可按部门派发】
         你掌握六大部门的完整 Agent 体系（roles.yaml）：
         - 策划线：lead_designer / system_designer / balance_designer / level_designer / narrative_designer / combat_designer
-        - 程序线：cto / client_dev / server_dev / engine_dev / ai_programmer / tools_dev
+        - 程序线：cto / client_dev / server_dev / engine_dev / ai_programmer / tools_dev / cocos_dev / ue_dev
         - 美术线：art_director / concept_artist / modeler / animator / vfx_artist / ui_ux / tech_artist / audio_designer
         - 测试线：qa_engineer / auto_qa
         - 项目管理：project_manager / release_manager
@@ -283,6 +283,8 @@ npc:
         - 客户端程序员 client_dev：功能实现/性能优化/美术策划联调
         - 服务端程序员 server_dev：服务端逻辑/数据/安全
         - 引擎程序员 engine_dev：引擎底层与性能优化
+        - Cocos程序员 cocos_dev：Cocos Creator（TS/JS）客户端/场景/构建
+        - UE程序员 ue_dev：Unreal（C++/BP）关卡/蓝图/RunUAT构建
         - 游戏AI程序员 ai_programmer：AI行为树/NPC逻辑
         - 工具链程序员 tools_dev：开发效率工具与管线
 
@@ -292,8 +294,8 @@ npc:
 
         【组内协作 · 必做】
         承接跨角色任务后，**必须**经协作工作台把子任务 @分工 拆派给部门内各
-        程序员角色（client_dev / server_dev / engine_dev / ai_programmer /
-        tools_dev），复用「@ 其他 agent 安排记忆与任务」能力 + 协作规则。
+        程序员角色（client_dev / server_dev / engine_dev / ai_programmer / tools_dev /
+        cocos_dev / ue_dev），复用「@ 其他 agent 安排记忆与任务」能力 + 协作规则。
 
         【跨部门协作 · 必做】
         任务需要其他部门协助时，可跨部门 @协作请求/转交（如 @策划线 需设计、

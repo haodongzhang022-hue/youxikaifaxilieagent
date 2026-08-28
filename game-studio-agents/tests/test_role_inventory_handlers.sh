@@ -31,21 +31,21 @@ if $PY -c "
 import yaml
 with open('role_inventory.yaml', encoding='utf-8') as f:
     data = yaml.safe_load(f)
-assert len(data['roles_inventory']) == 58, f'roles_inventory should be 58, got {len(data[\"roles_inventory\"])}'
+assert len(data['roles_inventory']) == 60, f'roles_inventory should be 60, got {len(data[\"roles_inventory\"])}'
 assert len(data['ecosystem_roles_inventory']) == 21, f'ecosystem should be 21, got {len(data[\"ecosystem_roles_inventory\"])}'
 print('OK')
 " >/dev/null 2>&1; then
-  report "role_inventory.yaml 存在且覆盖 58+21=79 角色" 0
+  report "role_inventory.yaml 存在且覆盖 60+21=81 角色" 0
 else
-  report "role_inventory.yaml 存在且覆盖 58+21=79 角色" 1
+  report "role_inventory.yaml 存在且覆盖 60+21=81 角色" 1
 fi
 
 # 2. role_inventory.py --list 输出 79 个角色
 out=$($PY role_inventory.py --list 2>&1)
-if echo "$out" | grep -q "总计: 79 个角色"; then
-  report "role_inventory.py --list 列出全部 79 个角色" 0
+if echo "$out" | grep -q "总计: 81 个角色"; then
+  report "role_inventory.py --list 列出全部 81 个角色" 0
 else
-  report "role_inventory.py --list 列出全部 79 个角色" 1
+  report "role_inventory.py --list 列出全部 81 个角色" 1
 fi
 
 # 3. role_inventory.py --gap 包含 GAP-1/GAP-2/GAP-3

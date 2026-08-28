@@ -25,6 +25,9 @@ from data_ops_diagnosis import run_data_ops
 from framework_upgrade_ops import run_data_ops_upgrade
 from shared_memory import SharedMemory
 from release_gate import aggregate_and_release, run_release_gate
+from engine_adapters import (
+    engine_aware_artifact, get_engine_spec, resolve_engine, build_artifact_manifest,
+)
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -454,15 +457,31 @@ class ProgramDeptAgent(DepartmentAgent):
             "server_framework": "asyncio",
             "perf_target": "60fps",
         })
+        # 双引擎技术栈感知（wp_engine_adaptation）：Cocos Creator / Unreal Engine
+        cocos = get_engine_spec("cocos")
+        unreal = get_engine_spec("unreal")
+        self.knowledge.add_doc("引擎适配", {
+            "cocos": {"langs": cocos.script_langs, "resource_dir": cocos.resource_dir,
+                      "build": cocos.build_cmd.format(platform="windows")},
+            "unreal": {"langs": unreal.script_langs, "resource_dir": unreal.resource_dir,
+                       "build": unreal.build_cmd.format(platform="windows", project="Game")},
+        })
 
     def _execute(self, work_package, assign):
         module = work_package.get("module", "")
         label = work_package.get("label", "")
         project = work_package.get("project", "未命名")
         if module == "client":
+            engine = work_package.get("engine", resolve_engine())
+            engine_info = engine_aware_artifact(engine, "程序线", work_package)
             artifact = {
                 "module": "client", "label": label, "project": project,
                 "artifact_type": "code",
+                "engine": engine_info["engine"],
+                "engine_name": engine_info["display_name"],
+                "engine_langs": engine_info["script_langs"],
+                "engine_resource_dir": engine_info["resource_dir"],
+                "engine_build_cmd": engine_info["build_cmd"],
                 "content": {"render_pipeline": "客户端渲染管线", "ui_binding": "UI 绑定"},
             }
         elif module == "server":
@@ -472,9 +491,16 @@ class ProgramDeptAgent(DepartmentAgent):
                 "content": {"api": "服务端 API", "db": "数据存储"},
             }
         elif module == "engine":
+            engine = work_package.get("engine", resolve_engine())
+            engine_info = engine_aware_artifact(engine, "程序线", work_package)
             artifact = {
                 "module": "engine", "label": label, "project": project,
                 "artifact_type": "code",
+                "engine": engine_info["engine"],
+                "engine_name": engine_info["display_name"],
+                "engine_langs": engine_info["script_langs"],
+                "engine_resource_dir": engine_info["resource_dir"],
+                "engine_build_cmd": engine_info["build_cmd"],
                 "content": {"core": "引擎核心", "perf": "性能优化"},
             }
         elif module == "ai_logic":
@@ -558,6 +584,8 @@ class ArtDeptAgent(DepartmentAgent):
                     "iterations": market_result["iterations"],
                     "metrics": market_result["metrics"],
                 },
+                # 引擎资源格式契约（wp_engine_adaptation）：美术品质资源按目标引擎分叉
+                "engine_resource": _engine_resource_hint(work_package, "art"),
             }
         elif module == "ui_ux":
             # wp_ui_ux：生态 UI/UX 与交互规范接入部门流水线，
@@ -637,6 +665,8 @@ class ArtDeptAgent(DepartmentAgent):
                 },
                 "dispatchable_owner": "audio_designer",
                 "dispatchable_eco_owner": "eco_audio_designer",
+                # 引擎资源格式契约（wp_engine_adaptation）：音频资源按目标引擎分叉
+                "engine_resource": _engine_resource_hint(work_package, "audio"),
             }
         else:
             artifact = {"module": module, "label": label, "project": project,
@@ -913,7 +943,34 @@ def build_department_agents(bus: MessageBus) -> Dict[str, DepartmentAgent]:
 # 演示 / 自测
 # ============================================================
 
+
+
+# ============================================================
+# 引擎资源格式提示（wp_engine_adaptation）
+# ============================================================
+
+def _engine_resource_hint(work_package, kind):
+    """按目标引擎返回资源落地格式提示（Cocos .prefab vs UE .uasset）。
+
+    供美术线/程序线产出标注引擎资源契约，让验收方明确该资源应落地到哪个引擎。
+    """
+    engine = work_package.get("engine", resolve_engine())
+    spec = get_engine_spec(engine) or get_engine_spec("cocos")
+    fmt = spec.resource_types.get(kind, f".{kind}")
+    return {
+        "engine": spec.engine,
+        "display_name": spec.display_name,
+        "resource_dir": spec.resource_dir,
+        "format": fmt,
+    }
+
+
+# ============================================================
+# 演示 / 自测
+# ============================================================
+
 if __name__ == "__main__":
+
     print("=" * 60)
     print("六大部门 Agent 自测")
     print("=" * 60)
