@@ -113,39 +113,55 @@ class EngineEventBridge:
 
         # 查找订阅方；无订阅时广播到所有已注册角色（topic=engine_event）
         targets = self._subscribers.get(event.event_type, [])
-        mode = "DIRECT" if targets else "TOPIC"
-        to_role = targets[0] if targets else "*"
-
-        msg = Message(
-            type=self._EVENT_MSG_TYPE,
-            from_role=self.from_role,
-            to_role=to_role,
-            content={
-                "event_type": event.event_type,
-                "data": event.data,
-                "engine": event.engine,
-                "timestamp": event.timestamp,
-                "source": "engine_bridge",
-            },
-            mode=mode,
-            topic="engine_event" if not targets else None,
-        )
-        self.bus.publish(msg)
-        # 通过消息总线处理队列（走标准投递链路，记录到 delivered）
-        self.bus.process_all()
-        # 若订阅方有 handler，立即处理
         delivered = []
-        for target in targets:
-            if target in self.bus.roles:
-                for h in self.bus._handlers.get(target, []):
-                    h(msg)
-                    delivered.append(target)
+
         if not targets:
             # TOPIC 广播：交给所有订阅了 topic 的角色
-            for sub in self.bus._subscriptions:
-                if sub.topic == "engine_event" and sub.handler:
-                    sub.handler(msg)
-                    delivered.append(sub.subscriber_id)
+            msg = Message(
+                type=self._EVENT_MSG_TYPE,
+                from_role=self.from_role,
+                to_role="*",
+                content={
+                    "event_type": event.event_type,
+                    "data": event.data,
+                    "engine": event.engine,
+                    "timestamp": event.timestamp,
+                    "source": "engine_bridge",
+                },
+                mode="TOPIC",
+                topic="engine_event",
+            )
+            self.bus.publish(msg)
+            self.bus.process_all()
+            if hasattr(msg, "trace"):
+                for tr in msg.trace:
+                    if tr.get("event") in ("delivered", "delivered_handler"):
+                        rid = tr.get("actor")
+                        if rid and rid not in delivered:
+                            delivered.append(rid)
+            return delivered
+
+        # 有订阅方：每个订阅方各发一条 DIRECT 消息，各自恰好收到一次，
+        # 均走消息总线标准投递链路，避免重复投递
+        for target in targets:
+            msg = Message(
+                type=self._EVENT_MSG_TYPE,
+                from_role=self.from_role,
+                to_role=target,
+                content={
+                    "event_type": event.event_type,
+                    "data": event.data,
+                    "engine": event.engine,
+                    "timestamp": event.timestamp,
+                    "source": "engine_bridge",
+                },
+                mode="DIRECT",
+                topic=None,
+            )
+            self.bus.publish(msg)
+            self.bus.process_all()
+            if target not in delivered:
+                delivered.append(target)
         return delivered
 
     def notify_command(self, cmd: EngineCommand, result: EngineResult,
@@ -254,7 +270,7 @@ class EngineIntegrationFacade:
         try:
             return self._bridge.execute(command, engine)
         except EngineBridgeError as e:
-            return EngineResult(success=False, error=str(e))
+            return EngineResult(command=command, success=False, error=str(e))
 
     # ---------- 便捷命令方法 ----------
     def load_scene(self, scene_path: str, engine: str = "") -> EngineResult:
