@@ -308,6 +308,7 @@ $:
             bash game-studio-agents/tests/test_agent_identity.sh
             bash game-studio-agents/tests/test_role_inventory.sh
             bash game-studio-agents/tests/test_role_inventory_handlers.sh
+            bash game-studio-agents/tests/test_engine_bridge.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
             # 功能模块验收测试（以功能模块为单位，每个模块独立脚本+断言）
