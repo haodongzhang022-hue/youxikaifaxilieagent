@@ -43,3 +43,11 @@
 | 工作包 | 模块 | 主责角色 | 产出物 | 状态 |
 |--------|------|----------|--------|:----:|
 | wp_engine_adaptation_qa | 双引擎适配底座验收 | qa_engineer + auto_qa | wp_engine_adaptation_qa_双引擎适配底座验收回归.md | ⛔ 打回（程序线 PR#87 未合入） |
+
+## 五、PR #96 下游解锁 · wp_routing_qa_v3（路由守卫 v3.0 三层触发引擎验证）
+
+| 工作包 | 模块 | 主责角色 | 产出物 | 状态 |
+|--------|------|----------|--------|:----:|
+| wp_routing_qa_v3 | 路由守卫 v3.0 三层触发引擎验证 | qa_engineer + auto_qa | 承接报告_PR96_wp_routing_qa_v3.md | ✅ 通过 |
+
+详细见：`承接报告_PR96_wp_routing_qa_v3.md`
