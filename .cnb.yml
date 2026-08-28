@@ -309,6 +309,8 @@ $:
             bash game-studio-agents/tests/test_role_inventory_handlers.sh
             pip install -q -r game-studio-agents/api/requirements.txt
             bash game-studio-agents/api/test_api.sh
+            # 功能模块验收测试（以功能模块为单位，每个模块独立脚本+断言）
+            bash game-studio-agents/tests/modules/test_all_modules.sh
         - name: 自动分配评审人
           type: git:reviewer
           options:
