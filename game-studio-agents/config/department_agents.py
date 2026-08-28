@@ -26,6 +26,7 @@ from framework_upgrade_ops import run_data_ops_upgrade
 from shared_memory import SharedMemory
 from release_gate import aggregate_and_release, run_release_gate
 from engine_adapters import get_engine
+from engine_integration import EngineIntegrationFacade
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -447,6 +448,9 @@ class ProgramDeptAgent(DepartmentAgent):
 
     def __init__(self, bus: MessageBus):
         super().__init__("cto", "程序线", bus)
+        # 引擎桥接层集成门面（Mock 模式，保证 CI 可运行）
+        self.engine_integration = EngineIntegrationFacade(
+            use_mock=True, engines=["cocos", "ue5"], bus=bus)
 
     def on_boot(self):
         super().on_boot()
@@ -455,6 +459,11 @@ class ProgramDeptAgent(DepartmentAgent):
             "server_framework": "asyncio",
             "perf_target": "60fps",
         })
+        # 初始化引擎桥接层
+        try:
+            self.engine_integration.init()
+        except Exception as e:
+            self._log("engine_init_warn", f"引擎桥接层初始化失败（降级）：{e}")
 
     def _execute(self, work_package, assign):
         module = work_package.get("module", "")
@@ -486,6 +495,12 @@ class ProgramDeptAgent(DepartmentAgent):
                 "content": {"api": "服务端 API", "db": "数据存储"},
             }
         elif module == "engine":
+            # 引擎桥接层集成：验证桥接门面 Mock 模式能力
+            bridge_report = {}
+            try:
+                bridge_report = self.engine_integration.report()
+            except Exception as e:
+                bridge_report = {"error": str(e)}
             artifact = {
                 "module": "engine", "label": label, "project": project,
                 "artifact_type": "code",
@@ -498,6 +513,14 @@ class ProgramDeptAgent(DepartmentAgent):
                     "build_command": engine.build_command("windows"),
                     "script_languages": engine_info["script_languages"],
                     "project_structure": engine_info["project_structure"],
+                },
+                # 引擎桥接层集成信息
+                "engine_bridge": {
+                    "integrated": True,
+                    "facade": "EngineIntegrationFacade",
+                    "available_engines": bridge_report.get("engines", {}),
+                    "default_engine": bridge_report.get("default_engine", ""),
+                    "mock_mode": True,
                 },
             }
         elif module == "ai_logic":

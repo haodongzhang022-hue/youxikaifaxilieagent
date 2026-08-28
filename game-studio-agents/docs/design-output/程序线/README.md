@@ -10,6 +10,8 @@
 | wp_narrative_impl | narrative_impl | server_dev + client_dev | 世界观/剧情/任务系统实现 | ✅ DONE |
 | wp_combat_impl | combat_impl | engine_dev + ai_programmer + client_dev | 战斗机制/技能/NPC AI 实现 | ✅ DONE |
 | wp_level_impl | level_impl | engine_dev + tools_dev | 关卡结构/难度曲线实现 | ✅ DONE |
+| wp_handler_program | handler_program | cto + engine_dev + tools_dev + server_dev | 仓库处理专员接入验证报告 | ✅ DONE |
+| wp_engine_bridge_integration | engine_bridge_integration | tools_dev + engine_dev + cto | 引擎桥接层接入验证报告 | ✅ DONE |
 
 ## 对接的策划设计文档
 
