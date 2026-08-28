@@ -193,3 +193,43 @@ python3 game-studio-agents/config/agent_identity.py
 # 运行测试信号灯
 bash game-studio-agents/tests/test_agent_identity.sh
 ```
+
+## 功能模块验收测试体系
+
+本仓库建立了**以功能模块为单位**的验收测试体系。每个功能模块有独立的测试脚本，
+验收以实际运行测试断言为唯一依据。
+
+### 功能模块划分
+
+| # | 功能模块 | 测试脚本 | 断言数 |
+|---|---------|---------|-------|
+| 1 | 消息总线 | `tests/modules/test_mod_message_bus.sh` | 9 |
+| 2 | 任务调度 | `tests/modules/test_mod_task_scheduler.sh` | 9 |
+| 3 | Agent 内核 | `tests/modules/test_mod_agent_core.sh` | 7 |
+| 4 | Agent 身份自适应 | `tests/modules/test_mod_agent_identity.sh` | 6 |
+| 5 | 角色协作层 | `tests/modules/test_mod_collaboration.sh` | 8 |
+| 6 | 统一派发能力 | `tests/modules/test_mod_dispatch.sh` | 8 |
+| 7 | 游戏向经理 | `tests/modules/test_mod_game_producer.sh` | 9 |
+| 8 | 部门 Agent | `tests/modules/test_mod_department_agents.sh` | 11 |
+| 9 | 进度督导 | `tests/modules/test_mod_progress_pusher.sh` | 9 |
+| 10 | 发版质量门禁 | `tests/modules/test_mod_release_gate.sh` | 7 |
+| 11 | 生态角色 | `tests/modules/test_mod_ecosystem_roles.sh` | 6 |
+| 12 | 预设实例化 | `tests/modules/test_mod_instantiator.sh` | 6 |
+| 13 | 合并确认 | `tests/modules/test_mod_merged_confirm.sh` | 7 |
+| 14 | 借鉴学习 | `tests/modules/test_mod_reference_learner.sh` | 4 |
+| 15 | 端到端联动 | `tests/modules/test_mod_end_to_end.sh` | 6 |
+
+**合计：15 个功能模块，112 项断言。**
+
+### 运行方式
+
+```bash
+# 一键运行全部功能模块测试
+bash game-studio-agents/tests/modules/test_all_modules.sh
+
+# 单独运行某个功能模块
+bash game-studio-agents/tests/modules/test_mod_message_bus.sh
+```
+
+每个模块验收通过 = 实际运行测试脚本所有断言通过。测试在 CI 流水线中自动执行，
+未通过即阻塞合并。
