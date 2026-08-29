@@ -87,23 +87,60 @@ from hybrid.selector import IncrementalSelector
 s = IncrementalSelector(root_dir=".")
 base = os.environ.get("CHANGE_AWARE_BASE", "HEAD~1")
 tests = []
+# 尝试增量选择
 try:
     if base != "__ALL__":
         tests = s.incremental(base=base, head="HEAD")
 except Exception:
     tests = []
+# 增量返回空：检查变更范围，区分「仅非代码文件变更」与「首次推送/新分支」
 if not tests:
-    # base 不可解析 / 无提交差异 → 回退工作区未提交变更检测
+    changed = []
     try:
-        tests = s.incremental_workdir()
+        changed = s.changed_files(base=base, head="HEAD")
     except Exception:
-        tests = []
+        changed = []
+    # git diff base..head 为空但工作区有变更 → 补充检查工作区
+    if not changed:
+        try:
+            changed = s.changed_files_workdir()
+        except Exception:
+            changed = []
+    # 判断变更文件中是否存在实际代码
+    non_code_exts = ('.md', '.sh', '.yml', '.yaml', '.json', '.txt', '.cfg',
+                     '.ini', '.toml', '.lock', '.gitignore', '.routing_active.txt')
+    has_code_change = False
+    for f in changed:
+        low = f.lower()
+        if not any(low.endswith(ext) for ext in non_code_exts):
+            has_code_change = True
+            break
+    if not has_code_change:
+        if changed:
+            # 仅文档/配置/脚本变更，无实际代码变更 → 跳过测试，退出 0
+            print("__SKIP_NO_CODE_CHANGE__")
+            print("__CHANGED__=" + ",".join(changed[:20]))
+            sys.exit(0)
+        else:
+            # 无任何变更文件（base==head 且无工作区改动）→ 视为无变更，跳过
+            print("__SKIP_NO_CODE_CHANGE__")
+            print("__CHANGED__=" + base + "..HEAD 无差异")
+            sys.exit(0)
 if not tests:
-    # 仍为空（首次推送 / 新分支）→ 全量兜底
+    # 有代码变更但 registry 未覆盖到 → 全量兜底
     tests = s.full_suite()
 print("\n".join(tests))
 PY
 )
+fi
+
+# 检测跳过标记
+if echo "$SELECTED_TESTS" | grep -q "__SKIP_NO_CODE_CHANGE__"; then
+  echo "  [skip] 本次变更仅涉及文档/配置/脚本等非代码文件，跳过测试"
+  CHANGED_LIST=$(echo "$SELECTED_TESTS" | grep "^__CHANGED__=" | cut -d= -f2)
+  echo "  变更文件: $CHANGED_LIST"
+  echo "==== [change-aware] 跳过，无代码变更 ===="
+  exit 0
 fi
 
 SELECTED_TESTS="$(echo "$SELECTED_TESTS" | grep -v '^$')"

@@ -349,6 +349,25 @@
       "cpu_cost_est": 0.6,
       "kind": "core"
     },
+    "test_server_core.sh": {
+      "covers": [
+        "server/core/",
+        "server/core/auth_service.py",
+        "server/core/combat_service.py",
+        "server/core/gameplay_service.py",
+        "server/core/gateway.py",
+        "server/core/world_state.py",
+        "server/proto/messages.py",
+        "server/proto/",
+        "server/__init__.py",
+        "server/core/__init__.py",
+        "server/proto/__init__.py",
+        "server/tests/test_server.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.5,
+      "kind": "core"
+    },
     "test_squad_pool.sh": {
       "covers": [
         "game-studio-agents/config/squad_pool.py",
