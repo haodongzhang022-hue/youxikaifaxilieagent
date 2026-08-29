@@ -29,6 +29,7 @@ from engine_adapters import get_engine
 from engine_sync import build_manifest, verify_manifest, consistency_report
 from deepseek_harness import build_context, receive_dispatch, plan_execution, report_back
 from game_dev_team import run_dev_team
+from stage_aware_engine import StageBoundaryGuard, GameStage
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -750,6 +751,22 @@ class ProgramDeptAgent(DepartmentAgent):
         engine_info = engine.to_dict()
         engine_name = engine_info["engine_name"]
         engine_key = "cocos" if "cocos" in str(engine_info["engine_type"]).lower() else "unreal"
+
+        # 【引擎阶段化 · stage_gate 阶段边界门禁（PR #113 下游接入 · 总师助理）】
+        # 引擎×阶段二维检测：当前引擎映射到阶段，用 StageBoundaryGuard 校验本模块是否
+        # 属于当前阶段。若模块属更晚阶段 → 过度设计（阶段不对=错）；属更早阶段 → 技术债。
+        # 产出 stage_gate 审计留痕（越界列表），供总师助理纠偏 & 验收门禁拦截。
+        _current_stage = GameStage.STAGE1_COCOS if engine_key == "cocos" else (
+            GameStage.STAGE2_UNITY if engine_key == "unity" else GameStage.STAGE3_UE
+        )
+        _stage_guard = StageBoundaryGuard()
+        # 按工作包模块对当前引擎阶段做边界检查（含常用能力关键词映射）
+        _stage_modules = [module, *([key for key in ("protobuf_protocol", "pure_logic_lib") if key in str(work_package).lower()])]
+        _stage_results = [_stage_guard.check(m, _current_stage) for m in _stage_modules if m]
+        _stage_violations = [r for r in _stage_results if not r["ok"]]
+        self._log("stage_gate",
+                  f"引擎阶段化门禁：engine={engine_key} stage={_current_stage.value} "
+                  f"violations={len(_stage_violations)} {[v['module'] for v in _stage_violations]}")
         # 构建本地上下文（DeepSeek harness 集成）
         ctx = build_context(
             agent_role=assign.get("role", "cto"),
@@ -821,6 +838,13 @@ class ProgramDeptAgent(DepartmentAgent):
             artifact = {"module": module, "label": label, "project": project,
                         "artifact_type": "code", "content": {"note": "程序通用实现"}}
         # 并入开发小组闭环产出（Leader 整合全组开发 + 进度留痕）
+        artifact["stage_gate"] = {
+            "engine": engine_key,
+            "stage": _current_stage.value,
+            "ok": len(_stage_violations) == 0,
+            "violations": _stage_violations,
+            "results": _stage_results,
+        }
         artifact["dev_team"] = {
             "ok": dev_team.get("ok", False),
             "reason": dev_team.get("reason", ""),
@@ -843,6 +867,12 @@ class ProgramDeptAgent(DepartmentAgent):
         if dev_team and dev_team.get("ok") is False:
             reason = dev_team.get("reason", "开发小组熔断/异常")
             return False, f"开发小组闭环失败：{reason}"
+        # 【引擎阶段化 · stage_gate 阶段边界门禁验收（PR #113 · 总师助理）】
+        # 阶段越界（过度设计/技术债）为硬性缺陷，验收打回 → 总师助理纠偏，不进入发布门禁。
+        stage_gate = artifact.get("stage_gate", {})
+        if stage_gate and stage_gate.get("violations"):
+            viol_modules = [v["module"] for v in stage_gate["violations"]]
+            return False, f"引擎阶段化门禁拦截：{stage_gate.get('stage','')} 阶段越界模块 {viol_modules}"
         return True, "程序产出自检通过"
 
 
