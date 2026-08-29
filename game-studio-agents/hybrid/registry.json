@@ -409,6 +409,17 @@
       "depends_on": [],
       "cpu_cost_est": 1.5,
       "kind": "core"
+    },
+    "test_stage_gate_integration.sh": {
+      "covers": [
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/stage_aware_engine.py"
+      ],
+      "depends_on": [
+        "test_stage_aware_engine.sh"
+      ],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
     }
   }
 }

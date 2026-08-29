@@ -50,7 +50,15 @@
 | 下游解锁 | 运营线 | wp_review_ops + wp_handler_ops 对外同步 | PM 验收通过后 |
 | 前置依赖 | 程序线 | PR #87 wp_engine_adaptation_integration 合入 | 解锁 PM 工作包前置条件 |
 
-## 二、PR #115 下游解锁 · 本轮承接记录
+## 二、PR #113 下游解锁 · 本轮承接记录
+
+| 工作包 | 状态 | 说明 |
+|--------|------|------|
+| wp_release_stage_gate（stage_gate 纳入发版门禁） | ✅ DONE | PR #113 合并后游戏向经理派发，把 stage_gate 阶段边界审查纳入发版门禁 + 里程碑排布 M1-M5，经 @分工 拆派 project_manager + release_manager 完成 |
+
+详细见：`PR113_stage_gate/承接报告_wp_release_stage_gate.md`
+
+## 三、PR #115 下游解锁 · 本轮承接记录
 
 | 工作包 | 状态 | 说明 |
 |--------|------|------|
@@ -58,14 +66,14 @@
 
 详细见：`PR115_wp_pm_squad_confirm/承接报告_PR115_项目管理_wp_pm_squad_confirm.md`
 
-## 三、组内分工表（新增 PR#115）
+## 四、组内分工表（新增 PR#115）
 
 | 子任务 | 承接角色 | 产出物文件 |
 |--------|---------|-----------|
 | 验证 _run_dev_team_loop 在 _execute 接入 | project_manager | PR115_wp_pm_squad_confirm/承接报告_PR115_项目管理_wp_pm_squad_confirm.md |
 | 验证 release_pm 小组自动调配/释放 | release_manager | PR115_wp_pm_squad_confirm/承接报告_PR115_项目管理_wp_pm_squad_confirm.md |
 
-## 四、跨部门协作记录（新增 PR#115）
+## 五、跨部门协作记录（新增 PR#115）
 
 | 协作方向 | 部门 | 协作内容 | 触发时机 |
 |---------|------|---------|---------|
