@@ -44,6 +44,7 @@ ok_inputs = {
     "market_preview": {"equilibrium": {"a": 1}, "metrics": {"dau": 100}, "diagnosis": "健康"},
     "ecosystem_roles": {"registered": 21, "dispatchable": 21, "publish_to_bus": True},
     "progress_pusher": {"watch": 5, "push": 2, "escalate": 1, "warn": 1},
+    "stage_gate": {"no_stage_crossing": True, "reusable_assets_validated": True, "stage_alignment": True},
 }
 result = run_release_gate(ok_inputs)
 print(f"MANUAL_GO={result.get('go_no_go')}")
@@ -68,10 +69,10 @@ PYEOF
 )
 
 # 1. 门禁项目定义
-if echo "$out" | grep -q "GATE_ITEMS=.*market_preview.*ecosystem_roles.*progress_pusher" && echo "$out" | grep -q "GATE_COUNT=3"; then
-  report "发版门禁三项标准定义完整" 0
+if echo "$out" | grep -q "GATE_ITEMS=.*market_preview.*ecosystem_roles.*progress_pusher.*stage_gate" && echo "$out" | grep -q "GATE_COUNT=4"; then
+  report "发版门禁四项标准定义完整（含 stage_gate）" 0
 else
-  report "发版门禁三项标准定义完整" 1
+  report "发版门禁四项标准定义完整（含 stage_gate）" 1
 fi
 
 # 2. 聚合验收 GO

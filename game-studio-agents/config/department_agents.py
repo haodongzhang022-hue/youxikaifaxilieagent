@@ -1151,9 +1151,16 @@ class PmDeptAgent(DepartmentAgent):
             "artifact_type": "release_plan",
             "content": {
                 "milestone": "生态角色接入 + 市场预演发版",
+                "milestone_plan": {
+                    "M1": {"desc": "引擎无关核心冻结", "stage_gate": "未跨阶段使用平台 API"},
+                    "M2": {"desc": "Web 引流验证", "stage_gate": "Cocos 阶段未做 UE 阶段的事"},
+                    "M3": {"desc": "小程序轻量验证", "stage_gate": "跨阶段可复用资产协议一致"},
+                    "M4": {"desc": "完整 App 内容", "stage_gate": "Unity 阶段产出对齐"},
+                    "M5": {"desc": "高保真护城河", "stage_gate": "UE 阶段产出对齐 + 迁移成本"},
+                },
                 "release_checklist": ["策划设计通过", "程序实现通过", "美术产出通过",
-                                       "测试通过", "生态角色接入通过", "市场预演通过"],
-                "schedule": "按依赖流水线自动推进",
+                                       "测试通过", "阶段边界审查通过", "生态角色接入通过", "市场预演通过"],
+                "schedule": "按依赖流水线自动推进 · 每里程碑入口先过 stage_gate 阶段边界审查",
             },
             # 发版质量门禁 + 验收放行（wp_release 落地产出）
             "release_gate": {
