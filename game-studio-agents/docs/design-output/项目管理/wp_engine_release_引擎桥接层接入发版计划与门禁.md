@@ -67,3 +67,24 @@
 **复验签核**：project_manager（里程碑复核）+ release_manager（门禁复验 GO）✅
 
 详细见：`承接报告_PR89_项目管理_wp_engine_release_发版门禁复验.md`
+
+---
+
+## 七、PR #91 测试线回归确认合并后 · 发版门禁复验签核（PR91 轮次）
+
+**触发**：PR #91（测试线 `wp_engine_bridge_qa` 引擎桥接层 P1 修复回归确认）合并，级联解锁下游 → 项目管理 `wp_engine_release` 发版门禁复验确认。
+
+**复验结论：GO ✅（发版门禁维持放行）**
+
+**复验依据（实测信号灯全绿）**：
+- `test_engine_bridge_integration.sh` **9/9** ✅（emit 单次投递 + execute 异常路径回归）
+- `test_engine_bridge.sh` **35/35** ✅
+- `test_engine_adapters.sh` **21/21** ✅
+- `test_engine_adaptation.sh` **17/17** ✅
+- `test_dept_npc_pipeline.sh` **16/16** ✅
+- `test_release_gate.sh` **6/6** ✅
+
+**门禁签核**：project_manager（里程碑 M1-M5 复核全绿）+ release_manager（release_gate 复验 GO）✅
+**下游解锁**：运营线（基于生产就绪桥接层推进真机接入对外部署）。
+
+详细见：`承接报告_PR89_项目管理_wp_engine_release_发版门禁复验.md`（PR91 轮次复验确认）。
