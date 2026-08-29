@@ -64,6 +64,20 @@ execute → verify → (REJECTED → rework) / (APPROVED → fuse) → integrate
 
 - 全组通过后 `deliver_to_manager()` **一次性交付**给经理（含完整进度回放）
 - 未通过客观验证（非 APPROVED）不可交付
+- 若注入了 `bus`（消息总线），交付时自动发布 `ARTIFACT_DELIVERY` 消息给 `manager_role`（默认 producer），
+  触发调度器下游解锁
+
+### 3.7 确定性同步编排（架构说明）
+
+> **`run_dev_team()` / `GameDevTeamEngine` 是"确定性同步编排"**，不是消息总线驱动的真实多 Agent 消息路由。
+> 开发小组内部执行→验证→整合→交付全部由同步代码控制，**不经过 message_bus 分发子任务**。
+> 这保证了流转的**确定性**（同样的输入必然产生同样的流转序列），
+> 仅最终交付才通过消息总线通知 producer（若注入了 bus）。
+
+**为什么这样设计**：
+- 开发小组的核心价值是**确定性状态机**控制流转，而不是异步消息路由
+- 让开发小组内部跑在同步代码中，避免异步竞态/回调地狱
+- 外部仍然通过消息总线与 producer 集成（`ARTIFACT_DELIVERY` 通知）
 
 ## 四、程序线部门接入
 
@@ -88,6 +102,15 @@ r = run_dev_team(
     dev_roles=["client_dev", "server_dev"],   # 一套循环 2 个开发
 )
 print(r["dev_count"], r["dev_ratio"], r["artifact"])
+
+# 接入消息总线（交付时自动发布 ARTIFACT_DELIVERY）
+from message_bus import MessageBus
+bus = MessageBus()
+r = run_dev_team(
+    {"id": "wp_b", "module": "server", "label": "服务端", "project": "Game"},
+    dev_roles=["server_dev", "engine_dev"],
+    bus=bus, manager_role="producer",
+)
 ```
 
 ```bash

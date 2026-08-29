@@ -28,7 +28,7 @@ from release_gate import aggregate_and_release, run_release_gate
 from engine_adapters import get_engine
 from engine_sync import build_manifest, verify_manifest, consistency_report
 from deepseek_harness import build_context, receive_dispatch, plan_execution, report_back
-from game_dev_team import GameDevTeamEngine, run_dev_team
+from game_dev_team import run_dev_team
 
 
 # 部门中文名 → 键（对齐 game_producer_agent.DEPARTMENTS）
@@ -524,6 +524,8 @@ class ProgramDeptAgent(DepartmentAgent):
             leader="cto",
             devs_per_team=2,
             verifier=_verifier,
+            bus=self.bus,
+            manager_role="producer",
         )
         self._log("dev_team", f"程序线开发小组闭环：{result.get('dev_count',0)} 开发，密度 {result.get('dev_ratio')}")
         return result
@@ -534,6 +536,26 @@ class ProgramDeptAgent(DepartmentAgent):
         project = work_package.get("project", "未命名")
         # 开发小组闭环：先跑一套循环 N 个开发（默认 2）的确定性编排
         dev_team = self._run_dev_team_loop(work_package, module, label, project)
+        # 失败提前短路：开发小组熔断/异常时直接返回失败，不构建引擎感知/上下文/完整 artifact
+        if dev_team.get("ok") is False:
+            reason = dev_team.get("reason", "开发小组熔断/异常")
+            self._log("execute", f"程序线开发小组失败，提前短路：{reason}")
+            return {
+                "module": module, "label": label, "project": project,
+                "artifact_type": "code",
+                "content": {},
+                "dev_team": {
+                    "ok": False,
+                    "reason": reason,
+                    "dev_count": dev_team.get("dev_count", 0),
+                    "devs": dev_team.get("devs", []),
+                    "dev_ratio": dev_team.get("dev_ratio", 0.0),
+                    "leader": dev_team.get("leader", "cto"),
+                    "team_id": dev_team.get("team_id", ""),
+                    "overview": dev_team.get("overview", {}),
+                    "rounds": dev_team.get("progress", {}).get("rounds", []),
+                },
+            }
         # 引擎感知：探测当前目标引擎（Cocos Creator / Unreal Engine）
         engine = get_engine()
         engine_info = engine.to_dict()

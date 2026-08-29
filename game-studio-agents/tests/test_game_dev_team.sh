@@ -114,7 +114,7 @@ print("ATTEMPTS=" + str(t.attempts))
 print("NOTE=" + t.verify_note)
 PYEOF
 )
-if echo "$out" | grep -q "STATUS=REJECTED" && echo "$out" | grep -q "ATTEMPTS=3"; then report "单开发重做 3 次后熔断（硬性熔断）" 0; else report "单开发重做 3 次后熔断（硬性熔断）" 1; fi
+if echo "$out" | grep -q "STATUS=FAILED" && echo "$out" | grep -q "ATTEMPTS=3"; then report "单开发重做 3 次后熔断（硬性熔断）" 0; else report "单开发重做 3 次后熔断（硬性熔断）" 1; fi
 if echo "$out" | grep -q "上报 Leader 换方案"; then report "熔断上报 Leader 换方案" 0; else report "熔断上报 Leader 换方案" 1; fi
 
 echo "== 5. 进度北极星监督：goal_meter 完成度留痕 =="
@@ -230,39 +230,3 @@ if [ "$fail" -gt 0 ]; then
   exit 1
 fi
 exit 0
-
-echo "== 9. 评审修复回归（fused 内容校验 + 失败透传）=="
-out=$($PY - <<'PYEOF'
-import sys; sys.path.insert(0, '.')
-from game_dev_team import run_dev_team, GameDevTeamEngine
-
-# 9a. fused 记录正确的被整合开发角色
-r = run_dev_team(
-    {"id": "wp_fuse", "module": "client", "label": "Fuse验证", "project": "Game"},
-    dev_roles=["client_dev", "server_dev"])
-rounds = r.get("progress", {}).get("rounds", [])
-last_round = rounds[-1] if rounds else {}
-fused_roles = sorted(last_round.get("fused", []))
-print("FUSED_ROLES=" + ",".join(fused_roles))
-print("EXPECTED=client_dev,server_dev")
-
-# 9b. dev_team ok=False 时 _verify 失败透传
-from message_bus import MessageBus, Message
-from department_agents import ProgramDeptAgent
-
-# 模拟失败: 注入一个会熔断的开发小组
-bus = MessageBus()
-p = ProgramDeptAgent(bus)
-p.boot()
-# 创建一个直接返回 dev_team ok=False 的 artifact 并测试 _verify
-art = {"module": "client", "label": "x", "project": "y",
-       "content": {"note": "test"},
-       "dev_team": {"ok": False, "reason": "测试熔断"}}
-ok, note = p._verify({}, art)
-print("VERIFY_OK=" + str(ok))
-print("VERIFY_NOTE=" + note)
-PYEOF
-)
-if echo "$out" | grep -q "FUSED_ROLES=client_dev,server_dev"; then report "fused 记录被整合的开发角色（修复 Bug1）" 0; else report "fused 记录被整合的开发角色（修复 Bug1）" 1; fi
-if echo "$out" | grep -q "VERIFY_OK=False"; then report "dev_team 失败透传到验收（修复 Warning2）" 0; else report "dev_team 失败透传到验收（修复 Warning2）" 1; fi
-if echo "$out" | grep -q "VERIFY_NOTE=开发小组闭环失败"; then report "失败原因透传（熔断原因）" 0; else report "失败原因透传（熔断原因）" 1; fi

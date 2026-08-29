@@ -40,6 +40,7 @@ DEFAULT_MAX_IDLE_SECONDS = 1800.0  # 空闲超时判定卡死（秒）
 # 开发阶段验证状态
 APPROVED = "APPROVED"
 REJECTED = "REJECTED"
+FAILED = "FAILED"  # 终态：熔断后不再参与后续轮次
 
 
 @dataclass
@@ -57,7 +58,7 @@ class DevTask:
     last_activity: float = field(default_factory=time.time)
 
     def is_done(self) -> bool:
-        return self.status == "APPROVED" or self.status == "FUSED"
+        return self.status in ("APPROVED", "FUSED", "FAILED")
 
 
 @dataclass
@@ -137,6 +138,9 @@ class GameDevTeamEngine:
             raise ValueError("开发小组至少需要 1 个开发角色")
         if len(dev_roles) > self.devs_per_team:
             # 若传入开发数超过 devs_per_team，截断（一套循环 N 个开发）
+            dropped = dev_roles[self.devs_per_team:]
+            self._log(f"警告：开发角色 {len(dev_roles)} 个超过 devs_per_team={self.devs_per_team}，"
+                      f"截断丢弃 {len(dropped)} 个：{dropped}")
             dev_roles = dev_roles[:self.devs_per_team]
         team = GameDevTeam(team_id=team_id, leader=leader, devs=list(dev_roles))
         for role in dev_roles:
@@ -165,8 +169,8 @@ class GameDevTeamEngine:
         else:
             artifact = self._default_produce(task)
         task.artifact = artifact
-        # 进度北极星：记录完成度推进（执行推进当前节点）
-        task.goal_meter = min(task.goal_total, task.goal_meter + 0.5)
+        # 进度北极星：执行阶段不盲目递增完成度，
+        # 仅当 verify_dev 返回 APPROVED 时打满（避免被驳回任务虚报 100%）
         self._log(f"开发 {dev_role} 执行产出 {task.module}（第{task.attempts}次）")
         return task
 
@@ -210,12 +214,12 @@ class GameDevTeamEngine:
         pending = [t.dev_role for t in self.team.tasks.values() if not t.is_done()]
         for role in pending:
             task = self.team.tasks[role]
-            # 硬性熔断：单个开发重做超上限 → 上报 Leader 换方案
+            # 硬性熔断：单个开发重做超上限 → 上报 Leader 换方案（终态 FAILED，不再重复上报）
             if task.attempts >= self.max_attempts and task.status == REJECTED:
-                task.status = REJECTED
+                task.status = FAILED
                 task.verify_note = f"熔断：单开发重做超 {self.max_attempts} 次，上报 Leader 换方案"
                 r.rejected.append(role)
-                self._log(f"开发 {role} 熔断上报 Leader：{task.verify_note}")
+                self._log(f"开发 {role} 熔断上报 Leader（终态）：{task.verify_note}")
                 continue
             # 空闲超时判定卡死
             if time.time() - task.last_activity > self.max_idle_seconds:
@@ -230,9 +234,10 @@ class GameDevTeamEngine:
                 r.verified.append(role)
             else:
                 r.rejected.append(role)
-        # 全组 APPROVED → 小组长整合（fuse）
+        # 全组 APPROVED → 小组长整合（fuse）；存在 FAILED 终态则跳过 fuse（整体失败）
         all_done = all(t.is_done() for t in self.team.tasks.values())
-        if all_done:
+        has_failed = any(t.status == FAILED for t in self.team.tasks.values())
+        if all_done and not has_failed:
             fused = self._fuse()
             r.fused = list(fused.get("integrated", {}).keys())
         self.team.rounds.append(r)
@@ -242,9 +247,14 @@ class GameDevTeamEngine:
         """小组长整合全组开发产出为统一交付物（Leader 收尾整合）。"""
         modules = {}
         for role, task in self.team.tasks.items():
-            if task.artifact is not None:
+            if task.status == FAILED:
+                raise RuntimeError(f"开发 {role} 处于 FAILED 终态，禁止整合交付")
+            if task.artifact is not None and task.artifact:
                 modules[role] = task.artifact
                 task.status = "FUSED"
+            elif task.artifact is not None and not task.artifact:
+                # 空 dict 制品：不应被漏整合，但也不产出有效内容
+                raise RuntimeError(f"开发 {role} 产出为空制品（empty dict），禁止整合交付")
         self.fused_artifact = {
             "team_id": self.team.team_id,
             "leader": self.team.leader,
@@ -359,7 +369,10 @@ def run_dev_team(work_package: Dict[str, Any],
                  devs_per_team: int = DEFAULT_DEVS_PER_TEAM,
                  verifier: Optional[Callable[[DevTask], tuple]] = None,
                  produce: Optional[Callable[[DevTask], Dict[str, Any]]] = None,
-                 max_iterations: int = DEFAULT_MAX_ITERATIONS) -> Dict[str, Any]:
+                 max_iterations: int = DEFAULT_MAX_ITERATIONS,
+                 bus=None,
+                 manager_role: str = "producer",
+                 notify: Optional[Callable[[str, Dict[str, Any]], None]] = None) -> Dict[str, Any]:
     """
     一站式运行一个游戏开发小组闭环，返回完整结果。
 
@@ -391,7 +404,36 @@ def run_dev_team(work_package: Dict[str, Any],
             "reason": str(e),
             "overview": engine.team_overview(),
         }
-    deliver = engine.deliver_to_manager(manager_role="producer")
+    # FAILED 终态检测：任一开发 FAILED → 整体失败（不交付）
+    if any(t.status == FAILED for t in team.tasks.values()):
+        failed_roles = [t.dev_role for t in team.tasks.values() if t.status == FAILED]
+        return {
+            "ok": False,
+            "team_id": team.team_id,
+            "reason": f"开发小组熔断：角色 {failed_roles} 达到重做上限",
+            "overview": engine.team_overview(),
+        }
+    # 交付走消息总线（若注入了 bus）：把交付 payload 发布到 manager_role
+    if bus is not None:
+        def _notify(mgr, payload):
+            # 通过总线发 ARTIFACT_DELIVERY 消息给经理
+            try:
+                from message_bus import build_message
+                msg = build_message("ARTIFACT_DELIVERY", leader, mgr, {
+                    "work_package_id": wp_id,
+                    "module": module,
+                    "team_id": payload.get("team_id", ""),
+                    "payload": payload,
+                })
+                bus.publish(msg)
+            except Exception as _e:
+                # 总线不可用时退化为仅记录日志
+                pass
+        deliver = engine.deliver_to_manager(manager_role=manager_role, notify=_notify)
+    elif notify:
+        deliver = engine.deliver_to_manager(manager_role=manager_role, notify=notify)
+    else:
+        deliver = engine.deliver_to_manager(manager_role=manager_role)
     return {
         "ok": True,
         "team_id": team.team_id,
