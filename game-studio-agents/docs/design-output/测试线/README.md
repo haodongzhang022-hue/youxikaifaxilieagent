@@ -13,6 +13,7 @@
 | wp_review_qa | 评审治理 | qa_engineer | 验收评审无推送权限边界回归 |
 | wp_handler_qa | 仓库处理专员回归 | qa_engineer + auto_qa | 仓库处理专员触发链路回归验证 |
 | wp_art_testing | 美术线生态角色模块化验收 | qa_engineer + auto_qa | 美术线生态角色接入模块化验收（16 项断言） |
+| wp_engine_bridge_qa | 引擎桥接层 P1 修复回归确认 | qa_engineer + auto_qa | 引擎桥接层 P1 修复回归确认（integration 9/9） |
 
 ## 二、组内分工表
 
@@ -24,6 +25,7 @@
 | 评审只读边界回归 | qa_engineer | wp_review_qa_验收评审无推送权限边界回归.md |
 | 仓库处理专员触发链路回归 | qa_engineer + auto_qa | wp_handler_qa_仓库处理专员触发链路回归.md |
 | 美术线生态角色模块化验收 | qa_engineer + auto_qa | wp_art_testing_美术线生态角色模块化验收.md |
+| 引擎桥接层 P1 修复回归确认 | qa_engineer + auto_qa | wp_engine_bridge_qa_引擎桥接层P1修复回归确认.md |
 
 ## 三、跨部门协作
 
@@ -37,6 +39,8 @@
 | 下游解锁 | 项目管理 | 发版里程碑收口 + 评审闭环验收 | 测试验收通过后 |
 | 被测对象 | 美术线 | 消费美术线生态角色产出做模块化验收（wp_art_testing） | PR#84 合并后 |
 | 下游解锁 | 项目管理 | wp_art_testing 验收通过后解锁 wp_release 发版门禁 | 本包验收通过后 |
+| 上游消费 | 程序线 | 消费 wp_engine_bridge_verify 验证报告做回归依据 | PR#89 合并后 |
+| 下游解锁 | 项目管理 | wp_engine_bridge_qa 验收通过后解锁 wp_engine_release 发版门禁复验 | 本包验收通过后 |
 
 ## 四、引擎适配专项（PR #82 合并后下游解锁）
 
