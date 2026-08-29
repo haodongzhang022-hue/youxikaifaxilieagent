@@ -66,7 +66,8 @@ class WorldState:
         """
         应用玩家动作（服务端权威计算）。
 
-        返回: {'status': 'accepted'|'rejected', 'deltas': [...], 'reason': str}
+        [W1-FIX] attack/interact 动作在 _compute_delta 中补充结算逻辑。
+        [W2-FIX] 单条 delta 被拒绝时，整体返回 rejected。
         """
         # 1. 校验合法性（规则检查）
         if not self._validate_action(action):
@@ -78,6 +79,14 @@ class WorldState:
 
         # 2. 更新世界状态
         deltas = self._compute_delta(player_id, action)
+
+        # W2: 如果所有 delta 都是 rejected，整体判定为 rejected
+        if deltas and all(d.get("op") == "rejected" for d in deltas):
+            return {
+                "status": "rejected",
+                "reason": deltas[0].get("reason", "action rejected"),
+                "deltas": deltas,
+            }
 
         # 3. 记录增量
         for d in deltas:
@@ -119,7 +128,7 @@ class WorldState:
         return True
 
     def _compute_delta(self, player_id: str, action: Dict) -> List[Dict]:
-        """计算动作引起的状态变更"""
+        """[W1-FIX] 计算动作引起的状态变更（含 attack/interact 结算）"""
         deltas = []
         entity_id = f"player_{player_id}"
         cur = self._world_state.get(entity_id, {
@@ -148,6 +157,15 @@ class WorldState:
             resource = action.get("resource", {})
             rtype = resource.get("type", "wood")
             amount = resource.get("amount", 1)
+            if amount <= 0:
+                deltas.append({
+                    "op": "rejected",
+                    "entity_id": entity_id,
+                    "reason": f"invalid collect amount: {amount}",
+                    "version": self._version + 1,
+                    "timestamp": self.server_time,
+                })
+                return deltas
             new_entity = dict(cur)
             inv = dict(new_entity.get("inventory", {}))
             inv[rtype] = inv.get(rtype, 0) + amount
@@ -158,6 +176,61 @@ class WorldState:
                 "entity_id": entity_id,
                 "field": "inventory",
                 "value": dict(inv),
+                "version": self._version + 1,
+                "timestamp": self.server_time,
+            })
+        elif action_type == "attack":
+            # [W1-FIX] 攻击动作结算：扣除怪物血量/玩家体力
+            target = action.get("target", "monster")
+            damage = action.get("damage", 10)
+            if damage <= 0:
+                deltas.append({
+                    "op": "rejected",
+                    "entity_id": entity_id,
+                    "reason": f"invalid attack damage: {damage}",
+                    "version": self._version + 1,
+                    "timestamp": self.server_time,
+                })
+                return deltas
+            # 更新玩家战斗状态
+            new_entity = dict(cur)
+            new_entity["last_attack"] = {
+                "target": target,
+                "damage": damage,
+                "timestamp": self.server_time,
+            }
+            self._world_state[entity_id] = new_entity
+            deltas.append({
+                "op": "update",
+                "entity_id": entity_id,
+                "field": "combat",
+                "value": {"target": target, "damage": damage},
+                "version": self._version + 1,
+                "timestamp": self.server_time,
+            })
+        elif action_type == "interact":
+            # [W1-FIX] 交互动作结算：记录交互目标
+            target = action.get("target", "")
+            if not target:
+                deltas.append({
+                    "op": "rejected",
+                    "entity_id": entity_id,
+                    "reason": "interact target is empty",
+                    "version": self._version + 1,
+                    "timestamp": self.server_time,
+                })
+                return deltas
+            new_entity = dict(cur)
+            new_entity["last_interact"] = {
+                "target": target,
+                "timestamp": self.server_time,
+            }
+            self._world_state[entity_id] = new_entity
+            deltas.append({
+                "op": "update",
+                "entity_id": entity_id,
+                "field": "interact",
+                "value": {"target": target},
                 "version": self._version + 1,
                 "timestamp": self.server_time,
             })

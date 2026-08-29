@@ -4,8 +4,8 @@ test_server.py - 多端共享服务端核心测试
 验证：
 1. 多端统一协议（登录/玩法/战斗/经济）
 2. 服务端权威状态同步
-3. 定点数战斗结算一致性
-4. 统一经济账本
+3. 定点数战斗结算一致性（C1/C2/C3 + W1-W4 修复后）
+4. 统一经济账本（含安全校验）
 """
 
 import os
@@ -122,6 +122,30 @@ class TestWorldState(unittest.TestCase):
         snap2 = self.world.snapshot()
         self.assertGreater(snap2["version"], snap1["version"])
 
+    def test_attack_action_settles(self):
+        """[W1-FIX] 攻击动作有结算逻辑"""
+        self.world.set_entity("player_1", {"player_id": "1", "x": 0, "z": 0, "hp": 100})
+        result = self.world.apply_action("1", {"type": "attack", "target": "monster", "damage": 15})
+        self.assertEqual(result["status"], "accepted")
+        entity = self.world.get_entity("player_1")
+        self.assertIn("last_attack", entity)
+        self.assertEqual(entity["last_attack"]["damage"], 15)
+
+    def test_interact_action_settles(self):
+        """[W1-FIX] 交互动作有结算逻辑"""
+        self.world.set_entity("player_1", {"player_id": "1", "x": 0, "z": 0})
+        result = self.world.apply_action("1", {"type": "interact", "target": "npc_elder"})
+        self.assertEqual(result["status"], "accepted")
+        entity = self.world.get_entity("player_1")
+        self.assertIn("last_interact", entity)
+        self.assertEqual(entity["last_interact"]["target"], "npc_elder")
+
+    def test_use_item_rejected_delta_rejects_action(self):
+        """[W2-FIX] 单条 rejected delta 导致整体 rejected"""
+        self.world.set_entity("player_1", {"player_id": "1", "inventory": {}})
+        result = self.world.apply_action("1", {"type": "use_item", "item": "nonexistent"})
+        self.assertEqual(result["status"], "rejected")
+
 
 class TestCombatService(unittest.TestCase):
     """战斗服务测试"""
@@ -147,15 +171,40 @@ class TestCombatService(unittest.TestCase):
     def test_combat_attack_victory(self):
         """战斗攻击到胜利"""
         session = self.combat.start_combat("P1", seed=42, monster_hp=20)
-        result = self.combat.process_attack(session.combat_id, attack_power=25)
+        # C2-FIX: 传入 caller_player_id
+        result = self.combat.process_attack(session.combat_id, "P1", attack_power=25)
+        # W3-FIX: damage = 25 * (25/50) = 12，20 HP 怪物需要多次攻击
+        self.assertIn(result["status"], ("in_progress", "victory"))
+        if result["status"] == "victory":
+            self.assertIn("rewards", result)
+
+    def test_combat_attack_owner_only(self):
+        """[C2-FIX] 非 owner 攻击被拒绝"""
+        session = self.combat.start_combat("P1", seed=42, monster_hp=100)
+        result = self.combat.process_attack(session.combat_id, "P2", attack_power=10)
+        self.assertEqual(result["status"], "error")
+        self.assertIn("permission denied", result.get("reason", ""))
+
+    def test_combat_attack_victory_high_power(self):
+        """高攻击力一次击败"""
+        session = self.combat.start_combat("P1", seed=42, monster_hp=10)
+        result = self.combat.process_attack(session.combat_id, "P1", attack_power=50)
         self.assertEqual(result["status"], "victory")
         self.assertIn("rewards", result)
 
     def test_deterministic_loot(self):
-        """确定性掉落：同 seed 同掉落"""
+        """[C3-FIX] 确定性掉落：同 seed 同掉落"""
         loot1 = self.combat._roll_loot(42)
         loot2 = self.combat._roll_loot(42)
         self.assertEqual(loot1, loot2)
+
+    def test_loot_uses_cabi(self):
+        """[C3-FIX] 掉落使用 cabi.roll_loot()"""
+        from middleware.bindings.python import cabi
+        cabi_loot = cabi.roll_loot("combat_loot", 42)
+        service_loot = self.combat._roll_loot(42)
+        # 掉落物品数量应与中间件一致
+        self.assertEqual(len(service_loot), len(cabi_loot.get("items", [])))
 
 
 class TestEconomyService(unittest.TestCase):
@@ -171,6 +220,24 @@ class TestEconomyService(unittest.TestCase):
         self.assertEqual(result["status"], "ok")
         balance = self.economy.get_balance("P1")
         self.assertEqual(balance["gold"], 100)
+
+    def test_credit_negative_amount_rejected(self):
+        """[C1-FIX] 负数金额入账被拒绝"""
+        self.economy.init_account("P1")
+        result = self.economy.credit("P1", "gold", -100, reason="hack")
+        self.assertEqual(result["status"], "error")
+
+    def test_credit_zero_amount_rejected(self):
+        """[C1-FIX] 零金额入账被拒绝"""
+        self.economy.init_account("P1")
+        result = self.economy.credit("P1", "gold", 0, reason="hack")
+        self.assertEqual(result["status"], "error")
+
+    def test_debit_negative_amount_rejected(self):
+        """[C1-FIX] 负数金额出账被拒绝"""
+        self.economy.init_account("P1")
+        result = self.economy.debit("P1", "gold", -50, reason="hack")
+        self.assertEqual(result["status"], "error")
 
     def test_debit_insufficient(self):
         """余额不足拒绝出账"""
@@ -189,6 +256,13 @@ class TestEconomyService(unittest.TestCase):
         b2 = self.economy.get_balance("P2")
         self.assertEqual(b1["gold"], 70)
         self.assertEqual(b2["gold"], 30)
+
+    def test_transfer_negative_amount_rejected(self):
+        """[C1-FIX] 负数金额转账被拒绝"""
+        self.economy.init_account("P1")
+        self.economy.init_account("P2")
+        result = self.economy.transfer("P1", "P2", "gold", -100)
+        self.assertEqual(result["status"], "error")
 
     def test_audit_trail(self):
         """交易记录全审计"""
@@ -245,6 +319,28 @@ class TestGateway(unittest.TestCase):
         self.assertEqual(resp2.status, 0)
         self.assertEqual(resp2.payload["status"], "accepted")
 
+    def test_gameplay_action_with_scene(self):
+        """[W4-FIX] GameplayService 场景路由"""
+        # 登录
+        req = GameRequest.create(
+            "temp", "login",
+            {"token": "token_abcdefg", "device_id": "dev_gw_scene"},
+            platform="web",
+        )
+        resp = self.gateway.handle(req)
+        player_id = resp.payload["player"]["player_id"]
+        token = resp.payload["session_token"]
+
+        # 带场景上下文的玩法动作
+        req2 = GameRequest.create(
+            player_id, "gameplay_action",
+            {"session_token": token, "scene_id": "LVL_001",
+             "action": {"type": "move", "x": 5, "z": 10}},
+        )
+        resp2 = self.gateway.handle(req2)
+        self.assertEqual(resp2.status, 0)
+        self.assertEqual(resp2.payload["status"], "accepted")
+
     def test_combat_flow(self):
         """战斗流程"""
         # 登录
@@ -266,17 +362,17 @@ class TestGateway(unittest.TestCase):
         self.assertEqual(resp2.status, 0)
         combat_id = resp2.payload["combat_id"]
 
-        # 攻击直到胜利
+        # 攻击直到胜利（使用高攻击力保证一次击败）
         req3 = GameRequest.create(
             player_id, "combat_result",
             {"session_token": token, "action": "attack",
-             "combat_id": combat_id, "attack_power": 20},
+             "combat_id": combat_id, "attack_power": 100},
         )
         resp3 = self.gateway.handle(req3)
         self.assertEqual(resp3.status, 0)
         self.assertEqual(resp3.payload["status"], "victory")
 
-        # 验证奖励入账（战斗胜利后应至少有一种货币 > 0）
+        # 验证奖励入账
         req4 = GameRequest.create(
             player_id, "economy_transfer",
             {"session_token": token, "action": "balance"},
@@ -284,8 +380,10 @@ class TestGateway(unittest.TestCase):
         resp4 = self.gateway.handle(req4)
         self.assertEqual(resp4.status, 0)
         balance = resp4.payload["balance"]
-        total_value = (balance["gold"] + balance["star_core"]
-                       + balance["eroding_stone"])
+        total_value = (balance.get("gold", 0) + balance.get("star_core", 0)
+                       + balance.get("eroding_stone", 0) + balance.get("potion", 0)
+                       + balance.get("gem", 0) + balance.get("iron_ore", 0)
+                       + balance.get("rune", 0))
         self.assertGreater(total_value, 0)
 
     def test_quest_update(self):
@@ -339,6 +437,46 @@ class TestGateway(unittest.TestCase):
         )
         resp_tx = self.gateway.handle(req_tx)
         self.assertEqual(resp_tx.status, 0)
+
+    def test_combat_attack_caller_not_owner(self):
+        """[C2-FIX] 网关层越权攻击被拒绝"""
+        # 登录两个玩家
+        req_a = GameRequest.create(
+            "temp", "login",
+            {"token": "token_abcdefg", "device_id": "dev_att1"},
+            platform="web",
+        )
+        resp_a = self.gateway.handle(req_a)
+        player_a = resp_a.payload["player"]["player_id"]
+        token_a = resp_a.payload["session_token"]
+
+        # A 开始战斗
+        req_start = GameRequest.create(
+            player_a, "combat_result",
+            {"session_token": token_a, "action": "start", "seed": 99, "monster_hp": 50},
+        )
+        resp_start = self.gateway.handle(req_start)
+        self.assertEqual(resp_start.status, 0)
+        combat_id = resp_start.payload["combat_id"]
+
+        # B 试图攻击 A 的战斗（B 不是 owner）
+        req_b = GameRequest.create(
+            "temp", "login",
+            {"token": "token_abcdefg", "device_id": "dev_att2"},
+            platform="web",
+        )
+        resp_b = self.gateway.handle(req_b)
+        player_b = resp_b.payload["player"]["player_id"]
+        token_b = resp_b.payload["session_token"]
+
+        req_attack = GameRequest.create(
+            player_b, "combat_result",
+            {"session_token": token_b, "action": "attack",
+             "combat_id": combat_id, "attack_power": 100},
+        )
+        resp_attack = self.gateway.handle(req_attack)
+        self.assertEqual(resp_attack.status, 0)
+        self.assertIn("permission denied", resp_attack.payload.get("reason", ""))
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from server.proto.messages import (
 from server.core.auth_service import AuthService
 from server.core.world_state import WorldState
 from server.core.combat_service import CombatService, EconomyService
+from server.core.gameplay_service import GameplayService
 
 
 class Gateway:
@@ -33,6 +34,7 @@ class Gateway:
         self.world = WorldState()
         self.combat = CombatService()
         self.economy = EconomyService()
+        self.gameplay = GameplayService(self.world)  # [W4-FIX] GameplayService 接入
 
     # ============================================================
     # 主入口
@@ -101,9 +103,15 @@ class Gateway:
         return GameResponse.ok(request.request_id, {"session_token": new_token})
 
     def _handle_gameplay_action(self, request: GameRequest) -> GameResponse:
-        """处理玩法动作（服务端权威）"""
+        """[W4-FIX] 处理玩法动作（服务端权威，经 GameplayService 路由）"""
         action = request.payload.get("action", {})
-        result = self.world.apply_action(request.player_id, action)
+        scene_id = request.payload.get("scene_id", "")
+        if scene_id:
+            # 场景上下文动作走 GameplayService
+            result = self.gameplay.player_action(
+                request.player_id, scene_id, action)
+        else:
+            result = self.world.apply_action(request.player_id, action)
         return GameResponse.ok(request.request_id, result)
 
     def _handle_snapshot(self, request: GameRequest) -> GameResponse:
@@ -127,7 +135,9 @@ class Gateway:
         elif action == "attack":
             combat_id = request.payload.get("combat_id", "")
             attack_power = request.payload.get("attack_power", 10)
-            result = self.combat.process_attack(combat_id, attack_power)
+            # [C2-FIX] 传入调用者 player_id，由 CombatService 做归属校验
+            result = self.combat.process_attack(
+                combat_id, player_id, attack_power)
             # 战斗胜利后自动发放奖励到经济账户
             if result.get("status") == "victory":
                 for reward in result.get("rewards", []):
@@ -136,8 +146,20 @@ class Gateway:
                     if item == "gold":
                         self.economy.credit(player_id, "gold", amount,
                                             reason="combat reward")
-                    elif item == "star_shard":
+                    elif item == "star_core":
                         self.economy.credit(player_id, "star_core", amount,
+                                            reason="combat reward")
+                    elif item == "potion":
+                        self.economy.credit(player_id, "potion", amount,
+                                            reason="combat reward")
+                    elif item == "gem":
+                        self.economy.credit(player_id, "gem", amount,
+                                            reason="combat reward")
+                    elif item == "iron_ore":
+                        self.economy.credit(player_id, "iron_ore", amount,
+                                            reason="combat reward")
+                    elif item == "rune":
+                        self.economy.credit(player_id, "rune", amount,
                                             reason="combat reward")
             return GameResponse.ok(request.request_id, result)
         else:
