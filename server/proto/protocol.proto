@@ -1,0 +1,201 @@
+// ============================================================
+// 游戏统一通信协议 (Game Unified Protocol)
+// 版本: v1.0
+// 对齐: Issue #112「游戏向架构师的开发」· wp_server 协议先行
+// 说明: 前后端通信全部使用本协议定义。协议一旦定下，除非大版本更新，
+//       否则不改。这是前后端解耦的唯一桥梁。
+//
+// 设计原则:
+//   1. 协议先行 (Protocol First): 所有通信使用强类型 IDL
+//   2. 跨语言: 从本文件可生成 Python/TS/C#/C++ 各语言代码
+//   3. 向后兼容: 字段只增不改，新增字段用 optional 标记
+//   4. 版本控制: protocol_version 字段全局递增
+// ============================================================
+
+syntax = "proto3";
+package game.protocol;
+
+// ============================================================
+// 通用枚举
+// ============================================================
+
+// 平台标识
+enum Platform {
+  PLATFORM_UNKNOWN = 0;
+  PLATFORM_WEB = 1;
+  PLATFORM_COCOS = 2;
+  PLATFORM_UNITY = 3;
+  PLATFORM_UE = 4;
+}
+
+// 错误码
+enum ErrorCode {
+  OK = 0;
+  AUTH_FAILED = 1001;
+  SESSION_EXPIRED = 1002;
+  INVALID_REQUEST = 1003;
+  ACTION_REJECTED = 2001;
+  COMBAT_NOT_FOUND = 3001;
+  ECONOMY_INSUFFICIENT = 4001;
+  STAGE_MISMATCH = 5001;  // 阶段不匹配（阶段不对=错）
+}
+
+// 消息类型
+enum MsgType {
+  MSG_UNKNOWN = 0;
+  MSG_LOGIN = 1;
+  MSG_REFRESH = 2;
+  MSG_GAMEPLAY_ACTION = 3;
+  MSG_GAMEPLAY_SNAPSHOT = 4;
+  MSG_COMBAT_RESULT = 5;
+  MSG_QUEST_UPDATE = 6;
+  MSG_ECONOMY_TRANSFER = 7;
+}
+
+// 游戏阶段（对齐 Issue #112 四阶段演进）
+enum GameStage {
+  STAGE_UNKNOWN = 0;
+  STAGE_COCOS = 1;
+  STAGE_UNITY = 2;
+  STAGE_UE = 3;
+  STAGE_ASSET_LIB = 4;
+}
+
+// ============================================================
+// 核心数据模型
+// ============================================================
+
+// 玩家数据
+message PlayerData {
+  string player_id = 1;
+  int32 level = 2;
+  int64 exp = 3;
+  int64 gold = 4;
+  int64 star_core = 5;
+  int64 eroding_stone = 6;
+  Platform platform = 7;
+  int32 data_version = 8;
+  GameStage stage = 9;              // 当前阶段（阶段感知）
+  string session_token = 10;        // 会话令牌（无状态服务端用）
+  int64 login_timestamp = 11;       // 登录时间戳（无状态校验）
+}
+
+// 通用请求
+message GameRequest {
+  string request_id = 1;
+  string player_id = 2;
+  int32 client_version = 3;
+  MsgType msg_type = 4;
+  bytes payload = 5;               // JSON 序列化（各语言通用）
+  Platform platform = 6;
+  string protocol_version = 7;     // 协议版本（如 "1.0"）
+}
+
+// 通用响应
+message GameResponse {
+  string request_id = 1;
+  ErrorCode code = 2;
+  string message = 3;
+  bytes data = 4;                  // JSON 序列化
+  int64 server_timestamp = 5;      // 服务端时间戳（无状态幂等）
+  string protocol_version = 6;
+}
+
+// ============================================================
+// 登录协议
+// ============================================================
+
+// 登录请求
+message LoginRequest {
+  string token = 1;
+  string device_id = 2;
+  Platform platform = 3;
+  string version = 4;
+}
+
+// 登录响应
+message LoginResponse {
+  PlayerData player = 1;
+  string session_token = 2;
+  int64 expires_in = 3;            // 会话有效期（秒）
+}
+
+// ============================================================
+// 玩法协议
+// ============================================================
+
+// 玩法动作请求
+message GameplayActionRequest {
+  string action_type = 1;          // move / attack / use_item / interact
+  string payload_json = 2;         // 具体动作数据（JSON 格式）
+  int64 action_timestamp = 3;      // 客户端时间戳
+  string session_token = 4;
+}
+
+// 玩法快照响应
+message GameplaySnapshotResponse {
+  PlayerData player = 1;
+  int64 world_version = 2;         // 世界状态版本（增量同步）
+  bytes world_state = 3;           // 世界状态快照（JSON）
+}
+
+// ============================================================
+// 战斗协议
+// ============================================================
+
+// 战斗结算请求
+message CombatRequest {
+  string combat_id = 1;
+  string action = 2;               // start / end / result
+  int64 seed = 3;                  // 确定性随机种子
+  string session_token = 4;
+  repeated string player_ids = 5;  // 参与玩家
+}
+
+// 战斗结算响应
+message CombatResponse {
+  string combat_id = 1;
+  string result_json = 2;          // 结算结果（JSON，定点数精度）
+  int64 server_timestamp = 3;
+}
+
+// ============================================================
+// 经济协议
+// ============================================================
+
+// 经济转账请求
+message EconomyTransferRequest {
+  string from_player = 1;
+  string to_player = 2;
+  int64 amount = 3;
+  string currency = 4;             // gold / star_core / eroding_stone
+  string reason = 5;
+  string session_token = 6;
+}
+
+// 经济转账响应
+message EconomyTransferResponse {
+  bool success = 1;
+  int64 new_balance = 2;
+  string transaction_id = 3;
+}
+
+// ============================================================
+// 阶段感知协议
+// ============================================================
+
+// 阶段切换请求（架构级操作）
+message StageTransitionRequest {
+  GameStage from_stage = 1;
+  GameStage to_stage = 2;
+  string transition_reason = 3;
+  string confirmation = 4;         // 人工确认（如 "confirmed"）
+}
+
+// 阶段切换响应
+message StageTransitionResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string assets_preserved = 3;  // 跨阶段保留的资产列表
+  repeated string assets_to_migrate = 4; // 需要迁移的资产列表
+}

@@ -34,19 +34,24 @@ from engine_adapters import get_engine, get_all_engines, detect_engine_from_proj
 
 # 获取引擎
 cocos = get_engine('cocos_creator')
+unity = get_engine('unity')
 unreal = get_engine('unreal_engine')
 all_engines = get_all_engines()
 detected = detect_engine_from_project()
 
 print(f"COCOS_ENGINE={cocos.engine_name}")
+print(f"UNITY_ENGINE={unity.engine_name}")
 print(f"UNREAL_ENGINE={unreal.engine_name}")
 print(f"ALL_COUNT={len(all_engines)}")
 print(f"DETECTED={detected.value}")
 print(f"COCOS_BUILD={cocos.build_command('windows')}")
+print(f"UNITY_BUILD={unity.build_command('windows')}")
 print(f"UNREAL_BUILD={unreal.build_command('windows')}")
 print(f"COCOS_PLATFORMS={','.join(cocos.supported_platforms())}")
+print(f"UNITY_PLATFORMS={','.join(unity.supported_platforms())}")
 print(f"UNREAL_PLATFORMS={','.join(unreal.supported_platforms())}")
 print(f"COCOS_SCRIPTS={','.join(cocos.script_languages)}")
+print(f"UNITY_SCRIPTS={','.join(unity.script_languages)}")
 print(f"UNREAL_SCRIPTS={','.join(unreal.script_languages)}")
 PYEOF
 )
@@ -59,10 +64,38 @@ else
 fi
 
 # 2. 引擎总数
-if echo "$out" | grep -q "ALL_COUNT=2"; then
-  report "引擎注册表包含 2 个适配器" 0
+if echo "$out" | grep -q "ALL_COUNT=3"; then
+  report "引擎注册表包含 3 个适配器(Cocos/Unity/UE)" 0
 else
-  report "引擎注册表包含 2 个适配器" 1
+  report "引擎注册表包含 3 个适配器(Cocos/Unity/UE)" 1
+fi
+
+# 2.5 Unity 引擎也可获取
+if echo "$out" | grep -q "UNITY_ENGINE=Unity"; then
+  report "Unity 引擎适配器可获取" 0
+else
+  report "Unity 引擎适配器可获取" 1
+fi
+
+# 2.6 Unity 构建命令正确
+if echo "$out" | grep -q "UNITY_BUILD=Unity -batchmode"; then
+  report "Unity 构建命令正确" 0
+else
+  report "Unity 构建命令正确" 1
+fi
+
+# 2.7 Unity 平台列表正确
+if echo "$out" | grep -q "UNITY_PLATFORMS=windows,webgl,android,ios,mac"; then
+  report "Unity 平台列表正确" 0
+else
+  report "Unity 平台列表正确" 1
+fi
+
+# 2.8 Unity 脚本语言正确
+if echo "$out" | grep -q "UNITY_SCRIPTS=C#"; then
+  report "Unity 脚本语言正确" 0
+else
+  report "Unity 脚本语言正确" 1
 fi
 
 # 3. Cocos 构建命令
@@ -114,11 +147,16 @@ sys.path.insert(0, '.')
 from engine_adapters import get_engine
 
 cocos = get_engine('cocos_creator')
+unity = get_engine('unity')
 unreal = get_engine('unreal_engine')
 
 # Cocos 资源类型
 cocos_types = [rs.resource_type for rs in cocos.resource_specs()]
 print(f"COCOS_TYPES={','.join(sorted(cocos_types))}")
+
+# Unity 资源类型
+unity_types = [rs.resource_type for rs in unity.resource_specs()]
+print(f"UNITY_TYPES={','.join(sorted(unity_types))}")
 
 # Unreal 资源类型
 unreal_types = [rs.resource_type for rs in unreal.resource_specs()]
@@ -152,6 +190,13 @@ if echo "$out2" | grep -q "UNREAL_TYPES=animation,audio,blueprint,map,material,m
   report "Unreal Engine 资源类型齐全" 0
 else
   report "Unreal Engine 资源类型齐全" 1
+fi
+
+# 10.5 Unity 资源类型齐全
+if echo "$out2" | grep -q "UNITY_TYPES=animation,assetbundle,audio,material,mesh,prefab,scene,script"; then
+  report "Unity 资源类型齐全" 0
+else
+  report "Unity 资源类型齐全" 1
 fi
 
 # 11. 音频资源格式

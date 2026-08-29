@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional
 class EngineType(str, Enum):
     """支持的游戏引擎类型"""
     COCOS_CREATOR = "cocos_creator"      # Cocos Creator（2D/3D 轻量游戏）
+    UNITY = "unity"                      # Unity/团结引擎（中度商业游戏）
     UNREAL_ENGINE = "unreal_engine"      # Unreal Engine（3D 重度游戏）
     CUSTOM = "custom"                    # 自定义/其他引擎
 
@@ -275,6 +276,161 @@ class CocosCreatorAdapter(EngineAdapter):
 
 
 # ============================================================
+
+# ============================================================
+# 四、Unity / 团结引擎适配器
+# ============================================================
+
+class UnityEngineAdapter(EngineAdapter):
+    """Unity / 团结引擎适配器。
+
+    Unity 特性:
+      - 中度 3D 游戏开发（商业化与中度游戏期）
+      - C# 脚本语言
+      - UGUI/FairyGUI UI框架、AssetBundle 热更新
+      - 支持 Web/Android/iOS/Windows 多平台发布
+    """
+
+    @property
+    def engine_type(self) -> EngineType:
+        return EngineType.UNITY
+
+    @property
+    def engine_name(self) -> str:
+        return "Unity"
+
+    @property
+    def engine_version(self) -> str:
+        return "2022.3.x (LTS)"
+
+    def build_command(self, target_platform: str = "windows") -> str:
+        """Unity 构建命令（BatchMode 命令行）"""
+        return (f"Unity -batchmode -quit -projectPath . "
+                f"-buildTarget {target_platform} -executeMethod BuildScript.Build")
+
+    def run_command(self, project_path: str = "") -> str:
+        """Unity 运行命令"""
+        if project_path:
+            return f"Unity -projectPath {project_path}"
+        return "Unity"
+
+    def supported_platforms(self) -> List[str]:
+        return ["windows", "webgl", "android", "ios", "mac"]
+
+    def resource_specs(self) -> List[ResourceSpec]:
+        return [
+            ResourceSpec(
+                engine=EngineType.UNITY,
+                resource_type="mesh",
+                extension=".fbx",
+                import_dir="Assets/Models",
+                export_dir="Build/",
+                build_tool="Unity Build",
+                max_size_mb=100.0,
+                notes="3D 模型资源（.fbx/.obj）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNITY,
+                resource_type="material",
+                extension=".mat",
+                import_dir="Assets/Materials",
+                export_dir="Build/",
+                build_tool="Unity Build",
+                max_size_mb=20.0,
+                notes="材质资源（PBR 材质）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNITY,
+                resource_type="audio",
+                extension=".wav",
+                import_dir="Assets/Audio",
+                export_dir="Build/",
+                build_tool="Unity Build",
+                max_size_mb=50.0,
+                notes="音频资源（.wav/.mp3/.ogg）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNITY,
+                resource_type="animation",
+                extension=".anim",
+                import_dir="Assets/Animations",
+                export_dir="Build/",
+                build_tool="Unity Build",
+                max_size_mb=50.0,
+                notes="动画剪辑/Animator Controller",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNITY,
+                resource_type="prefab",
+                extension=".prefab",
+                import_dir="Assets/Prefabs",
+                export_dir="Build/",
+                build_tool="Unity Build",
+                max_size_mb=50.0,
+                notes="预制体资源（场景/UI 复用）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNITY,
+                resource_type="scene",
+                extension=".unity",
+                import_dir="Assets/Scenes",
+                export_dir="Build/",
+                build_tool="Unity Build",
+                max_size_mb=100.0,
+                notes="场景资源（关卡/UI 场景）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNITY,
+                resource_type="script",
+                extension=".cs",
+                import_dir="Assets/Scripts",
+                export_dir="Build/",
+                build_tool="Unity Build",
+                max_size_mb=5.0,
+                notes="C# 脚本资源（含纯逻辑类库）",
+            ),
+            ResourceSpec(
+                engine=EngineType.UNITY,
+                resource_type="assetbundle",
+                extension=".bundle",
+                import_dir="Assets/AssetBundles",
+                export_dir="Build/AssetBundles/",
+                build_tool="BuildAssetBundles",
+                max_size_mb=200.0,
+                notes="AssetBundle 热更新资源包",
+            ),
+        ]
+
+    def resource_import_path(self, resource_type: str) -> str:
+        mapping = {
+            "mesh": "Assets/Models",
+            "material": "Assets/Materials",
+            "audio": "Assets/Audio",
+            "animation": "Assets/Animations",
+            "prefab": "Assets/Prefabs",
+            "scene": "Assets/Scenes",
+            "script": "Assets/Scripts",
+            "assetbundle": "Assets/AssetBundles",
+        }
+        return mapping.get(resource_type, "Assets/")
+
+    def resource_export_path(self, resource_type: str) -> str:
+        return "Build/"
+
+    def project_structure(self) -> Dict[str, str]:
+        return {
+            "Assets": "资源目录（Scripts/Models/Materials/Audio/Prefabs/Scenes）",
+            "Packages": "Unity Package Manager 依赖",
+            "ProjectSettings": "项目设置",
+            "Build": "构建产物目录",
+            "Library": "导入缓存",
+            "Logs": "构建日志",
+        }
+
+    @property
+    def script_languages(self) -> List[str]:
+        return ["C#"]
+
 # 五、Unreal Engine 适配器
 # ============================================================
 
@@ -420,6 +576,7 @@ class UnrealEngineAdapter(EngineAdapter):
 
 _ENGINE_REGISTRY: Dict[str, EngineAdapter] = {
     EngineType.COCOS_CREATOR.value: CocosCreatorAdapter(),
+    EngineType.UNITY.value: UnityEngineAdapter(),
     EngineType.UNREAL_ENGINE.value: UnrealEngineAdapter(),
 }
 
