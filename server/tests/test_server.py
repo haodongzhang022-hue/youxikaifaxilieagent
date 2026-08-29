@@ -95,11 +95,12 @@ class TestWorldState(unittest.TestCase):
     def test_apply_action_move(self):
         """移动动作（服务端权威）"""
         self.world.set_entity("player_1", {"player_id": "1", "x": 0, "z": 0, "hp": 100})
-        result = self.world.apply_action("1", {"type": "move", "x": 15, "z": 30})
+        # 在最大移动速度内（dist = sqrt(25+64)=9.4 < 10）
+        result = self.world.apply_action("1", {"type": "move", "x": 5, "z": 8})
         self.assertEqual(result["status"], "accepted")
         entity = self.world.get_entity("player_1")
-        self.assertEqual(entity["x"], 15)
-        self.assertEqual(entity["z"], 30)
+        self.assertEqual(entity["x"], 5)
+        self.assertEqual(entity["z"], 8)
 
     def test_apply_action_collect(self):
         """采集动作"""
@@ -147,7 +148,11 @@ class TestCombatService(unittest.TestCase):
     def test_combat_attack_victory(self):
         """战斗攻击到胜利"""
         session = self.combat.start_combat("P1", seed=42, monster_hp=20)
-        result = self.combat.process_attack(session.combat_id, attack_power=25)
+        # 攻击力 25：伤害 = 10 * (25/50) = 5，不足以秒 20HP，继续攻击
+        result = self.combat.process_attack(session.combat_id, "P1", attack_power=25)
+        self.assertEqual(result["status"], "in_progress")
+        # 用更高攻击力（受 MAX_ATTACK_POWER 约束）
+        result = self.combat.process_attack(session.combat_id, "P1", attack_power=1000)
         self.assertEqual(result["status"], "victory")
         self.assertIn("rewards", result)
 
@@ -239,7 +244,7 @@ class TestGateway(unittest.TestCase):
         # 移动
         req2 = GameRequest.create(
             player_id, "gameplay_action",
-            {"session_token": token, "action": {"type": "move", "x": 10, "z": 20}},
+            {"session_token": token, "action": {"type": "move", "x": 5, "z": 8}},
         )
         resp2 = self.gateway.handle(req2)
         self.assertEqual(resp2.status, 0)
@@ -266,15 +271,20 @@ class TestGateway(unittest.TestCase):
         self.assertEqual(resp2.status, 0)
         combat_id = resp2.payload["combat_id"]
 
-        # 攻击直到胜利
-        req3 = GameRequest.create(
-            player_id, "combat_result",
-            {"session_token": token, "action": "attack",
-             "combat_id": combat_id, "attack_power": 20},
-        )
-        resp3 = self.gateway.handle(req3)
-        self.assertEqual(resp3.status, 0)
-        self.assertEqual(resp3.payload["status"], "victory")
+        # 攻击直到胜利（攻击力 1000 受服务端归一约束，多次攻击直到胜利）
+        result_status = "in_progress"
+        for _ in range(20):
+            req3 = GameRequest.create(
+                player_id, "combat_result",
+                {"session_token": token, "action": "attack",
+                 "combat_id": combat_id, "attack_power": 1000},
+            )
+            resp3 = self.gateway.handle(req3)
+            self.assertEqual(resp3.status, 0)
+            result_status = resp3.payload["status"]
+            if result_status == "victory":
+                break
+        self.assertEqual(result_status, "victory")
 
         # 验证奖励入账（战斗胜利后应至少有一种货币 > 0）
         req4 = GameRequest.create(
