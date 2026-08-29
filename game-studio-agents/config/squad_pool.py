@@ -429,6 +429,24 @@ def create_default_squad_pool() -> SquadPool:
     return pool
 
 
+# 全局共享小组池：所有部门 Agent / 自动化调度器共享同一个小组池，
+# 避免每个部门/调度器各持独立池导致无法跨部门调配。
+_GLOBAL_SQUAD_POOL: "SquadPool" | None = None
+
+
+def get_global_squad_pool() -> SquadPool:
+    """获取全局共享可调配小组池（懒加载单例）。
+
+    可调配小组池是**跨部门共享**的全局资源（小组不隶属任何部门），
+    因此所有调用方（部门 Agent、自动化调度器、制作人派发能力）都应
+    共享同一个 SquadPool 实例，才能实现跨部门调配与重复调用。
+    """
+    global _GLOBAL_SQUAD_POOL
+    if _GLOBAL_SQUAD_POOL is None:
+        _GLOBAL_SQUAD_POOL = create_default_squad_pool()
+    return _GLOBAL_SQUAD_POOL
+
+
 # ============================================================
 # 五、演示
 # ============================================================

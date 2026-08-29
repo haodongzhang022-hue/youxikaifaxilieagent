@@ -155,10 +155,14 @@ class GameProducerAgent(BaseAgent):
         self.collab = CollaborationWorkbench()
 
     def _get_squad_pool(self):
-        """懒加载共享可调配小组池（独立于部门，灵活调配/重复调用）。"""
+        """懒加载共享可调配小组池（独立于部门，灵活调配/重复调用）。
+
+        使用**全局共享小组池**，与部门 Agent 自动化调度器共享同一资源池，
+        保证跨部门调配与重复调用的一致性（评审 C2）。
+        """
         if getattr(self, "_squad_pool", None) is None:
-            from squad_pool import create_default_squad_pool
-            self._squad_pool = create_default_squad_pool()
+            from squad_pool import get_global_squad_pool
+            self._squad_pool = get_global_squad_pool()
         return self._squad_pool
 
     def dispatch_capability(self):

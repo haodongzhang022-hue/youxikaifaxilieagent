@@ -97,6 +97,10 @@ class DepartmentAgent(BaseAgent):
         self.internal_subtasks: Dict[str, list] = {}
         # 跨部门协作记录：工作包 id -> [（协作类型, 对方角色）]
         self.peer_collab: list = []
+        # 可调配小组自动化调度器（懒加载）：自动触发调配 + 自动释放
+        self._auto_squad = None
+        # 当前正在使用可调配小组的工作包 id 集（用于自动释放跟踪）
+        self._squad_wp_ids: set = set()
         # 部门 Agent 需接收本部门所有角色的派单（balance_designer / ai_programmer 等），
         # 统一由部门 Agent 按 module 执行；为此注册部门内全部 role_id 到总线。
         dept_key = _DEPT_KEY_BY_NAME.get(department)
@@ -203,6 +207,73 @@ class DepartmentAgent(BaseAgent):
         elif msg.type == "STATUS_REPORT":
             self.reply(msg, "STATUS_REPORT", self.report())
 
+    # ---------- 可调配小组自动化（自动触发 + 自动释放） ----------
+    def _squad_auto(self):
+        """懒加载可调配小组自动化调度器（SquadAutoScheduler）。
+
+        创建调度器的同时，把同一小组池注入到本 Agent 的派发能力
+        （dispatch_capability），确保自动调配与派发共享同一资源池。
+        """
+        if self._auto_squad is None:
+            from squad_auto import SquadAutoScheduler
+            # SquadAutoScheduler 缺省使用**全局共享小组池**（get_global_squad_pool），
+            # 保证所有部门 Agent 共享同一资源池，支持跨部门调配与重复调用。
+            self._auto_squad = SquadAutoScheduler()
+            # 共享小组池：把调度器的小组池同步注入派发能力，保证
+            # auto_acquire_and_dispatch 内部调用的 dispatch_to_squad 能
+            # 找到已注册小组（而非各持独立空池）。
+            self.dispatch_capability().squad_pool = self._auto_squad.squad_pool
+        return self._auto_squad
+
+    def _auto_squad_dispatch(self, work_package: Dict[str, Any]) -> bool:
+        """自动触发调配：工作包声明 squad_domain 时自动从小组池调配小组执行。
+
+        触发时机：部门收到工作包后、执行前。若工作包不需要小组（未声明
+        squad_domain），自动跳过，部门走自身内部实现正常执行。
+
+        Returns:
+            True = 已自动调配小组（小组进入 BUSY 状态）
+            False = 未触发（无需小组 / 调配失败 / 已关闭）
+        """
+        if not work_package.get("squad_domain"):
+            return False
+        try:
+            auto = self._squad_auto()
+            cap = self.dispatch_capability()
+            result = auto.auto_acquire_and_dispatch(
+                work_package, cap, department=self.department)
+            if result["auto_dispatched"]:
+                self._squad_wp_ids.add(work_package.get("id", ""))
+                self._log("auto_squad",
+                          f"自动调配小组执行 {work_package.get('id', '')}: {result['reason']}")
+                return True
+            else:
+                self._log("auto_squad_skip",
+                          f"自动调配未触发: {result['reason']}")
+                return False
+        except Exception as e:  # noqa: BLE001 容错：调配异常不阻塞部门执行
+            self._log("auto_squad_error",
+                      f"自动调配异常（不阻塞部门执行）: {e}")
+            return False
+
+    def _auto_squad_release(self, work_package_id: str):
+        """自动释放：工作包完成后归还调配的可调配小组到池。"""
+        if work_package_id not in self._squad_wp_ids:
+            return
+        try:
+            auto = self._squad_auto()
+            rel = auto.auto_release_for_wp(work_package_id)
+            if rel["released"]:
+                self._squad_wp_ids.discard(work_package_id)
+                self._log("auto_squad_release",
+                          f"工作包 {work_package_id} 完成，自动释放小组: {rel['reason']}")
+            else:
+                self._log("auto_squad_release_fail",
+                          f"工作包 {work_package_id} 自动释放失败: {rel['reason']}")
+        except Exception as e:  # noqa: BLE001 容错：释放异常不阻塞验收
+            self._log("auto_squad_release_error",
+                      f"工作包 {work_package_id} 自动释放异常（不阻塞验收）: {e}")
+
     # ---------- 派单处理 ----------
     def _on_task_assign(self, msg: Message):
         """收到调度器/经理派单：解析工作包 → 执行 → 上报验收。"""
@@ -242,6 +313,9 @@ class DepartmentAgent(BaseAgent):
         for pc in (peer_collabs or []):
             self.request_peer(wp_id, wp_label,
                               pc.get("peer", ""), need=pc.get("need", ""))
+        # 自动触发调配：工作包声明 squad_domain 时自动从小组池调配小组执行
+        self._auto_squad_dispatch(work_package)
+
         # 部门专属执行（统一头汇总组内协作产出）
         self._transition("EXECUTING")
         artifact = self._execute(work_package, content)
@@ -265,6 +339,8 @@ class DepartmentAgent(BaseAgent):
         self.done_packages.append(wp_id)
         self.biz_state = "DELIVERING"
         self._log("deliver", f"工作包 {wp_id} 执行完成，已上报 REVIEW_RESULT（{note}）")
+        # 自动释放：工作包完成后归还调配的可调配小组到池（重复调用）
+        self._auto_squad_release(wp_id)
         self._transition("IDLE")
 
     # ---------- 状态汇报 ----------
@@ -282,6 +358,8 @@ class DepartmentAgent(BaseAgent):
             # 部门统一头（小组）协作状态：组内子任务 + 跨部门协作
             "internal_subtasks": dict(self.internal_subtasks),
             "peer_collab": list(self.peer_collab),
+            # 可调配小组自动化调度状态
+            "auto_squad_wps": sorted(self._squad_wp_ids),
         }
 
     def _on_notification(self, msg: Message):

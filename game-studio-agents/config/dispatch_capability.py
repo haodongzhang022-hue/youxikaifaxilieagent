@@ -344,7 +344,9 @@ class DispatchCapability:
             squad.acquire(caller, task_id)
             newly_acquired = True
         elif squad.status == SQUAD_BUSY and squad.owner_department == caller:
-            # 已被本调配方占用（复用正在执行任务的小组），不再重复 acquire
+            # 已被本调配方占用（复用正在执行任务的小组），不再重复 acquire，
+            # 但需同步更新小组当前执行的任务 id（评审 W3），确保释放/追踪一致。
+            squad.task_id = task_id
             newly_acquired = False
         elif squad.status == SQUAD_BUSY:
             # 已被其他部门占用，不可重复调配（除非释放）

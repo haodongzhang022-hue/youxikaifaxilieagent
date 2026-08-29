@@ -385,6 +385,17 @@
       "depends_on": [],
       "cpu_cost_est": 1.0,
       "kind": "core"
+    },
+    "test_squad_auto.sh": {
+      "covers": [
+        "game-studio-agents/config/squad_auto.py",
+        "game-studio-agents/config/squad_pool.py",
+        "game-studio-agents/config/dispatch_capability.py",
+        "game-studio-agents/config/department_agents.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
     }
   }
 }
