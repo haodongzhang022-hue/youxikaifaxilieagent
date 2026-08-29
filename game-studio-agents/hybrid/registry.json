@@ -371,7 +371,8 @@
         "server/__init__.py",
         "server/core/__init__.py",
         "server/proto/__init__.py",
-        "server/tests/test_server.py"
+        "server/tests/test_server.py",
+        "server/tests/test_pitfalls_scan.py"
       ],
       "depends_on": [],
       "cpu_cost_est": 1.5,
