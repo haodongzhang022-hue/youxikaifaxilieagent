@@ -215,6 +215,45 @@ else
   report "小组池共 12 个小组" 1
 fi
 
+echo "== 3.5 各部门接入开发小组闭环（dev_team 模块扩展） =="
+out35=$($PY << 'PYBLK35'
+import sys
+sys.path.insert(0, '.')
+from message_bus import MessageBus
+from department_agents import (DesignDeptAgent, ArtDeptAgent, QaDeptAgent,
+                               PmDeptAgent, OpsDeptAgent)
+
+bus = MessageBus()
+# 各部门执行一个工作包，验证返回的 artifact 均带 dev_team（开发小组闭环结果）
+cases = [
+    (DesignDeptAgent(bus), "wp_gp", {"id": "wp_gp", "module": "gameplay", "label": "玩法", "project": "P"}, "策划线"),
+    (ArtDeptAgent(bus), "wp_art", {"id": "wp_art", "module": "art_direction", "label": "美术", "project": "P"}, "美术线"),
+    (QaDeptAgent(bus), "wp_qa", {"id": "wp_qa", "module": "testing", "label": "测试", "project": "P"}, "测试线"),
+    (PmDeptAgent(bus), "wp_pm", {"id": "wp_pm", "module": "release", "label": "发版", "project": "P"}, "项目管理"),
+    (OpsDeptAgent(bus), "wp_ops", {"id": "wp_ops", "module": "data_ops", "label": "运营", "project": "P"}, "运营线"),
+]
+all_ok = True
+for agent, wp_id, wp, dept in cases:
+    try:
+        art = agent._execute(wp, {"payload": {}})
+        dt = art.get("dev_team", {})
+        if not isinstance(dt, dict) or not dt.get("team_id") or dt.get("ok") is not True:
+            all_ok = False
+            print(f"FAIL {dept}: dev_team={dt}")
+    except Exception as e:
+        all_ok = False
+        print(f"EXC {dept}: {e}")
+print(f"ALL_DEPT_DEVTEAM: {'OK' if all_ok else 'FAIL'}")
+PYBLK35
+)
+
+if echo "$out35" | grep -q "ALL_DEPT_DEVTEAM: OK"; then
+  report "策划/美术/测试/项目/运营五部门均接入开发小组闭环 dev_team" 0
+else
+  report "策划/美术/测试/项目/运营五部门均接入开发小组闭环 dev_team" 1
+  echo "$out35" | grep -E "FAIL|EXC"
+fi
+
 echo "== 4. 与既有功能回归 =="
 reg1=$($PY squad_pool.py 2>&1)
 if echo "$reg1" | grep -q "🟢 通过"; then

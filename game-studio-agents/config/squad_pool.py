@@ -513,7 +513,7 @@ def demo():
 
     pool = create_default_squad_pool()
 
-    print("\n[1] 注册预置小组（5 个小组，分别做不一样的事）")
+    print("\n[1] 注册预置小组（12 个小组，分别做不一样的事）")
     print(f"    小组池共 {pool.count()} 个小组")
     for s in pool.list_squads():
         print(f"    {s['squad_id']} | {s['name']} | domain={s['domain']} "

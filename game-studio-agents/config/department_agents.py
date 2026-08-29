@@ -88,6 +88,7 @@ class DepartmentAgent(BaseAgent):
     def __init__(self, role_id: str, department: str, bus: MessageBus):
         super().__init__(role_id, bus)
         self.department = department          # 部门名（策划线/程序线/...）
+        self.department_key = _DEPT_KEY_BY_NAME.get(department, "program")  # 部门 key（design/program/...）
         self.done_packages: list = []         # 已执行完成的工作包 id
         self.accepted_by: Dict[str, str] = {}  # 工作包 id -> 验收人 role_id
         self.pending_rework: list = []         # 收到返工通知、待重新加工的工作包 id
@@ -390,29 +391,77 @@ class DepartmentAgent(BaseAgent):
         self._log("review", f"{wp_id} 验收结果: {'通过' if approved else '打回'} by {msg.from_role}")
 
     # ---------- 开发小组闭环（Goose 四维闭环 · 多部门通用） ----------
+    # 各非程序部门默认的开发小组角色映射（模块 → 小组内开发角色，一套循环 2 个开发）
+    # 用于把「开发小组闭环」以模块形式扩展到全部部门（通用基类扩展点）。
+    _DEPT_DEV_ROLES = {
+        # 策划线
+        "design": {
+            "gameplay": ["system_designer_1", "level_designer_1"],
+            "numeric_model": ["system_designer_1", "level_designer_1"],
+            "narrative": ["narrative_designer_1", "combat_designer_1"],
+            "combat": ["narrative_designer_1", "combat_designer_1"],
+            "full": ["system_designer_1", "level_designer_1"],
+        },
+        # 美术线
+        "art": {
+            "art_direction": ["art_director_1", "concept_artist_1"],
+            "ui_ux": ["ui_ux_1", "tech_artist_1"],
+            "audio": ["audio_designer_1", "art_director_1"],
+            "full": ["art_director_1", "concept_artist_1"],
+        },
+        # 测试线
+        "qa": {
+            "testing": ["qa_engineer_1", "auto_qa_1"],
+            "full": ["qa_engineer_1", "auto_qa_1"],
+        },
+        # 项目管理
+        "pm": {
+            "release": ["project_manager_1", "release_manager_1"],
+            "full": ["project_manager_1", "release_manager_1"],
+        },
+        # 运营线
+        "ops": {
+            "data_ops": ["data_analyst_1", "game_operator_1"],
+            "full": ["data_analyst_1", "game_operator_1"],
+        },
+    }
+
+    # 各部门默认产出类型（开发小组制品的 artifact_type）
+    _DEPT_ARTIFACT_TYPE = {
+        "design": "design_doc",
+        "art": "style_guide",
+        "qa": "test_report",
+        "pm": "release_plan",
+        "ops": "data_report",
+    }
+
     def _run_dev_team_loop(self, work_package, module, label, project,
                            dev_roles_map=None, leader=None,
-                           artifact_type="code"):
+                           artifact_type=None):
         """开发小组闭环（参考 Goose 四维闭环 + dongjiagoushi DevTeam）。
 
         通用版：所有部门均可调用。通过注入 dev_roles_map（模块→开发角色映射）、
         leader（小组长）、artifact_type（产出类型），即可适配不同部门的
-        开发小组闭环。默认回退到程序线的开发角色表。
+        开发小组闭环。未显式指定时按部门自适应默认配置（_DEPT_DEV_ROLES /
+        _DEPT_ARTIFACT_TYPE），程序线默认回退到客户端+服务端开发角色表。
 
         dev_roles_map: {module: [dev_role, ...]}，按模块指定小组内的开发角色；
         leader: 小组长 role_id（缺省取部门统一头 role_id）；
-        artifact_type: 产出类型（缺省 "code"，其他部门可为 "design_doc" 等）。
+        artifact_type: 产出类型（缺省按部门自适应，程序线为 "code"）。
         """
         if dev_roles_map is None:
-            # 默认：程序线开发角色映射（客户端+服务端，一套循环 2 个开发）
-            dev_roles_map = {
-                "client":  ["client_dev", "server_dev"],
-                "server":  ["server_dev", "engine_dev"],
-                "engine":  ["engine_dev", "client_dev"],
-                "ai_logic":["ai_programmer", "engine_dev"],
-                "tools":   ["tools_dev", "client_dev"],
-                "full":    ["client_dev", "server_dev", "engine_dev"],
-            }
+            # 默认：按部门自适应（策划/美术/测试/项目/运营），程序线回退客户端+服务端
+            dev_roles_map = self._DEPT_DEV_ROLES.get(
+                self.department_key, {
+                    "client":  ["client_dev", "server_dev"],
+                    "server":  ["server_dev", "engine_dev"],
+                    "engine":  ["engine_dev", "client_dev"],
+                    "ai_logic":["ai_programmer", "engine_dev"],
+                    "tools":   ["tools_dev", "client_dev"],
+                    "full":    ["client_dev", "server_dev", "engine_dev"],
+                })
+        if artifact_type is None:
+            artifact_type = self._DEPT_ARTIFACT_TYPE.get(self.department_key, "code")
         dev_roles = dev_roles_map.get(module, dev_roles_map.get("full", ["client_dev", "server_dev"]))
         leader = leader or self.role_id
 
@@ -580,6 +629,10 @@ class DesignDeptAgent(DepartmentAgent):
                 "content": {"note": "策划通用设计"},
             }
         self._log("execute", f"策划线产出 {module} 设计文档")
+        # 开发小组闭环（Goose 四维闭环 · 以模块形式接入本部门，通用基类扩展点）
+        module = artifact.get("module", work_package.get("module", ""))
+        dev_team = self._run_dev_team_loop(work_package, module, label, project)
+        artifact["dev_team"] = dev_team
         return artifact
 
     def _verify(self, work_package, artifact):
@@ -959,6 +1012,10 @@ class ArtDeptAgent(DepartmentAgent):
             artifact = {"module": module, "label": label, "project": project,
                         "artifact_type": "art_asset", "content": {"note": "美术通用产出"}}
         self._log("execute", f"美术线产出 {module} 美术资源")
+        # 开发小组闭环（Goose 四维闭环 · 以模块形式接入本部门，通用基类扩展点）
+        module = artifact.get("module", work_package.get("module", ""))
+        dev_team = self._run_dev_team_loop(work_package, module, label, project)
+        artifact["dev_team"] = dev_team
         return artifact
 
     def _verify(self, work_package, artifact):
@@ -1004,6 +1061,10 @@ class QaDeptAgent(DepartmentAgent):
             },
         }
         self._log("execute", f"测试线对上游产出执行质量验证")
+        # 开发小组闭环（Goose 四维闭环 · 以模块形式接入本部门，通用基类扩展点）
+        module = artifact.get("module", work_package.get("module", ""))
+        dev_team = self._run_dev_team_loop(work_package, module, label, project)
+        artifact["dev_team"] = dev_team
         return artifact
 
     def _verify(self, work_package, artifact):
@@ -1073,6 +1134,10 @@ class PmDeptAgent(DepartmentAgent):
             },
         }
         self._log("execute", f"项目管理制定发版计划 + 发版门禁验收（{gate['go_no_go']}）")
+        # 开发小组闭环（Goose 四维闭环 · 以模块形式接入本部门，通用基类扩展点）
+        module = artifact.get("module", work_package.get("module", ""))
+        dev_team = self._run_dev_team_loop(work_package, module, label, project)
+        artifact["dev_team"] = dev_team
         return artifact
 
     def _verify(self, work_package, artifact):
@@ -1196,6 +1261,10 @@ class OpsDeptAgent(DepartmentAgent):
         self._log("execute",
                  f"运营线产出数据洞察 + 市场生态位诊断"
                  + (" + 框架升级记录沉淀" if _is_upgrade_topic else ""))
+        # 开发小组闭环（Goose 四维闭环 · 以模块形式接入本部门，通用基类扩展点）
+        module = artifact.get("module", work_package.get("module", ""))
+        dev_team = self._run_dev_team_loop(work_package, module, label, project)
+        artifact["dev_team"] = dev_team
         return artifact
 
     def _verify(self, work_package, artifact):
