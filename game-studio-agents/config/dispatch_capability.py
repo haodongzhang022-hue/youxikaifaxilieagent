@@ -423,7 +423,14 @@ class DispatchCapability:
                 reason=acquire_result.get("reason", "无匹配可调配小组"),
             )
         squad = acquire_result["squad"]
-        return self.dispatch_to_squad(squad.squad_id, work_package, department)
+        result = self.dispatch_to_squad(squad.squad_id, work_package, department)
+        # by_domain 是本方法自行 acquire 调配的小组（进入 dispatch_to_squad 时已是
+        # BUSY 且 owner==本调配方 → newly_acquired=False，内层不会释放）。
+        # 派发失败时主动归还本次调配的小组，避免小组永久停留 BUSY 造成资源泄漏，
+        # 导致该领域唯一空闲小组被占死、后续 by_domain 派发一律返回 ALL_BUSY。
+        if not result.dispatched:
+            self.squad_pool.release(squad.squad_id)
+        return result
 
     def release_squad(self, squad_id: str) -> Dict[str, Any]:
         """释放小组回池（任务完成后归还，可被重复调用）。"""

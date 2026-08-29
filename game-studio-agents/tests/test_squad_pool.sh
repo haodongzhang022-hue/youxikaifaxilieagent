@@ -249,6 +249,46 @@ else
   echo "$out2b"
 fi
 
+echo "== 2c. by_domain 派发失败资源泄漏回归（修复后释放回池） =="
+out2c=$($PY << 'PYBLK2C'
+from message_bus import MessageBus
+from dispatch_capability import DispatchCapability
+from squad_pool import create_default_squad_pool, SQUAD_IDLE
+
+bus = MessageBus()
+pool = create_default_squad_pool()
+cap = DispatchCapability("producer", bus=bus, squad_pool=pool)
+
+# 不注册 leader 制造 by_domain 派发失败
+wp = {"id": "wp_leak_001", "label": "客户端 UI", "module": "client"}
+r = cap.dispatch_to_squad_by_domain("client_dev", wp, "程序线")
+
+# 派发失败后小组必须释放回 IDLE（不再泄漏 BUSY）
+client_squads = pool.find(domain="client_dev")
+res = {}
+res["fail_dispatched"] = (not r.dispatched)
+res["released_to_idle"] = (all(s.status == SQUAD_IDLE for s in client_squads))
+
+# 释放后可再次成功调配（资源未被占死）
+bus.register("client_lead")
+bus.on("client_lead", lambda m: None)
+wp2 = {"id": "wp_leak_002", "label": "客户端 UI v2", "module": "client"}
+r2 = cap.dispatch_to_squad_by_domain("client_dev", wp2, "程序线")
+res["retry_ok"] = r2.dispatched
+
+for k, v in res.items():
+    print(f"  {k}: {'OK' if v else 'FAIL'}")
+print("ALL_PASS" if all(res.values()) else "SOME_FAIL")
+PYBLK2C
+)
+if echo "$out2c" | grep -q "ALL_PASS"; then
+  report "by_domain 派发失败小组释放回池（资源不泄漏）" 0
+  echo "$out2c"
+else
+  report "by_domain 派发失败小组释放回池（资源不泄漏）" 1
+  echo "$out2c"
+fi
+
 echo "== 3. SquadPool 文档 =="
 if [ -f "../docs/squad-pool.md" ]; then
   report "文档存在（docs/squad-pool.md）" 0
