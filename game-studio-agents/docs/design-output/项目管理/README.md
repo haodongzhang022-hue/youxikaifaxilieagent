@@ -49,3 +49,11 @@
 | 上游消费 | 程序线 | 消费 PR #87 wp_engine_adaptation_integration 合入状态 | 引擎适配集成合入后 |
 | 下游解锁 | 运营线 | wp_review_ops + wp_handler_ops 对外同步 | PM 验收通过后 |
 | 前置依赖 | 程序线 | PR #87 wp_engine_adaptation_integration 合入 | 解锁 PM 工作包前置条件 |
+
+## PR #113 下游解锁 · 本轮承接记录
+
+| 工作包 | 状态 | 说明 |
+|--------|------|------|
+| wp_release_stage_gate（stage_gate 纳入发版门禁） | ✅ DONE | PR #113 合并后游戏向经理派发，把 stage_gate 阶段边界审查纳入发版门禁 + 里程碑排布 M1-M5，经 @分工 拆派 project_manager + release_manager 完成 |
+
+详细见：`PR113_stage_gate/承接报告_wp_release_stage_gate.md`

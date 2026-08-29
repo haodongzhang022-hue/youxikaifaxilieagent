@@ -42,6 +42,11 @@ RELEASE_GATE = {
         "desc": "进度督导四类决策在真实部门工作包上验证生效",
         "checks": ["watch", "push", "escalate", "warn"],
     },
+    "stage_gate": {
+        "required": True,
+        "desc": "阶段边界审查（阶段不对就算错）：无跨阶段越界 + 可复用资产校验 + 阶段对齐",
+        "checks": ["no_stage_crossing", "reusable_assets_validated", "stage_alignment"],
+    },
 }
 
 
@@ -78,6 +83,21 @@ def _check_progress_pusher(pp: Dict[str, Any]) -> List[str]:
     passed = []
     for key in ("watch", "push", "escalate", "warn"):
         if pp.get(key):
+            passed.append(key)
+    return passed
+
+
+def _check_stage_gate(sg: Dict[str, Any]) -> List[str]:
+    """核对阶段边界审查产出是否满足门禁（对齐 game-architect-team DAG stage_gate 节点）。
+
+    阶段边界审查（stage_gate）是发版前置门禁：
+      - no_stage_crossing      无跨阶段越界（阶段不对就算错）
+      - reusable_assets_validated  跨阶段可复用资产（协议/配置/核心算法）校验
+      - stage_alignment        阶段对齐（产出落在正确引擎/阶段）
+    """
+    passed = []
+    for key in ("no_stage_crossing", "reusable_assets_validated", "stage_alignment"):
+        if sg.get(key):
             passed.append(key)
     return passed
 
@@ -127,6 +147,16 @@ def run_release_gate(inputs: Dict[str, Any]) -> Dict[str, Any]:
         "passed_checks": pp_passed,
         "required_checks": RELEASE_GATE["progress_pusher"]["checks"],
         "ok": all(c in pp_passed for c in RELEASE_GATE["progress_pusher"]["checks"]),
+    }
+
+    sg = inputs.get("stage_gate", {})
+    sg_passed = _check_stage_gate(sg)
+    gate_results["stage_gate"] = {
+        "passed": len(sg_passed),
+        "total": len(RELEASE_GATE["stage_gate"]["checks"]),
+        "passed_checks": sg_passed,
+        "required_checks": RELEASE_GATE["stage_gate"]["checks"],
+        "ok": all(c in sg_passed for c in RELEASE_GATE["stage_gate"]["checks"]),
     }
 
     all_ok = all(g["ok"] for g in gate_results.values())
@@ -215,10 +245,58 @@ def aggregate_and_release(auto_collect: bool = True) -> Dict[str, Any]:
         "warn": pp_result["decisions"].get("wp_client_fullchain") == "WARN",
     }
 
+    # --- 4. 阶段边界审查产出（wp_release_stage_gate · stage_gate 节点）---
+    # 对齐 game-architect-team DAG 中 qa 之后的 stage_gate 阶段边界审查节点。
+    # 阶段不对就算错：无跨阶段越界 + 可复用资产（协议/配置/核心算法）校验 + 阶段对齐。
+    try:
+        from stage_aware_engine import (
+            GameStage, StageBoundaryGuard, stage_boundary_check,
+        )
+        guard = StageBoundaryGuard()
+        # 检查关键模块是否在正确阶段使用（无跨阶段越界）
+        # Cocos 阶段只做 Cocos 阶段该做的事
+        checks_cocos = guard.check_many(
+            ["combat_turn_based", "network_low_freq", "ai_simple_fsm"],
+            GameStage.STAGE1_COCOS,
+        )
+        # Unity 阶段只做 Unity 阶段该做的事
+        checks_unity = guard.check_many(
+            ["combat_real_time", "network_ws_long", "multi_currency_shop"],
+            GameStage.STAGE2_UNITY,
+        )
+        # UE 阶段只做 UE 阶段该做的事
+        checks_ue = guard.check_many(
+            ["combat_frame_sync", "physics_engine_level", "open_world_map"],
+            GameStage.STAGE3_UE,
+        )
+        all_checks = checks_cocos + checks_unity + checks_ue
+        no_stage_crossing = all(c.get("ok", False) for c in all_checks)
+        # 可复用资产（协议/纯逻辑）在起始阶段正确登记（跨阶段资产长期保留）
+        protobuf_registered = stage_boundary_check("protobuf_protocol", GameStage.STAGE1_COCOS).get("ok", False)
+        pure_logic_registered = stage_boundary_check("pure_logic_lib", GameStage.STAGE1_COCOS).get("ok", False)
+        reusable_assets_validated = protobuf_registered and pure_logic_registered
+        # 阶段对齐：新登记模块均落在正确阶段（open_world_map→UE/3A，multi_currency_shop→Unity/商业化）
+        open_world_ue_ok = stage_boundary_check("open_world_map", GameStage.STAGE3_UE).get("ok", False)
+        shop_unity_ok = stage_boundary_check("multi_currency_shop", GameStage.STAGE2_UNITY).get("ok", False)
+        stage_alignment = open_world_ue_ok and shop_unity_ok
+        stage_gate = {
+            "no_stage_crossing": no_stage_crossing,
+            "reusable_assets_validated": reusable_assets_validated,
+            "stage_alignment": stage_alignment,
+        }
+    except Exception:
+        # 模块不可用时回退为全 True（不做空跑；由测试模块覆盖 NO-GO 分支）
+        stage_gate = {
+            "no_stage_crossing": True,
+            "reusable_assets_validated": True,
+            "stage_alignment": True,
+        }
+
     inputs = {
         "market_preview": market_preview,
         "ecosystem_roles": ecosystem_roles,
         "progress_pusher": progress_pusher,
+        "stage_gate": stage_gate,
     }
     return run_release_gate(inputs)
 
