@@ -80,6 +80,33 @@ ARCHITECTURE_MODULES = {
 }
 
 
+# 架构模块 → 可调配小组领域（squad_domain）映射
+# 经理拆包时自动为工作包标注 squad_domain，使部门 Agent 收到工作包后
+# 能自动从小组池调配对应领域的小组执行（SquadAutoScheduler 自动触发闭环）。
+MODULE_SQUAD_DOMAIN = {
+    # 策划线
+    "gameplay":        "gameplay_design",
+    "numeric_model":   "gameplay_design",
+    "narrative":       "narrative_design",
+    "combat":          "narrative_design",
+    # 程序线
+    "client":          "client_dev",
+    "server":          "server_dev",
+    "engine":          "engine_dev",
+    "ai_logic":        "ai_dev",
+    # 美术线
+    "art_direction":   "art_direction",
+    "ui_ux":           "ui_design",
+    "audio":           "art_direction",
+    # 测试线
+    "testing":         "qa_testing",
+    # 项目管理
+    "release":         "release_pm",
+    # 运营线
+    "data_ops":        "data_ops",
+}
+
+
 # ============================================================
 # 游戏向经理状态机（角色 manager 编排）
 # ============================================================
@@ -456,7 +483,11 @@ class GameProducerAgent(BaseAgent):
         return result
 
     def _split_work_packages(self, decomposed: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """拆分工作包：为每个部门模块生成独立工作包，并建立部门间依赖。"""
+        """拆分工作包：为每个部门模块生成独立工作包，并建立部门间依赖。
+
+        v1.1 增强：拆包时**自动标注 squad_domain**（依据 MODULE_SQUAD_DOMAIN 映射），
+        使部门 Agent 收到工作包后能自动从小组池调配对应领域的小组执行。
+        """
         # 依赖规则：程序需要策划先给设计，QA 需要程序/美术产出，发版依赖 QA
         dept_order = {"design": 0, "program": 1, "art": 1, "qa": 2, "pm": 3, "ops": 2}
         wps = []
@@ -467,14 +498,17 @@ class GameProducerAgent(BaseAgent):
             for prev in decomposed[:i]:
                 if dept_order.get(prev["department"], 0) < dept_order.get(dept, 0):
                     deps.append(f"wp_{prev['module']}")
+            module_key = mod["module"]
             wps.append({
-                "id": f"wp_{mod['module']}",
-                "module": mod["module"],
+                "id": f"wp_{module_key}",
+                "module": module_key,
                 "label": mod["label"],
                 "department": dept,
                 "department_name": self.departments[dept]["name"],
                 "deps": deps,
                 "status": "pending",
+                # 自动标注可调配小组领域（经理拆包即自动，无需手写标记）
+                "squad_domain": MODULE_SQUAD_DOMAIN.get(module_key, ""),
             })
         return wps
 
@@ -824,8 +858,9 @@ def demo():
 
     print("\n拆分出的部门工作包:")
     for wp in manager.work_packages:
+        squad_note = f"squad={wp.get('squad_domain', '-')}"
         print(f"  - {wp['id']:<16} {wp['label']:<14} → {wp['department_name']:<6} "
-              f"主责={wp['owner']:<16} 依赖={wp['deps']}")
+              f"主责={wp['owner']:<16} {squad_note:<28} 依赖={wp['deps']}")
 
     print("\n调度队列任务（含部门间依赖）:")
     for t in manager.scheduler.queue.tasks.values():

@@ -123,3 +123,44 @@ bash tests/test_squad_auto.sh
 4. 未声明 squad_domain 不触发
 5. 无可用小组不阻塞部门执行
 6. 与既有 SquadPool / DispatchCapability 回归
+
+---
+
+## 六、经理拆包自动标注（v1.1 增强）
+
+**问题**：工作包需要手动声明 `squad_domain` 才能触发自动调配，增加了手写标记负担。
+
+**增强**：`game_producer_agent.py` 的 `_split_work_packages()` 在拆包时**自动标注** `squad_domain`。
+
+### MODULE_SQUAD_DOMAIN 映射
+
+| 架构模块 | 部门 | squad_domain |
+|---|---|---|
+| gameplay / numeric_model | 策划线 | gameplay_design |
+| narrative / combat | 策划线 | narrative_design |
+| client | 程序线 | client_dev |
+| server | 程序线 | server_dev |
+| engine | 程序线 | engine_dev |
+| ai_logic | 程序线 | ai_dev |
+| art_direction / audio | 美术线 | art_direction |
+| ui_ux | 美术线 | ui_design |
+| testing | 测试线 | qa_testing |
+| release | 项目管理 | release_pm |
+| data_ops | 运营线 | data_ops |
+
+**效果**：经理拆包后，所有工作包自动携带 `squad_domain`，部门 Agent 收到后自动从小组池调配对应领域小组执行，无需手写标记。
+
+### 跨部门小组池
+
+小组池从 5 个扩展到 12 个，覆盖全部六部门：
+
+```
+程序线: client_dev / server_dev / ai_dev / engine_dev / tools_dev
+策划线: gameplay_design / narrative_design
+美术线: art_direction / ui_design
+测试线: qa_testing
+项目管理: release_pm
+运营线: data_ops
+```
+
+**测试**：`bash tests/test_squad_annotation.sh`
