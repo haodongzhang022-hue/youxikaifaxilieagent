@@ -426,6 +426,60 @@ def create_default_squad_pool() -> SquadPool:
         leader="tools_lead",
         members=["tools_dev_1", "tools_dev_2"],
     )
+    # ---- 策划线可调配小组 ----
+    pool.create_squad(
+        name="玩法设计F组",
+        domain="gameplay_design",
+        skills=["gameplay", "system", "level", "loop"],
+        leader="gameplay_lead",
+        members=["system_designer_1", "level_designer_1"],
+    )
+    pool.create_squad(
+        name="叙事设计G组",
+        domain="narrative_design",
+        skills=["narrative", "story", "lore", "world"],
+        leader="narrative_lead",
+        members=["narrative_designer_1", "combat_designer_1"],
+    )
+    # ---- 美术线可调配小组 ----
+    pool.create_squad(
+        name="美术视觉H组",
+        domain="art_direction",
+        skills=["art", "style", "concept", "visual"],
+        leader="art_lead",
+        members=["art_director_1", "concept_artist_1"],
+    )
+    pool.create_squad(
+        name="UI/UX 设计I组",
+        domain="ui_design",
+        skills=["ui", "ux", "interaction", "interface"],
+        leader="ui_lead",
+        members=["ui_ux_1", "tech_artist_1"],
+    )
+    # ---- 测试线可调配小组 ----
+    pool.create_squad(
+        name="质量保障J组",
+        domain="qa_testing",
+        skills=["qa", "testing", "quality", "regression"],
+        leader="qa_lead",
+        members=["qa_engineer_1", "auto_qa_1"],
+    )
+    # ---- 项目管理可调配小组 ----
+    pool.create_squad(
+        name="项目管理K组",
+        domain="release_pm",
+        skills=["pm", "release", "milestone", "planning"],
+        leader="pm_lead",
+        members=["project_manager_1", "release_manager_1"],
+    )
+    # ---- 运营线可调配小组 ----
+    pool.create_squad(
+        name="数据运营L组",
+        domain="data_ops",
+        skills=["data", "analytics", "operations", "growth"],
+        leader="ops_lead",
+        members=["data_analyst_1", "game_operator_1"],
+    )
     return pool
 
 
@@ -505,15 +559,15 @@ def demo():
           f"| 忙碌={summary['busy']} | 累计调配={summary['total_assignments']}")
 
     print("\n[7] 未注册领域查询")
-    r = pool.acquire(domain="narrative_design", department="策划线")
-    print(f"    调配 narrative_design: ok={r['ok']} reason={r['reason']}")
+    r = pool.acquire(domain="ghost_specialty", department="策划线")
+    print(f"    调配 ghost_specialty: ok={r['ok']} reason={r['reason']}")
 
     # 断言核心能力
-    ok = (pool.count() == 5
+    ok = (pool.count() == 12
           and r1["ok"] and r2["ok"] and ai_squad["ok"]
           and engine_squad["ok"] and tools_squad["ok"]
           and not r["ok"]
-          and summary["total"] == 5 and summary["idle"] == 5)
+          and summary["total"] == 12 and summary["idle"] == 12)
     print(f"\n结果: {'🟢 通过' if ok else '🔴 未通过'}")
     return 0 if ok else 1
 

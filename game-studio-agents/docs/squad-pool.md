@@ -97,7 +97,9 @@ cap.squad_summary()
 
 ## 预置小组
 
-`create_default_squad_pool()` 提供 5 个常见可调配小组：
+`create_default_squad_pool()` 提供 **12 个可调配小组**，覆盖全部六部门：
+
+### 程序线小组
 
 | 小组 | domain | 技能 |
 |---|---|---|
@@ -106,3 +108,25 @@ cap.squad_summary()
 | AI 逻辑C组 | ai_dev | ai, behavior_tree, npc, adaptive |
 | 引擎适配D组 | engine_dev | engine, cocos, unreal, render |
 | 工具链E组 | tools_dev | tools, pipeline, build, scaffold |
+
+### 策划线小组
+
+| 小组 | domain | 技能 |
+|---|---|---|
+| 玩法设计F组 | gameplay_design | gameplay, system, level, loop |
+| 叙事设计G组 | narrative_design | narrative, story, lore, world |
+
+### 美术线小组
+
+| 小组 | domain | 技能 |
+|---|---|---|
+| 美术视觉H组 | art_direction | art, style, concept, visual |
+| UI/UX 设计I组 | ui_design | ui, ux, interaction, interface |
+
+### 测试线 / 项目管理 / 运营线
+
+| 小组 | domain | 技能 |
+|---|---|---|
+| 质量保障J组 | qa_testing | qa, testing, quality, regression |
+| 项目管理K组 | release_pm | pm, release, milestone, planning |
+| 数据运营L组 | data_ops | data, analytics, operations, growth |

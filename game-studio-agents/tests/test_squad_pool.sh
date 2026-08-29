@@ -26,11 +26,11 @@ report() {
 echo "== 1. SquadPool 独立模块演示 =="
 out=$($PY squad_pool.py 2>&1)
 
-# 1. 预置 5 个小组
-if echo "$out" | grep -q "小组池共 5 个小组"; then
-  report "预置 5 个可调配小组" 0
+# 1. 预置 12 个小组（覆盖全部六部门）
+if echo "$out" | grep -q "小组池共 12 个小组"; then
+  report "预置 12 个可调配小组（覆盖全部部门）" 0
 else
-  report "预置 5 个可调配小组" 1
+  report "预置 12 个可调配小组（覆盖全部部门）" 1
 fi
 
 # 2. 程序线调配成功
@@ -63,7 +63,7 @@ else
 fi
 
 # 6. 未注册领域拒绝
-if echo "$out" | grep -q "调配 narrative_design: ok=False"; then
+if echo "$out" | grep -q "调配 ghost_specialty: ok=False"; then
   report "未注册领域查询被拒绝" 0
 else
   report "未注册领域查询被拒绝" 1

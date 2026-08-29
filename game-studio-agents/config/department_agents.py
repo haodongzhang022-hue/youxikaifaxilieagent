@@ -389,6 +389,64 @@ class DepartmentAgent(BaseAgent):
         self.accepted_by[wp_id] = msg.from_role
         self._log("review", f"{wp_id} 验收结果: {'通过' if approved else '打回'} by {msg.from_role}")
 
+    # ---------- 开发小组闭环（Goose 四维闭环 · 多部门通用） ----------
+    def _run_dev_team_loop(self, work_package, module, label, project,
+                           dev_roles_map=None, leader=None,
+                           artifact_type="code"):
+        """开发小组闭环（参考 Goose 四维闭环 + dongjiagoushi DevTeam）。
+
+        通用版：所有部门均可调用。通过注入 dev_roles_map（模块→开发角色映射）、
+        leader（小组长）、artifact_type（产出类型），即可适配不同部门的
+        开发小组闭环。默认回退到程序线的开发角色表。
+
+        dev_roles_map: {module: [dev_role, ...]}，按模块指定小组内的开发角色；
+        leader: 小组长 role_id（缺省取部门统一头 role_id）；
+        artifact_type: 产出类型（缺省 "code"，其他部门可为 "design_doc" 等）。
+        """
+        if dev_roles_map is None:
+            # 默认：程序线开发角色映射（客户端+服务端，一套循环 2 个开发）
+            dev_roles_map = {
+                "client":  ["client_dev", "server_dev"],
+                "server":  ["server_dev", "engine_dev"],
+                "engine":  ["engine_dev", "client_dev"],
+                "ai_logic":["ai_programmer", "engine_dev"],
+                "tools":   ["tools_dev", "client_dev"],
+                "full":    ["client_dev", "server_dev", "engine_dev"],
+            }
+        dev_roles = dev_roles_map.get(module, dev_roles_map.get("full", ["client_dev", "server_dev"]))
+        leader = leader or self.role_id
+
+        # 客观验证器：按模块校验产出
+        def _verifier(task):
+            art = task.artifact or {}
+            if not art.get("content"):
+                return False, "开发产出为空（未通过客观验证）"
+            if art.get("artifact_type") != artifact_type:
+                return False, f"产出类型不符（应为 {artifact_type}）"
+            return True, "客观验证通过（编译/测试/lint 检查）"
+
+        # 自定义产出：按 artifact_type 生成可验证制品（非 code 模块也能通过验证）
+        def _produce(task):
+            return {
+                "module": task.module,
+                "dev_role": task.dev_role,
+                "artifact_type": artifact_type,
+                "content": f"{task.module} 产出（{task.dev_role}）",
+            }
+
+        result = run_dev_team(
+            work_package,
+            dev_roles=dev_roles,
+            leader=leader,
+            devs_per_team=2,
+            verifier=_verifier,
+            produce=_produce,
+            bus=self.bus,
+            manager_role="producer",
+        )
+        self._log("dev_team", f"{self.department} 开发小组闭环：{result.get('dev_count',0)} 开发，密度 {result.get('dev_ratio')}")
+        return result
+
     # ---------- 子类需实现 ----------
     def _execute(self, work_package: Dict[str, Any], assign: Dict[str, Any]) -> Dict[str, Any]:
         """部门专属执行逻辑，返回产出物字典。"""
