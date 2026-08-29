@@ -187,7 +187,7 @@ pipeline:
     - {id: "art",    role: "游戏·美术·主管", desc: "原画/3D/动画/特效/UI/TA", depends_on: ["design"]}
     - {id: "qa",     role: "游戏·测试·主管", desc: "用例/执行/回归/性能/放行门禁", depends_on: ["program", "art"]}
     - {id: "stage_gate", role: "游戏·架构·总师助理", desc: "阶段边界审查(阶段不对就算错/越界打回纠偏)/ 跨阶段可复用资产(协议/配置/核心算法)校验", depends_on: ["qa"]}
-    - {id: "release",role: "游戏·发行·主管", desc: "版本/发布/本地化/社区", depends_on: ["qa"]}
+    - {id: "release",role: "游戏·发行·主管", desc: "版本/发布/本地化/社区", depends_on: ["qa", "stage_gate"]}
 
 # ------------------------------------------------------------
 # 条件触发映射（三层触发）

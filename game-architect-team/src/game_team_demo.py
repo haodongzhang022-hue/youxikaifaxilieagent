@@ -39,7 +39,7 @@ class GameArchitect(GameRole):
             "数值": "成长曲线v1",
             "关卡": "主线1-5",
             "经济": "金币/材料循环v1",
-            "引擎": "Godot 4",
+            "引擎": "Cocos Creator",
             "主线": "背包→装备→战斗→任务",
         }
         # 写入共享记忆（content 二次整理）
@@ -119,31 +119,53 @@ class GameQA(GameRole):
 class GameChiefAssistant(GameRole):
     """游戏·架构·总师助理：引擎阶段纠偏专项 / 改错改框架 / 阶段边界检查（阶段不对就算错）
     参考 dongjiagoushi 架构·总师助理：专角色专用，保总师主线上下文纯净。"""
-    def act(self, task: str, engine_stage: str = "cocos") -> dict:
-        # 阶段边界检查：发现当前阶段引擎能力之外的越界实现 → 标记阶段越界并纠偏
+    def act(self, task: str, engine_stage: str = "cocos",
+            implementation_review: dict | None = None) -> dict:
+        # 阶段边界检查：扫描实现方案，若包含当前阶段引擎能力之外的越界项 → 标记阶段越界并纠偏。
+        # 不同引擎阶段的允许/越界项不同（阶段不对就算错）。
         stage_boundary = {
             "cocos": {"allowed": ["UI", "本地存档", "轻量登录", "简单排行榜"],
                       "forbidden": ["帧同步战斗校验", "大规模同屏物理", "C++级内存池"]},
             "unity": {"allowed": ["复杂UI", "AssetBundle热更", "高并发WebSocket", "纯C#核心库"],
                       "forbidden": ["每帧子弹轨迹计算(Go)", "极致底层C++优化"]},
             "ue":    {"allowed": ["C++渲染管线", "同源C++战斗库", "Go网关高并发"],
-                      "forbidden": ["草台班子式无状态弱约束架构"]},
+                      "forbidden": ["每帧粒子特效物理模拟", "C++内存池手工管理", "全局实时光照"]},
         }
         boundary = stage_boundary.get(engine_stage, stage_boundary["cocos"])
-        # 示例：检测到一个越界项
-        violation = "帧同步战斗校验（本应在unity/ue阶段，cocos阶段强行实现=过度设计）"
+        forbidden = boundary["forbidden"]
+
+        # 真实检测：对实现方案逐项比对当前阶段的越界项（B2/B3：violation 随 stage 动态生成）
+        # 未传入实现方案时，用演示样本做一次真实比对，避免硬编码假检测。
+        review = implementation_review if implementation_review is not None else {
+            "涉及技术": ["帧同步战斗校验", "简单排行榜"]
+        }
+        reviewed = review.get("涉及技术") or review.get("实现项") or []
+        detected = [item for item in reviewed if item in forbidden]
+
+        if detected:
+            violation = "、".join(f"{item}(本应在{engine_stage}阶段之后才做，{engine_stage}阶段强行实现=过度设计)"
+                                  for item in detected)
+            qualitative = "阶段越界(阶段不对就算错)"
+            action = ("[回转] 打回实现，标记[阶段越界]，当前阶段用轻量方案实现，"
+                      f"越界项({detected})推迟到后续阶段再落地")
+            print(f"[游戏·架构·总师助理](引擎阶段纠偏) 检测到阶段越界({detected})，打回纠偏")
+        else:
+            violation = "无"
+            qualitative = "合规(未越界)"
+            action = "通过：当前实现未超出本阶段边界"
+            print(f"[游戏·架构·总师助理](引擎阶段审查) 当前实现合规，未检测到阶段越界")
+
         result = {
             "引擎阶段": engine_stage,
             "阶段边界(允许)": boundary["allowed"],
-            "阶段越界(禁止)": boundary["forbidden"],
+            "阶段越界(禁止)": forbidden,
             "检测到越界": violation,
-            "定性": "阶段越界(阶段不对就算错)",
-            "处置": "[回转] 打回实现，标记[阶段越界]，在cocos阶段用轻量同步，战斗校验推迟到unity/ue",
+            "定性": qualitative,
+            "处置": action,
             "目标进度尺": {"goal_total": "该阶段验收", "current": "已收敛", "distance": "待进入下一阶段"},
         }
         self.memory.add_record(self.space, "task",
                                {"类型": "阶段边界审查", "结果": result}, self.name)
-        print(f"[游戏·架构·总师助理](引擎阶段纠偏) 检测到阶段越界，打回纠偏")
         return result
 
 
@@ -182,7 +204,9 @@ def main():
 
     print("\n--- ③.5 阶段边界审查（阶段不对就算错）→ 引入 游戏·架构·总师助理 ---")
     chief_assistant = GameChiefAssistant("游戏·架构·总师助理", space, memory)
-    chief_assistant.act("阶段边界审查", engine_stage="cocos")
+    chief_assistant.act(
+        "阶段边界审查", engine_stage="cocos",
+        implementation_review={"涉及技术": ["帧同步战斗校验", "简单排行榜"]})  # 演示真实检测
 
     print("\n--- ④ 共享记忆查询（relevance×weight）---")
     print("查询'战斗'共享记忆：")
