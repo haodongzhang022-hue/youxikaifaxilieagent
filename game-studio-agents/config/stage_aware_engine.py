@@ -279,6 +279,8 @@ class StageBoundaryGuard:
         "render_3d_advanced": GameStage.STAGE3_UE,
         "protobuf_protocol": GameStage.STAGE1_COCOS,  # 协议先行：所有阶段
         "pure_logic_lib": GameStage.STAGE1_COCOS,      # 纯逻辑库：所有阶段
+        "open_world_map": GameStage.STAGE3_UE,         # 开放大世界：UE/3A 阶段
+        "multi_currency_shop": GameStage.STAGE2_UNITY, # 多货币商城：Unity/商业化阶段
     }
 
     def __init__(self):

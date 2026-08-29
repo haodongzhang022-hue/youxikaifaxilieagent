@@ -143,12 +143,22 @@ ok_unity = guard.check('combat_real_time', GameStage.STAGE2_UNITY)
 over_unity = guard.check('ai_behavior_tree', GameStage.STAGE2_UNITY)
 # 未登记模块
 unknown = guard.check('unknown_module', GameStage.STAGE1_COCOS)
+# Issue112 新增：open_world_map（开放大世界）→ UE 阶段
+over_world = guard.check('open_world_map', GameStage.STAGE1_COCOS)
+ok_world_ue = guard.check('open_world_map', GameStage.STAGE3_UE)
+# Issue112 新增：multi_currency_shop（多货币商城）→ Unity 阶段
+over_multi_currency = guard.check('multi_currency_shop', GameStage.STAGE1_COCOS)
+ok_multi_unity = guard.check('multi_currency_shop', GameStage.STAGE2_UNITY)
 
 print(f"OK_COCOS={ok_cocos['ok']}|{ok_cocos['action']}")
 print(f"OVER_COCOS={over_cocos['ok']}|{over_cocos['action']}|{over_cocos['reason']}")
 print(f"OK_UNITY={ok_unity['ok']}|{ok_unity['action']}")
 print(f"OVER_UNITY={over_unity['ok']}|{over_unity['action']}")
 print(f"UNKNOWN={unknown['ok']}|{unknown['action']}")
+print(f"OVER_WORLD={over_world['ok']}|{over_world['action']}")
+print(f"OK_WORLD_UE={ok_world_ue['ok']}|{ok_world_ue['action']}")
+print(f"OVER_MULTI_CURRENCY={over_multi_currency['ok']}|{over_multi_currency['action']}")
+print(f"OK_MULTI_UNITY={ok_multi_unity['ok']}|{ok_multi_unity['action']}")
 print(f"VIOLATIONS={len(guard.violations())}")
 PYEOF
 )
@@ -188,11 +198,39 @@ else
   report "未登记模块标记审查" 1
 fi
 
-# 14. 越界计数
-if echo "$out2" | grep -q "VIOLATIONS=2"; then
-  report "越界计数正确(2项)" 0
+# 14. open_world_map 越界检测（开放大世界属 UE 阶段）
+if echo "$out2" | grep -q "OVER_WORLD=False|remove_or_defer"; then
+  report "open_world_map 在 Cocos 阶段越界检测正确" 0
 else
-  report "越界计数正确(2项)" 1
+  report "open_world_map 在 Cocos 阶段越界检测正确" 1
+fi
+
+# 15. multi_currency_shop 越界检测（多货币商城属 Unity 阶段）
+if echo "$out2" | grep -q "OVER_MULTI_CURRENCY=False|remove_or_defer"; then
+  report "multi_currency_shop 在 Cocos 阶段越界检测正确" 0
+else
+  report "multi_currency_shop 在 Cocos 阶段越界检测正确" 1
+fi
+
+# 16. open_world_map 在 UE 阶段合规
+if echo "$out2" | grep -q "OK_WORLD_UE=True|ok"; then
+  report "open_world_map 在 UE 阶段合规" 0
+else
+  report "open_world_map 在 UE 阶段合规" 1
+fi
+
+# 17. multi_currency_shop 在 Unity 阶段合规
+if echo "$out2" | grep -q "OK_MULTI_UNITY=True|ok"; then
+  report "multi_currency_shop 在 Unity 阶段合规" 0
+else
+  report "multi_currency_shop 在 Unity 阶段合规" 1
+fi
+
+# 18. 越界计数（原有2项 + 新增加2项 = 4项）
+if echo "$out2" | grep -q "VIOLATIONS=4"; then
+  report "越界计数正确(4项)" 0
+else
+  report "越界计数正确(4项)" 1
 fi
 
 echo ""

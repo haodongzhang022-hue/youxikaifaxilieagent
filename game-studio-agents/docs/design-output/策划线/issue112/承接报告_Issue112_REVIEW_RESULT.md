@@ -26,7 +26,7 @@
 
 ## 四、跨部门协作记录（request_peer）
 策划线为流水线**根节点**，产出不依赖其他部门，无需发起跨部门协作。下游依赖由游戏向经理验收通过后级联解锁：
-- 下游解锁：程序线承接 wp_engine/wp_server/wp_client（依赖 wp_numeric_model）
+- 下游解锁：程序线承接 wp_engine/wp_server/wp_client（依赖 wp_gameplay + wp_numeric_model）
 - 下游解锁：美术线按四阶段边界做表现层设计
 - 下游解锁：测试线纯算法跨语言单测回归基线
 
