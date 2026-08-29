@@ -109,3 +109,32 @@ PR #89 修复引擎桥接层集成 P1 缺陷（`EngineEventBridge.emit()` 双重
 
 **✅ 通过** — 引擎桥接层真机接入对外部署（wp_engine_ops D2 阶段）已完成文档化与沟通策略梳理，
 运营线可据此推进引擎桥接层真机接入对外部署落地，D2-2/D2-3 待程序线真机联调完成后触发。
+
+---
+
+## 七、PR #91 轮次复验确认（运营线签核）
+
+**触发**：PR #91（测试线 `wp_engine_bridge_qa` 引擎桥接层 P1 修复回归确认）合并，
+项目管理 `wp_engine_release` 发版门禁复验确认 **GO 通过**，级联解锁运营线做 D2 阶段复验确认。
+
+**复验结论：✅ 通过（D2 初版产出继续有效）**
+
+**复验依据**（PR #91 轮次实测信号灯全绿）：
+- `test_engine_bridge_integration.sh` **9/9** ✅
+- `test_engine_bridge.sh` **35/35** ✅
+- `test_engine_adapters.sh` **21/21** ✅
+- `test_engine_adaptation.sh` **17/17** ✅
+- `test_dept_npc_pipeline.sh` **16/16** ✅
+- `test_release_gate.sh` **6/6** ✅
+
+**复验确认要点**：
+- **data_analyst 确认**：真机接入对外数据口径（emit 单次投递 + execute 异常路径数据侧）仍有效，
+  ENGINE_EVENT 订阅 + 数据平台/运营看板/渠道三方对接说明无需变更；
+- **game_operator 确认**：3 类沟通对象（发行渠道/玩家社区/内部团队）真机接入同步策略仍可执行，
+  D2-1 真机准备阶段对外部署计划继续有效；
+- **reference_learner 确认**：引擎能力差异/平台适配/事件投递可靠性/异常路径健壮性 4 个影响面调研仍适用，
+  借鉴建议与风险预案无需调整。
+
+**签核**：运营线统一头（data_analyst + game_operator + reference_learner 三方复验确认）✅
+
+详细见：`承接报告_PR91_运营线_wp_engine_ops_D2_复验确认.md`
