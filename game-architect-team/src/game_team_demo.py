@@ -2,8 +2,9 @@
 # 游戏向架构师团队 · 端到端演示
 # 说明：用游戏向架构师团队完成一个游戏功能框架的开发（作为测试）。
 # 流程：游戏·架构·总师(架构) → 游戏·制作·经理(派活) → 策划(设计)
-#       → 程序(实现) → 测试(验收)，全程共享记忆(只增不改只追加)。
-# 同时演示"条件触发"：遇到数值平衡问题自动引入游戏·数值策划。
+#       → 程序(实现) → 测试(验收) → 游戏·架构·总师助理(阶段边界审查/阶段不对就算错)，
+#       全程共享记忆(只增不改只追加)。
+# 同时演示"条件触发"：数值失衡→游戏·数值策划；引擎阶段越界→游戏·架构·总师助理纠偏。
 # 语言: Python 3 (可运行, 零依赖)
 # ============================================================
 from __future__ import annotations
@@ -115,6 +116,37 @@ class GameQA(GameRole):
         return result
 
 
+class GameChiefAssistant(GameRole):
+    """游戏·架构·总师助理：引擎阶段纠偏专项 / 改错改框架 / 阶段边界检查（阶段不对就算错）
+    参考 dongjiagoushi 架构·总师助理：专角色专用，保总师主线上下文纯净。"""
+    def act(self, task: str, engine_stage: str = "cocos") -> dict:
+        # 阶段边界检查：发现当前阶段引擎能力之外的越界实现 → 标记阶段越界并纠偏
+        stage_boundary = {
+            "cocos": {"allowed": ["UI", "本地存档", "轻量登录", "简单排行榜"],
+                      "forbidden": ["帧同步战斗校验", "大规模同屏物理", "C++级内存池"]},
+            "unity": {"allowed": ["复杂UI", "AssetBundle热更", "高并发WebSocket", "纯C#核心库"],
+                      "forbidden": ["每帧子弹轨迹计算(Go)", "极致底层C++优化"]},
+            "ue":    {"allowed": ["C++渲染管线", "同源C++战斗库", "Go网关高并发"],
+                      "forbidden": ["草台班子式无状态弱约束架构"]},
+        }
+        boundary = stage_boundary.get(engine_stage, stage_boundary["cocos"])
+        # 示例：检测到一个越界项
+        violation = "帧同步战斗校验（本应在unity/ue阶段，cocos阶段强行实现=过度设计）"
+        result = {
+            "引擎阶段": engine_stage,
+            "阶段边界(允许)": boundary["allowed"],
+            "阶段越界(禁止)": boundary["forbidden"],
+            "检测到越界": violation,
+            "定性": "阶段越界(阶段不对就算错)",
+            "处置": "[回转] 打回实现，标记[阶段越界]，在cocos阶段用轻量同步，战斗校验推迟到unity/ue",
+            "目标进度尺": {"goal_total": "该阶段验收", "current": "已收敛", "distance": "待进入下一阶段"},
+        }
+        self.memory.add_record(self.space, "task",
+                               {"类型": "阶段边界审查", "结果": result}, self.name)
+        print(f"[游戏·架构·总师助理](引擎阶段纠偏) 检测到阶段越界，打回纠偏")
+        return result
+
+
 # ============================================================
 # 二、主流程
 # ============================================================
@@ -147,6 +179,10 @@ def main():
 
     print("\n--- ③ 测试验收 ---")
     qa.act("验收")
+
+    print("\n--- ③.5 阶段边界审查（阶段不对就算错）→ 引入 游戏·架构·总师助理 ---")
+    chief_assistant = GameChiefAssistant("游戏·架构·总师助理", space, memory)
+    chief_assistant.act("阶段边界审查", engine_stage="cocos")
 
     print("\n--- ④ 共享记忆查询（relevance×weight）---")
     print("查询'战斗'共享记忆：")
