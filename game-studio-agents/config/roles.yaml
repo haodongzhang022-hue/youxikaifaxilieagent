@@ -103,6 +103,7 @@ roles:
       dispatch_capability: "config/dispatch_capability.py::DispatchCapability"  # 拆解→派发→依赖解锁→跟踪闭环
       scheduler: "config/task_scheduler.py::Scheduler"  # 任务队列/优先级/依赖派发
       message_bus: "config/message_bus.py::MessageBus"  # 事件驱动协作（DIRECT/TOPIC/ANYCAST）
+      squad_pool: "config/squad_pool.py::SquadPool"  # 可调配小组池（独立于部门，灵活调配/重复调用）
 
   # ---------------- 主策划 ----------------
   - role_id: "lead_designer"

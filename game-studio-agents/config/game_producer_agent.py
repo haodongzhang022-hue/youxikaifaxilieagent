@@ -154,12 +154,20 @@ class GameProducerAgent(BaseAgent):
         # 角色间协作工作台：支持多角色互相@（任务转交/分工协作/协作请求）
         self.collab = CollaborationWorkbench()
 
+    def _get_squad_pool(self):
+        """懒加载共享可调配小组池（独立于部门，灵活调配/重复调用）。"""
+        if getattr(self, "_squad_pool", None) is None:
+            from squad_pool import create_default_squad_pool
+            self._squad_pool = create_default_squad_pool()
+        return self._squad_pool
+
     def dispatch_capability(self):
         """经理的统一派发能力（复用现有 scheduler，与派发流水线共享）。"""
-        if self._dispatch_cap is None:
+        if getattr(self, "_dispatch_cap", None) is None:
             from dispatch_capability import DispatchCapability
             self._dispatch_cap = DispatchCapability(
-                caller_role=self.role_id, bus=self.bus, scheduler=self.scheduler)
+                caller_role=self.role_id, bus=self.bus, scheduler=self.scheduler,
+                squad_pool=self._get_squad_pool())
         return self._dispatch_cap
 
     # ---------- 覆写 BaseAgent 钩子 ----------

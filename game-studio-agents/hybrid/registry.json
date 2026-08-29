@@ -376,6 +376,15 @@
       "depends_on": [],
       "cpu_cost_est": 1.5,
       "kind": "core"
+    },
+    "test_squad_pool.sh": {
+      "covers": [
+        "game-studio-agents/config/squad_pool.py",
+        "game-studio-agents/config/dispatch_capability.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
     }
   }
 }
