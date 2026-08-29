@@ -76,22 +76,21 @@ out2=$($PY << 'PYBLK2'
 from message_bus import MessageBus
 from department_agents import ProgramDeptAgent
 from dispatch_capability import DispatchCapability
-from squad_pool import create_default_squad_pool, SQUAD_IDLE, SQUAD_BUSY
-from squad_auto import SquadAutoScheduler
+from squad_pool import get_global_squad_pool, SQUAD_IDLE, SQUAD_BUSY
 
 bus = MessageBus()
 agent = ProgramDeptAgent(bus)
 agent.boot()
 
-pool = create_default_squad_pool()
+# 走生产路径：通过 agent._squad_auto() 懒加载**全局共享小组池**，
+# 不手动注入独立池/调度器（评审 W4：测试需覆盖生产路径）。
+pool = get_global_squad_pool()
 for s in pool.list_squads():
     leader = s["leader"]
     if leader not in bus.roles:
         bus.register(leader)
         bus.on(leader, lambda m: None)
 
-agent._auto_squad = SquadAutoScheduler(squad_pool=pool)
-agent.dispatch_capability().squad_pool = pool
 cap = DispatchCapability("producer", bus=bus, squad_pool=pool)
 
 res = {}

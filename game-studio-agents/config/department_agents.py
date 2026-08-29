@@ -216,6 +216,8 @@ class DepartmentAgent(BaseAgent):
         """
         if self._auto_squad is None:
             from squad_auto import SquadAutoScheduler
+            # SquadAutoScheduler 缺省使用**全局共享小组池**（get_global_squad_pool），
+            # 保证所有部门 Agent 共享同一资源池，支持跨部门调配与重复调用。
             self._auto_squad = SquadAutoScheduler()
             # 共享小组池：把调度器的小组池同步注入派发能力，保证
             # auto_acquire_and_dispatch 内部调用的 dispatch_to_squad 能
@@ -235,33 +237,42 @@ class DepartmentAgent(BaseAgent):
         """
         if not work_package.get("squad_domain"):
             return False
-        auto = self._squad_auto()
-        cap = self.dispatch_capability()
-        result = auto.auto_acquire_and_dispatch(
-            work_package, cap, department=self.department)
-        if result["auto_dispatched"]:
-            self._squad_wp_ids.add(work_package.get("id", ""))
-            self._log("auto_squad",
-                      f"自动调配小组执行 {work_package.get('id', '')}: {result['reason']}")
-            return True
-        else:
-            self._log("auto_squad_skip",
-                      f"自动调配未触发: {result['reason']}")
+        try:
+            auto = self._squad_auto()
+            cap = self.dispatch_capability()
+            result = auto.auto_acquire_and_dispatch(
+                work_package, cap, department=self.department)
+            if result["auto_dispatched"]:
+                self._squad_wp_ids.add(work_package.get("id", ""))
+                self._log("auto_squad",
+                          f"自动调配小组执行 {work_package.get('id', '')}: {result['reason']}")
+                return True
+            else:
+                self._log("auto_squad_skip",
+                          f"自动调配未触发: {result['reason']}")
+                return False
+        except Exception as e:  # noqa: BLE001 容错：调配异常不阻塞部门执行
+            self._log("auto_squad_error",
+                      f"自动调配异常（不阻塞部门执行）: {e}")
             return False
 
     def _auto_squad_release(self, work_package_id: str):
         """自动释放：工作包完成后归还调配的可调配小组到池。"""
         if work_package_id not in self._squad_wp_ids:
             return
-        auto = self._squad_auto()
-        rel = auto.auto_release_for_wp(work_package_id)
-        if rel["released"]:
-            self._squad_wp_ids.discard(work_package_id)
-            self._log("auto_squad_release",
-                      f"工作包 {work_package_id} 完成，自动释放小组: {rel['reason']}")
-        else:
-            self._log("auto_squad_release_fail",
-                      f"工作包 {work_package_id} 自动释放失败: {rel['reason']}")
+        try:
+            auto = self._squad_auto()
+            rel = auto.auto_release_for_wp(work_package_id)
+            if rel["released"]:
+                self._squad_wp_ids.discard(work_package_id)
+                self._log("auto_squad_release",
+                          f"工作包 {work_package_id} 完成，自动释放小组: {rel['reason']}")
+            else:
+                self._log("auto_squad_release_fail",
+                          f"工作包 {work_package_id} 自动释放失败: {rel['reason']}")
+        except Exception as e:  # noqa: BLE001 容错：释放异常不阻塞验收
+            self._log("auto_squad_release_error",
+                      f"工作包 {work_package_id} 自动释放异常（不阻塞验收）: {e}")
 
     # ---------- 派单处理 ----------
     def _on_task_assign(self, msg: Message):

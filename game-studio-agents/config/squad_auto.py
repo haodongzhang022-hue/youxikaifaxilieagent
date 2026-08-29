@@ -22,6 +22,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from squad_pool import (SquadPool, Squad, create_default_squad_pool,
+                       get_global_squad_pool,
                        SQUAD_IDLE, SQUAD_BUSY, SQUAD_READY, SQUAD_BLOCKED)
 
 
@@ -56,11 +57,10 @@ class SquadAutoScheduler:
             squad_pool: 可调配小组池（缺省时创建默认小组池）
             max_track: 工作包→小组映射留痕上限（有界，防止无限增长）
         """
-        self.squad_pool = squad_pool or create_default_squad_pool()
+        # 默认使用全局共享小组池（跨部门共享，支持重复调用/跨部门调配）
+        self.squad_pool = squad_pool or get_global_squad_pool()
         # 工作包 id → 已调配的小组 id（用于任务完成后自动释放）
         self._wp_squad_map: Dict[str, str] = {}
-        # 领域 → 本调度器最后调配给某工作包的小组（供同一部门复用）
-        self._last_acquired: Dict[str, str] = {}
         # 自动化调度留痕（有界）
         self._auto_log: List[Dict[str, Any]] = []
         self._max_track = max_track
@@ -110,26 +110,20 @@ class SquadAutoScheduler:
                 return {"auto_dispatched": True, "squad_id": squad_id,
                         "reason": f"复用已调配小组 {squad.name}"}
 
-        # 2) 查已注册的匹配小组（优先找空闲的）
+        # 2) 查已注册的匹配小组，仅调配「空闲」小组
+        #    （每个工作包独立调配空闲小组，不与其他工作包共用同一小组，
+        #      避免其中一个任务完成即把共享小组过早释放——见 C1）
         candidates = self.squad_pool.find(domain=squad_domain)
         idle_candidates = [s for s in candidates if s.status == SQUAD_IDLE]
-        busy_same_dept = [s for s in candidates
-                          if s.status == SQUAD_BUSY
-                          and s.owner_department == caller]
 
-        target = None
-        # 优先复用本部门已占用的同领域小组（多任务共用一个小队）
-        if busy_same_dept:
-            target = busy_same_dept[0]
-        elif idle_candidates:
-            # 自动从池中调配：选 assign_count 最少（负载均衡）
-            target = min(idle_candidates, key=lambda s: s.assign_count)
-
-        if target is None:
-            self._log("auto_no_squad", f"领域[{squad_domain}]无可调配小组"
-                      f"（空闲 {len(idle_candidates)} 个，忙碌 {len(candidates)-len(idle_candidates)} 个）")
+        if not idle_candidates:
+            self._log("auto_no_squad", f"领域[{squad_domain}]无可调配空闲小组"
+                      f"（空闲 0 个，忙碌 {len(candidates)} 个）")
             return {"auto_dispatched": False, "squad_id": None,
-                    "reason": f"领域[{squad_domain}]无可调配小组"}
+                    "reason": f"领域[{squad_domain}]无空闲小组可调配"}
+
+        # 从空闲小组中选 assign_count 最少（负载均衡）调配
+        target = min(idle_candidates, key=lambda s: s.assign_count)
 
         # 3) 调用 dispatch_to_squad 派发（会处理 acquire / release / 状态流转）
         result = dispatch_cap.dispatch_to_squad(
@@ -138,7 +132,6 @@ class SquadAutoScheduler:
         if result.dispatched:
             # 记录映射，供任务完成后自动释放
             self._wp_squad_map[wp_id] = target.squad_id
-            self._last_acquired[squad_domain] = target.squad_id
             self._log("auto_trigger", f"自动调配小组 {target.name} 执行 {wp_id} → {result.owner}")
             return {"auto_dispatched": True, "squad_id": target.squad_id,
                     "reason": f"自动调配 {target.name} 执行 {wp_id}"}
