@@ -16,6 +16,7 @@ from server.proto.messages import (
 from server.core.auth_service import AuthService
 from server.core.world_state import WorldState
 from server.core.combat_service import CombatService, EconomyService
+from server.core.gameplay_service import GameplayService
 
 
 class Gateway:
@@ -28,11 +29,16 @@ class Gateway:
     3. 路由分发（按消息类型路由到对应服务）
     """
 
+    # W3: 任务进度上限与单调性约束
+    MAX_QUEST_PROGRESS = 100
+
     def __init__(self):
         self.auth = AuthService()
         self.world = WorldState()
         self.combat = CombatService()
         self.economy = EconomyService()
+        # W4: GameplayService 接入
+        self.gameplay = GameplayService(self.world)
 
     # ============================================================
     # 主入口
@@ -103,7 +109,9 @@ class Gateway:
     def _handle_gameplay_action(self, request: GameRequest) -> GameResponse:
         """处理玩法动作（服务端权威）"""
         action = request.payload.get("action", {})
-        result = self.world.apply_action(request.player_id, action)
+        scene_id = request.payload.get("scene_id", "LVL_001")
+        # W4: 通过 GameplayService 处理（已接入 Gateway 路由）
+        result = self.gameplay.player_action(request.player_id, scene_id, action)
         return GameResponse.ok(request.request_id, result)
 
     def _handle_snapshot(self, request: GameRequest) -> GameResponse:
@@ -127,31 +135,51 @@ class Gateway:
         elif action == "attack":
             combat_id = request.payload.get("combat_id", "")
             attack_power = request.payload.get("attack_power", 10)
-            result = self.combat.process_attack(combat_id, attack_power)
-            # 战斗胜利后自动发放奖励到经济账户
-            if result.get("status") == "victory":
+            # C2: 传递 caller_player_id 做越权校验
+            result = self.combat.process_attack(
+                combat_id, attack_power, caller_player_id=player_id
+            )
+            # W5: 发奖幂等 - 仅对胜利且未发奖过的战斗发放奖励
+            if result.get("status") == "victory" and not self.combat.is_rewarded(combat_id):
                 for reward in result.get("rewards", []):
                     item = reward["item"]
                     amount = reward["amount"]
-                    if item == "gold":
+                    if item in ("gold", "coin"):
                         self.economy.credit(player_id, "gold", amount,
                                             reason="combat reward")
                     elif item == "star_shard":
                         self.economy.credit(player_id, "star_core", amount,
                                             reason="combat reward")
+                self.combat.mark_rewarded(combat_id)
             return GameResponse.ok(request.request_id, result)
         else:
             return GameResponse.error(request.request_id, ERR_INVALID_REQUEST)
 
     def _handle_quest(self, request: GameRequest) -> GameResponse:
-        """处理任务更新"""
+        """处理任务更新
+        W3 修复：任务进度单调性 + 范围上限校验。
+        """
         quest_id = request.payload.get("quest_id", "")
         progress = request.payload.get("progress", 0)
         player_id = request.player_id
 
-        # 任务进度存服务端
+        # W3: 范围校验
+        if progress < 0 or progress > self.MAX_QUEST_PROGRESS:
+            return GameResponse.error(request.request_id, "progress out of range")
+        if not isinstance(progress, int):
+            return GameResponse.error(request.request_id, "progress must be integer")
+
+        # W3: 单调性校验 - 服务端只接受递增进度
         entity_key = f"quest_{player_id}"
         cur = self.world.get_entity(entity_key) or {"quest_id": quest_id, "progress": 0}
+        cur_quest_id = cur.get("quest_id", "")
+        if cur_quest_id != quest_id:
+            # 新任务，接受
+            cur = {"quest_id": quest_id, "progress": 0}
+        old_progress = cur.get("progress", 0)
+        if progress < old_progress:
+            return GameResponse.error(request.request_id, "progress cannot decrease")
+
         cur["quest_id"] = quest_id
         cur["progress"] = progress
         self.world.set_entity(entity_key, cur)
