@@ -566,13 +566,16 @@ class GameProducerAgent(BaseAgent):
             因为实例化装配场景下仅实例化角色装配了总线 Agent、能承接派单。
         """
         dept_roles = self.departments[wp["department"]]["roles"]
-        # 关键过滤：仅保留模块级 DEPARTMENTS 中定义的角色（这些角色已由
-        # DepartmentAgent.__init__ 注册到消息总线）。roles.yaml 中可能包含
-        # 架构师/助理等跨部门协作角色（如 game_architect 属程序线），它们在
+        # 关键过滤：仅剔除已知未装配总线 Agent 的坏角色（如 game_architect /
+        # game_architect_assistant），同时保留模块级 DEPARTMENTS 角色与已注册
+        # 实例化角色。roles.yaml 中可能包含架构师/助理等跨部门协作角色，它们在
         # 总线上无 Agent 承接，若被误派主责会导致 TASK_ASSIGN 石沉大海。
         _builtin_roles = DEPARTMENTS.get(wp["department"], {}).get("roles", [])
-        if _builtin_roles:
-            _filtered = [r for r in dept_roles if r in _builtin_roles]
+        _instantiated_roles = [r for r in dept_roles if r in self.instantiated_role_ids]
+        _known_bad = {"game_architect", "game_architect_assistant"}
+        if _builtin_roles or _instantiated_roles:
+            _filtered = [r for r in dept_roles
+                         if r in _builtin_roles or r in _instantiated_roles or r not in _known_bad]
             if _filtered:
                 dept_roles = _filtered
         # 主责指派融合策略（main 的模块级覆盖 + v0.9 实例化负载均衡）：
