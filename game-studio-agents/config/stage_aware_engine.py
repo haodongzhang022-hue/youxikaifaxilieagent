@@ -1,12 +1,12 @@
 # ============================================================
-# 四阶段感知引擎模块 (Stage-Aware Engine)
+# 五阶段感知引擎模块 (Stage-Aware Engine, L0~L3 + 资产库)
 # 版本: v1.0
 # 说明: 为游戏引擎选型/架构决策提供「阶段感知」能力。
 #       对齐 Issue #112「游戏向架构师的开发」核心思想：
 #       "阶段不对就算错" —— 每个架构决策必须绑定「引擎 × 阶段」二维坐标。
 #
 #   核心能力:
-#     1. GameStage 枚举：定义四阶段演进路线（Cocos → Unity → UE → 资产库）
+#     1. GameStage 枚举：定义五阶段演进路线（L0 网页 → Cocos → Unity → UE → 资产库）
 #     2. StageAwareEngine：阶段感知引擎模型（引擎×阶段二维绑定）
 #     3. EngineStageSelector：阶段选型/切换决策器
 #     4. StageBoundaryGuard：阶段边界护栏（防阶段错配）
@@ -31,16 +31,18 @@ from typing import Any, Dict, List, Optional, Set
 # ============================================================
 
 class GameStage(str, Enum):
-    """游戏开发四阶段演进路线（Issue #112 定义）"""
-    STAGE1_COCOS = "stage1_cocos"         # 阶段1: 网页/Cocos 小程序 (MVP 验证期)
-    STAGE2_UNITY = "stage2_unity"         # 阶段2: Unity/团结引擎 (商业化与中度游戏期)
-    STAGE3_UE = "stage3_ue"               # 阶段3: Unreal Engine (3A/重度实时)
+    """游戏开发阶段演进路线（L0~L3 + 资产库，对齐 Issue #126 命名统一）"""
+    STAGE0_WEB = "stage0_web"             # L0: 纯网页 (React/Web, 玩法验证 + 引流分享)
+    STAGE1_COCOS = "stage1_cocos"         # L1: Cocos/小程序 (MVP 验证期)
+    STAGE2_UNITY = "stage2_unity"         # L2: Unity/团结引擎 (商业化与中度游戏期)
+    STAGE3_UE = "stage3_ue"               # L3: Unreal Engine (3A/重度实时)
     STAGE4_ASSET = "stage4_asset"         # 阶段4: 终极形态 (一直能使用的资产库)
 
     @property
     def label(self) -> str:
         """阶段中文标签"""
         return {
+            GameStage.STAGE0_WEB: "纯网页 React (玩法验证/引流期)",
             GameStage.STAGE1_COCOS: "Cocos/小程序 (MVP验证期)",
             GameStage.STAGE2_UNITY: "Unity/团结引擎 (商业化期)",
             GameStage.STAGE3_UE: "Unreal Engine (3A/重度实时)",
@@ -51,6 +53,7 @@ class GameStage(str, Enum):
     def order(self) -> int:
         """阶段顺序（用于比较/切换）"""
         return {
+            GameStage.STAGE0_WEB: 0,
             GameStage.STAGE1_COCOS: 1,
             GameStage.STAGE2_UNITY: 2,
             GameStage.STAGE3_UE: 3,
@@ -61,11 +64,12 @@ class GameStage(str, Enum):
     def from_order(cls, order: int) -> "GameStage":
         """从顺序号获取阶段"""
         return {
+            0: cls.STAGE0_WEB,
             1: cls.STAGE1_COCOS,
             2: cls.STAGE2_UNITY,
             3: cls.STAGE3_UE,
             4: cls.STAGE4_ASSET,
-        }.get(order, cls.STAGE1_COCOS)
+        }.get(order, cls.STAGE0_WEB)
 
 
 # ============================================================
@@ -73,15 +77,17 @@ class GameStage(str, Enum):
 # ============================================================
 
 class StageEngineType(str, Enum):
-    """四阶段涉及的游戏引擎"""
-    COCOS_CREATOR = "cocos_creator"      # Cocos Creator (TS)
-    UNITY = "unity"                      # Unity/团结引擎 (C#)
-    UNREAL = "unreal_engine"             # Unreal Engine (C++/蓝图)
+    """L0~L3 涉及的游戏引擎"""
+    REACT = "react_web"                  # L0 纯网页 (React/Web, TS)
+    COCOS_CREATOR = "cocos_creator"      # L1 Cocos Creator (TS)
+    UNITY = "unity"                      # L2 Unity/团结引擎 (C#)
+    UNREAL = "unreal_engine"             # L3 Unreal Engine (C++/蓝图)
     CUSTOM = "custom"                    # 自定义/其他
 
 
 # 引擎→适用阶段映射
 ENGINE_STAGE_MAP: Dict[StageEngineType, GameStage] = {
+    StageEngineType.REACT: GameStage.STAGE0_WEB,
     StageEngineType.COCOS_CREATOR: GameStage.STAGE1_COCOS,
     StageEngineType.UNITY: GameStage.STAGE2_UNITY,
     StageEngineType.UNREAL: GameStage.STAGE3_UE,
@@ -89,6 +95,7 @@ ENGINE_STAGE_MAP: Dict[StageEngineType, GameStage] = {
 
 # 引擎→脚本语言
 ENGINE_LANGUAGES: Dict[StageEngineType, List[str]] = {
+    StageEngineType.REACT: ["TypeScript", "JavaScript"],
     StageEngineType.COCOS_CREATOR: ["TypeScript", "JavaScript"],
     StageEngineType.UNITY: ["C#"],
     StageEngineType.UNREAL: ["C++", "Blueprint"],
@@ -113,6 +120,31 @@ class StageBoundary:
 
 # 预定义四阶段边界
 STAGE_BOUNDARIES: Dict[GameStage, StageBoundary] = {
+    GameStage.STAGE0_WEB: StageBoundary(
+        stage=GameStage.STAGE0_WEB,
+        engine=StageEngineType.REACT,
+        stage_goal="玩法验证 + 引流分享 + 快速传播，成本最低、上手最快，验证核心乐趣",
+        boundary_in=[
+            "网页/H5 玩法核心循环、点击/拖拽/键盘交互",
+            "本地存档、Canvas/SVG 渲染、CSS 动画",
+            "轻量 Lottie/序列帧动画、2D 贴图精灵",
+            "前端 TypeScript 逻辑、简单状态机",
+            "CDN 静态资源分发、轻量后端 API",
+        ],
+        boundary_out=[
+            "复杂寻路算法、大量单位同屏计算",
+            "实时战斗校验、高频位置同步",
+            "复杂 AI 行为树、3D 物理引擎",
+            "PBR 材质、法线贴图、骨骼 IK",
+            "跨服匹配、全球排行榜",
+        ],
+        refactor_points=[
+            "核心逻辑需下沉为纯 TS 类（不依赖 React DOM）",
+            "数据走本地 JSON + 简单云端接口，URL 与 Protobuf 结构保持兼容",
+            "表现层（Canvas/CSS）与逻辑层解耦，便于后期迁移 Cocos",
+        ],
+        architecture_notes="L0 网页端不做 3D 过度设计；核心逻辑层必须与 React 渲染层解耦，为迁移 Cocos/Unity 留路",
+    ),
     GameStage.STAGE1_COCOS: StageBoundary(
         stage=GameStage.STAGE1_COCOS,
         engine=StageEngineType.COCOS_CREATOR,
@@ -274,9 +306,11 @@ class StageBoundaryGuard:
         "physics_basic": GameStage.STAGE1_COCOS,
         "physics_advanced": GameStage.STAGE2_UNITY,
         "physics_engine_level": GameStage.STAGE3_UE,
-        "render_2d": GameStage.STAGE1_COCOS,
+        "render_2d": GameStage.STAGE0_WEB,          # L0 网页即可做 2D（Canvas/CSS/SVG）
+        "render_web_light": GameStage.STAGE0_WEB,     # L0 网页轻量渲染（Lottie/序列帧）
         "render_3d_basic": GameStage.STAGE2_UNITY,
         "render_3d_advanced": GameStage.STAGE3_UE,
+        "ai_simple_fsm": GameStage.STAGE0_WEB,        # L0 网页即可用简单状态机
         "protobuf_protocol": GameStage.STAGE1_COCOS,  # 协议先行：所有阶段
         "pure_logic_lib": GameStage.STAGE1_COCOS,      # 纯逻辑库：所有阶段
         "open_world_map": GameStage.STAGE3_UE,         # 开放大世界：UE/3A 阶段
@@ -447,6 +481,11 @@ def get_stage_aware_engines() -> List[StageAwareEngine]:
 def _get_engine_capabilities(engine: StageEngineType) -> List[str]:
     """获取引擎能力集"""
     base = {
+        StageEngineType.REACT: [
+            "dom.render", "component.create", "canvas.draw", "ui.button",
+            "audio.play", "css.animation", "network.fetch",
+            "local.storage", "lottie.play", "webgl.render",
+        ],
         StageEngineType.COCOS_CREATOR: [
             "scene.load", "node.create", "sprite.set", "ui.button",
             "audio.play", "animation.play", "network.http",
@@ -478,17 +517,17 @@ def stage_boundary_check(module: str, current_stage: GameStage) -> Dict[str, Any
 # ============================================================
 
 if __name__ == "__main__":
-    print("=== 四阶段感知引擎模块自测 ===")
+    print("=== 五阶段感知引擎模块自测 (L0~L3 + 资产库) ===")
     print()
 
     # 1. 阶段枚举
-    print("== 1. 四阶段演进 ==")
+    print("== 1. 五阶段演进 (L0~L3 + 资产库) ==")
     for stage in GameStage:
         print(f"  阶段{stage.order}: {stage.label}")
 
     # 2. 阶段选型
     print("\n== 2. 阶段选型决策 ==")
-    for stage in [GameStage.STAGE1_COCOS, GameStage.STAGE2_UNITY, GameStage.STAGE3_UE]:
+    for stage in [GameStage.STAGE0_WEB, GameStage.STAGE1_COCOS, GameStage.STAGE2_UNITY, GameStage.STAGE3_UE]:
         decision = EngineStageSelector.select(stage)
         print(f"  {decision['stage_label']}: 引擎={decision['engine']}, "
               f"语言={decision['languages']}, 边界内={len(decision['boundary_in'])}项, "
@@ -497,6 +536,17 @@ if __name__ == "__main__":
     # 3. 阶段边界检查
     print("\n== 3. 阶段边界检查 ==")
     guard = StageBoundaryGuard()
+
+    # L0 网页阶段检查
+    print("  当前阶段: 纯网页 React (L0)")
+    checks = guard.check_many(
+        ["render_2d", "render_web_light", "ai_simple_fsm",
+         "render_3d_advanced", "open_world_map"],
+        GameStage.STAGE0_WEB,
+    )
+    for c in checks:
+        status = "✅" if c["ok"] else "❌"
+        print(f"    {status} {c['module']}: {c['reason']}")
 
     # Cocos 阶段检查
     print("  当前阶段: Cocos (MVP)")
@@ -524,6 +574,7 @@ if __name__ == "__main__":
     # 4. 阶段切换
     print("\n== 4. 阶段切换 ==")
     selector = EngineStageSelector
+    print(f"  L0→L1: {'✅ 可以' if selector.can_transition(GameStage.STAGE0_WEB, GameStage.STAGE1_COCOS) else '❌ 不行'}")
     print(f"  阶段1→阶段2: {'✅ 可以' if selector.can_transition(GameStage.STAGE1_COCOS, GameStage.STAGE2_UNITY) else '❌ 不行'}")
     print(f"  阶段2→阶段3: {'✅ 可以' if selector.can_transition(GameStage.STAGE2_UNITY, GameStage.STAGE3_UE) else '❌ 不行'}")
     print(f"  阶段3→阶段2: {'✅ 可以' if selector.can_transition(GameStage.STAGE3_UE, GameStage.STAGE2_UNITY) else '❌ 不行'}")

@@ -750,14 +750,19 @@ class ProgramDeptAgent(DepartmentAgent):
         engine = get_engine()
         engine_info = engine.to_dict()
         engine_name = engine_info["engine_name"]
-        engine_key = "cocos" if "cocos" in str(engine_info["engine_type"]).lower() else "unreal"
+        _et = str(engine_info["engine_type"]).lower()
+        engine_key = "react" if "react" in _et or "react_web" in _et else (
+            "cocos" if "cocos" in _et else ("unity" if "unity" in _et else "unreal")
+        )
 
         # 【引擎阶段化 · stage_gate 阶段边界门禁（PR #113 下游接入 · 总师助理）】
         # 引擎×阶段二维检测：当前引擎映射到阶段，用 StageBoundaryGuard 校验本模块是否
         # 属于当前阶段。若模块属更晚阶段 → 过度设计（阶段不对=错）；属更早阶段 → 技术债。
         # 产出 stage_gate 审计留痕（越界列表），供总师助理纠偏 & 验收门禁拦截。
-        _current_stage = GameStage.STAGE1_COCOS if engine_key == "cocos" else (
-            GameStage.STAGE2_UNITY if engine_key == "unity" else GameStage.STAGE3_UE
+        _current_stage = GameStage.STAGE0_WEB if engine_key == "react" else (
+            GameStage.STAGE1_COCOS if engine_key == "cocos" else (
+                GameStage.STAGE2_UNITY if engine_key == "unity" else GameStage.STAGE3_UE
+            )
         )
         _stage_guard = StageBoundaryGuard()
         # 按工作包模块对当前引擎阶段做边界检查（含常用能力关键词映射）

@@ -38,6 +38,7 @@ class HarnessContext:
 
 # 本地运行时可调用的工具链（对应引擎）
 _ENGINE_TOOLS = {
+    "react": ["npm run build", "npm run dev", "tsc", "resource_import"],
     "cocos": ["cocos build", "cocos creator", "tsc", "resource_import"],
     "unreal": ["RunUAT", "Unreal Editor", "Visual Studio", "cook"],
 }
@@ -80,10 +81,10 @@ def plan_execution(ctx: HarnessContext, work_package: Dict[str, Any]) -> Dict[st
     """结合目标引擎生成本地执行计划（工具调用面）。"""
     module = work_package.get("module", "generic")
     module_map = {
-        "client": ["cocos build", "resource_import"],
-        "engine": ["tsc", "cocos build"],
-        "scene": ["cocos creator", "resource_import"],
-        "audio": ["resource_import", "cocos build"],
+        "client": ["npm run build", "resource_import"] if ctx.engine == "react" else ["cocos build", "resource_import"],
+        "engine": ["tsc", "npm run build"] if ctx.engine == "react" else ["tsc", "cocos build"],
+        "scene": ["npm run dev", "resource_import"] if ctx.engine == "react" else ["cocos creator", "resource_import"],
+        "audio": ["resource_import", "npm run build"] if ctx.engine == "react" else ["resource_import", "cocos build"],
         "blueprint": ["RunUAT", "Unreal Editor"],
         "map": ["Unreal Editor"],
         "generic": ctx.tool_chain,

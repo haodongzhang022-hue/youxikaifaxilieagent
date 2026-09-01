@@ -129,7 +129,8 @@
     },
     "test_engine_adapters.sh": {
       "covers": [
-        "game-studio-agents/config/engine_adapters.py"
+        "game-studio-agents/config/engine_adapters.py",
+        "game-studio-agents/config/model_config.py"
       ],
       "depends_on": [],
       "cpu_cost_est": 1.0,
@@ -418,6 +419,14 @@
       "depends_on": [
         "test_stage_aware_engine.sh"
       ],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
+    },
+    "test_stage_aware_engine.sh": {
+      "covers": [
+        "game-studio-agents/config/stage_aware_engine.py"
+      ],
+      "depends_on": [],
       "cpu_cost_est": 1.0,
       "kind": "core"
     }

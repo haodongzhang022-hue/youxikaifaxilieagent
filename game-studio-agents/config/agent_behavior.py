@@ -624,7 +624,7 @@ class ReasoningModeRouter:
     """
 
     BANDS = ["spec", "mixed", "react", "weak"]
-    # 论文实测坍缩区（DeepSeek V4 Pro）
+    # 统一模型坍缩区（DeepSeek V4 Flash 0731，见 config/model_config.py · Issue #126）
     SPEC_UPPER = 0.15      # spec 带 [0, 0.15]
     MIXED_RANGE = (0.2, 0.45)  # 过渡带，回避
     REACT_LOWER = 0.5      # react 带 [0.5, 1.0]
@@ -634,7 +634,13 @@ class ReasoningModeRouter:
     SPEC_RE = r"(理解|拆解|分析|评估|审查|还原|识别|为什么|怎么|研究|调研|修复|调试|重构|排查|understand|analyze|assess|review|evaluate|why|how|research|fix|debug|refactor)"
 
     def __init__(self, model_id=None):
-        self.model_id = model_id
+        # 统一模型：默认使用 deepseek-v4-flash-0731（model_config 单点维护）
+        try:
+            from model_config import DEFAULT_MODEL
+            _default = DEFAULT_MODEL
+        except ImportError:
+            _default = "deepseek-v4-flash-0731"
+        self.model_id = model_id or _default
         self.overrides = {}   # session_id -> mode
 
     def classify_task(self, text):

@@ -254,9 +254,14 @@ def aggregate_and_release(auto_collect: bool = True) -> Dict[str, Any]:
         )
         guard = StageBoundaryGuard()
         # 检查关键模块是否在正确阶段使用（无跨阶段越界）
+        # L0 网页阶段只做 L0 该做的事（ai_simple_fsm/render_2d 现归属 L0）
+        checks_l0 = guard.check_many(
+            ["render_2d", "render_web_light", "ai_simple_fsm"],
+            GameStage.STAGE0_WEB,
+        )
         # Cocos 阶段只做 Cocos 阶段该做的事
         checks_cocos = guard.check_many(
-            ["combat_turn_based", "network_low_freq", "ai_simple_fsm"],
+            ["combat_turn_based", "network_low_freq", "economy_basic"],
             GameStage.STAGE1_COCOS,
         )
         # Unity 阶段只做 Unity 阶段该做的事
@@ -269,7 +274,7 @@ def aggregate_and_release(auto_collect: bool = True) -> Dict[str, Any]:
             ["combat_frame_sync", "physics_engine_level", "open_world_map"],
             GameStage.STAGE3_UE,
         )
-        all_checks = checks_cocos + checks_unity + checks_ue
+        all_checks = checks_l0 + checks_cocos + checks_unity + checks_ue
         no_stage_crossing = all(c.get("ok", False) for c in all_checks)
         # 可复用资产（协议/纯逻辑）在起始阶段正确登记（跨阶段资产长期保留）
         protobuf_registered = stage_boundary_check("protobuf_protocol", GameStage.STAGE1_COCOS).get("ok", False)
