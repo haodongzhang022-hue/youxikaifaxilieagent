@@ -299,7 +299,6 @@ class StageBoundaryGuard:
         "network_low_freq": GameStage.STAGE1_COCOS,
         "network_high_freq_sync": GameStage.STAGE3_UE,
         "ai_behavior_tree": GameStage.STAGE3_UE,
-        "ai_simple_fsm": GameStage.STAGE1_COCOS,
         "economy_full": GameStage.STAGE2_UNITY,
         "economy_basic": GameStage.STAGE1_COCOS,
         "economy_cross_server": GameStage.STAGE3_UE,
@@ -551,7 +550,7 @@ if __name__ == "__main__":
     # Cocos 阶段检查
     print("  当前阶段: Cocos (MVP)")
     checks = guard.check_many(
-        ["combat_turn_based", "network_low_freq", "ai_simple_fsm",
+        ["combat_turn_based", "network_low_freq",
          "combat_frame_sync", "physics_advanced"],
         GameStage.STAGE1_COCOS,
     )

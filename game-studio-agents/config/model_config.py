@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 
 
 # ============================================================
@@ -52,7 +52,7 @@ MODEL_POOL = {
 }
 
 # 模型档位标识（供路由/文档引用）
-MODEL_FAMILY = "glm-5.3-flash"
+MODEL_FAMILY = "glm-5.3"    # family 不含 snapshot 后缀
 MODEL_SNAPSHOT = "flash"
 
 # 备用/历史模型（迁移前引用，便于回溯）
