@@ -624,7 +624,7 @@ class ReasoningModeRouter:
     """
 
     BANDS = ["spec", "mixed", "react", "weak"]
-    # 统一模型坍缩区（GLM 5.3 Flash，见 config/model_config.py · Issue #126）
+    # 统一模型坍缩区（自动切换：高峰→GLM / 低峰→DeepSeek，见 model_config.py）
     SPEC_UPPER = 0.15      # spec 带 [0, 0.15]
     MIXED_RANGE = (0.2, 0.45)  # 过渡带，回避
     REACT_LOWER = 0.5      # react 带 [0.5, 1.0]
@@ -634,14 +634,28 @@ class ReasoningModeRouter:
     SPEC_RE = r"(理解|拆解|分析|评估|审查|还原|识别|为什么|怎么|研究|调研|修复|调试|重构|排查|understand|analyze|assess|review|evaluate|why|how|research|fix|debug|refactor)"
 
     def __init__(self, model_id=None):
-        # 统一模型：默认使用 glm-5.3-flash（model_config 单点维护）
+        # 统一模型：默认走 model_config 的自动切换（高峰→GLM / 低峰→DeepSeek）
         try:
-            from model_config import DEFAULT_MODEL
-            _default = DEFAULT_MODEL
+            from model_config import get_auto_model, record_usage
+            _default = get_auto_model()
         except ImportError:
             _default = "glm-5.3-flash"
         self.model_id = model_id or _default
         self.overrides = {}   # session_id -> mode
+
+    def record(self, tokens_in=0, tokens_out=0, context="", session_id=""):
+        """记录本次调用模型消耗，写入历史（供定价评估）。"""
+        try:
+            from model_config import record_usage
+            record_usage(
+                model=self.model_id,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                context=context or "ReasoningModeRouter",
+                session_id=session_id,
+            )
+        except ImportError:
+            pass
 
     def classify_task(self, text):
         """外部路由：关键词分类。返回 spec/react/weak。"""

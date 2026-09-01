@@ -430,5 +430,14 @@
       "cpu_cost_est": 1.0,
       "kind": "core"
     }
+  },
+  "test_model_auto_switch.sh": {
+    "covers": [
+      "game-studio-agents/config/model_config.py",
+      "game-studio-agents/config/agent_behavior.py"
+    ],
+    "depends_on": [],
+    "cpu_cost_est": 1.0,
+    "kind": "core"
   }
 }

@@ -113,4 +113,4 @@ def is_complex_task(text):
   减少不必要的仪式与脚手架（对应论文 10/10 vs 6 的绿地构建收益）。
 - **复合借鉴（weak + 深度引导）**：复杂借鉴任务决策更充分、收敛更快。
 
-> ⚠️ 路由映射基于统一模型 glm-5.3-flash 单档位验证（默认模型已由 DeepSeek V4 Flash 切换为 GLM 5.3 Flash）。
+> ⚠️ 路由映射基于统一模型池验证（高峰→glm-5.3-flash / 低峰→deepseek-v4-flash-0731 自动切换，见 model_config.py）。
