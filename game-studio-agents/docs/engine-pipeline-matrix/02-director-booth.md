@@ -43,10 +43,10 @@
 
 | 引擎 | 工具 | 能力完整度 | 特色 |
 |------|------|-----------|------|
-| L1 React | 自定义 Timeline | ★★☆ | Canvas/CSS/WebGL 编排 |
-| L2 Cocos | Animation Editor | ★★☆ | 轻量过场 |
-| L3 Unity | Unity Timeline | ★★★★ | 多轨道完整能力 |
-| L4 Unreal | UE Sequencer | ★★★★★ | 电影级/最高能力 |
+| L0 React | 自定义 Timeline | ★★☆ | Canvas/CSS/WebGL 编排 |
+| L1 Cocos | Animation Editor | ★★☆ | 轻量过场 |
+| L2 Unity | Unity Timeline | ★★★★ | 多轨道完整能力 |
+| L3 Unreal | UE Sequencer | ★★★★★ | 电影级/最高能力 |
 
 ### 2.3 导演台管线注册
 

@@ -125,7 +125,7 @@ DOMAINS = {
 
 ENGINES = {
     "react": {
-        "name": "L1 纯网页",
+        "name": "L0 纯网页",
         "full_name": "React (Web/WASM)",
         "positioning": "玩法验证 + 引流分享 + 快速传播",
         "script_lang": "TypeScript",
@@ -137,7 +137,7 @@ ENGINES = {
         ],
     },
     "cocos": {
-        "name": "L2 Cocos",
+        "name": "L1 Cocos",
         "full_name": "Cocos Creator",
         "positioning": "小程序 + 轻量分享传播",
         "script_lang": "TypeScript",
@@ -149,7 +149,7 @@ ENGINES = {
         ],
     },
     "unity": {
-        "name": "L3 Unity",
+        "name": "L2 Unity",
         "full_name": "Unity (团结引擎)",
         "positioning": "完整地图 + App 客户端",
         "script_lang": "C#",
@@ -162,7 +162,7 @@ ENGINES = {
         ],
     },
     "unreal": {
-        "name": "L4 Unreal",
+        "name": "L3 Unreal",
         "full_name": "Unreal Engine",
         "positioning": "高品质效果 + 护城河",
         "script_lang": "C++ / Blueprint",
@@ -188,7 +188,7 @@ def _build_pipelines() -> List[PipelineDef]:
     """构建全部管线定义（40+ 条）"""
     pipes: List[PipelineDef] = []
 
-    # --- L1 React ---
+    # --- L0 React ---
     pipes.append(PipelineDef(
         pipeline_id="pipeline.character_animation.react",
         name="React角色动画管线",
@@ -270,7 +270,7 @@ def _build_pipelines() -> List[PipelineDef]:
         quality_gates=["骨骼正确", "动画流畅"],
     ))
 
-    # --- L2 Cocos ---
+    # --- L1 Cocos ---
     pipes.append(PipelineDef(
         pipeline_id="pipeline.character_animation.cocos",
         name="Cocos角色动画管线",
@@ -352,7 +352,7 @@ def _build_pipelines() -> List[PipelineDef]:
         quality_gates=["过场流畅", "时间精准"],
     ))
 
-    # --- L3 Unity ---
+    # --- L2 Unity ---
     pipes.append(PipelineDef(
         pipeline_id="pipeline.character_animation.unity",
         name="Unity角色动作管线",
@@ -478,7 +478,7 @@ def _build_pipelines() -> List[PipelineDef]:
         quality_gates=["过场流畅", "镜头合理", "灯光到位"],
     ))
 
-    # --- L4 Unreal ---
+    # --- L3 Unreal ---
     pipes.append(PipelineDef(
         pipeline_id="pipeline.character_animation.unreal",
         name="UE角色动作管线",

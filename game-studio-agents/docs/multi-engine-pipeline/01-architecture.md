@@ -12,10 +12,10 @@
 
 | 层级 | 引擎 | 定位 | 核心目标 | 技术栈 |
 |------|------|------|---------|--------|
-| **L1 引流层** | React (Web) | 玩法验证 + 引流分享 | 最敏捷开发、快速验证玩法、网页传播 | React + Canvas + WebGL |
-| **L2 轻量层** | Cocos Creator | 小程序/轻量游戏 | 快速分享传播、轻量包体、微信小程序 | TypeScript + Cocos 引擎 |
-| **L3 完整层** | Unity (团结引擎) | 完整地图/App客户端 | 完整游戏体验、程序化生成、内容升级 | C# / C++ + 团结引擎 |
-| **L4 护城河** | Unreal Engine | 高品质效果 | 视觉/物理天花板、护城河 | C++ + UE5 |
+| **L0 引流层** | React (Web) | 玩法验证 + 引流分享 | 最敏捷开发、快速验证玩法、网页传播 | React + Canvas + WebGL |
+| **L1 轻量层** | Cocos Creator | 小程序/轻量游戏 | 快速分享传播、轻量包体、微信小程序 | TypeScript + Cocos 引擎 |
+| **L2 完整层** | Unity (团结引擎) | 完整地图/App客户端 | 完整游戏体验、程序化生成、内容升级 | C# / C++ + 团结引擎 |
+| **L3 护城河** | Unreal Engine | 高品质效果 | 视觉/物理天花板、护城河 | C++ + UE5 |
 
 ### 1.2 核心驱动因素
 
@@ -40,7 +40,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    L1 引流层 · React (Web)                          │
+│                    L0 引流层 · React (Web)                          │
 │  玩法原型 / 互动H5 / 网页引流 / 快速验证                              │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐          │
 │  │ React 组件层 │    │ 玩法逻辑层    │    │ 数据采集层   │          │
@@ -85,7 +85,7 @@
 │          │              │              │              │            │
 │          ▼              ▼              ▼              ▼            │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐    │
-│  │ L2 Cocos  │  │ L3 Unity   │  │ L4 Unreal  │  │ 其他引擎   │    │
+│  │ L1 Cocos  │  │ L2 Unity   │  │ L3 Unreal  │  │ 其他引擎   │    │
 │  │ Creator    │  │ (团结引擎) │  │ Engine    │  │ (预留)     │    │
 │  └────────────┘  └────────────┘  └────────────┘  └────────────┘    │
 └─────────────────────────────────────────────────────────────────────┘
@@ -95,7 +95,7 @@
 
 ## 三、各层引擎适配策略
 
-### 3.1 L1 → L2：React → Cocos Creator
+### 3.1 L0 → L1：React → Cocos Creator
 
 ```
 React (Web) ──迁移──→ Cocos Creator
@@ -112,7 +112,7 @@ React (Web) ──迁移──→ Cocos Creator
 - 玩法数值/关卡数据全部 JSON 化，不硬编码
 - UI 需要重构，但数据模型直接复用
 
-### 3.2 L2 → L3：Cocos → Unity (团结引擎)
+### 3.2 L1 → L2：Cocos → Unity (团结引擎)
 
 ```
 Cocos Creator ──迁移──→ Unity (团结引擎)
@@ -124,12 +124,12 @@ Cocos Creator ──迁移──→ Unity (团结引擎)
 ```
 
 **迁移要点**：
-- 采用 **C++ 核心 + C ABI** 作为 L3 的主架构
+- 采用 **C++ 核心 + C ABI** 作为 L2 的主架构
 - 程序化生成逻辑完全引擎无关（中间件层），各引擎只是"渲染器"
 - 资产经转换管线批量处理，不手动搬运
 - 使用 **IL2CPP** 或 **Native Plugin** 承载 C++ 核心
 
-### 3.3 L3 → L4：Unity → Unreal Engine
+### 3.3 L2 → L3：Unity → Unreal Engine
 
 ```
 Unity (团结引擎) ──迁移──→ Unreal Engine
@@ -304,10 +304,10 @@ assets/
 
 | 层 | 引擎 | 主语言 | 中间件接口 | AI 协作方式 |
 |----|------|--------|-----------|-----------|
-| L1 | React | TypeScript | WASM (Emscripten 编译 C++→WASM) | AI 生成 TS 逻辑 |
-| L2 | Cocos | TypeScript | C ABI FFI (通过 cocos native plugin) | AI 生成 TS + Python 原型 |
-| L3 | Unity | C# + C++ | C ABI (PInvoke) + Native Plugin | Python→C++ AI 转译 |
-| L4 | Unreal | C++ | 源码集成 (直接编译) | AI 生成 C++ 代码 |
+| L0 | React | TypeScript | WASM (Emscripten 编译 C++→WASM) | AI 生成 TS 逻辑 |
+| L1 | Cocos | TypeScript | C ABI FFI (通过 cocos native plugin) | AI 生成 TS + Python 原型 |
+| L2 | Unity | C# + C++ | C ABI (PInvoke) + Native Plugin | Python→C++ AI 转译 |
+| L3 | Unreal | C++ | 源码集成 (直接编译) | AI 生成 C++ 代码 |
 
 ---
 
