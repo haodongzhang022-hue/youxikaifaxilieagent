@@ -732,9 +732,11 @@ def get_engine(engine_type: str = None) -> EngineAdapter:
 def detect_engine_from_project(project_path: str = "") -> EngineType:
     """根据项目文件探测使用的引擎类型。
 
-    通过检查项目目录中的特征文件判断引擎:
-      - Cocos Creator: project.json / package.json (cocos 依赖)
+    通过检查项目目录中的特征文件判断引擎（L0~L3）:
       - Unreal Engine: .uproject 文件
+      - Unity: ProjectSettings/ProjectVersion.txt
+      - React (L0 纯网页): package.json 含 react/react-dom 依赖，或 vite.config.ts + src
+      - Cocos Creator: project.json / package.json (cocos/creator 依赖)
       - 默认返回 cocos_creator
 
     Args:
@@ -743,29 +745,42 @@ def detect_engine_from_project(project_path: str = "") -> EngineType:
     Returns:
         EngineType: 探测到的引擎类型
     """
-    import os
+    import json
     from pathlib import Path
 
     root = Path(project_path) if project_path else Path(".")
     if not root.exists():
         return DEFAULT_ENGINE
 
-    # 检查 Unreal Engine 标志文件 (.uproject)
-    for f in root.glob("*.uproject"):
+    # 1. Unreal Engine 标志文件 (.uproject)
+    if list(root.glob("*.uproject")):
         return EngineType.UNREAL_ENGINE
 
-    # 检查 Cocos Creator 标志文件 (project.json)
-    if (root / "project.json").exists() or (root / "package.json").exists():
+    # 2. Unity 标志文件 (ProjectSettings/ProjectVersion.txt)
+    if (root / "ProjectSettings" / "ProjectVersion.txt").exists():
+        return EngineType.UNITY
+
+    # 3. 读取 package.json（若存在）判断 React / Cocos
+    pkg_deps: dict = {}
+    if (root / "package.json").exists():
         try:
-            import json
-            if (root / "package.json").exists():
-                with open(root / "package.json") as f:
-                    pkg = json.load(f)
-                if "cocos" in pkg.get("dependencies", {}) or \
-                   "creator" in pkg.get("dependencies", {}):
-                    return EngineType.COCOS_CREATOR
+            with open(root / "package.json", encoding="utf-8") as f:
+                pkg = json.load(f)
+            pkg_deps = {
+                **pkg.get("dependencies", {}),
+                **pkg.get("devDependencies", {}),
+            }
         except Exception:
-            pass
+            pkg_deps = {}
+
+    # React (L0 纯网页)：react / react-dom 依赖，或 vite 项目特征
+    if "react" in pkg_deps or "react-dom" in pkg_deps or \
+       (root / "vite.config.ts").exists() or (root / "vite.config.js").exists():
+        return EngineType.REACT
+
+    # Cocos Creator：project.json 或 cocos/creator 依赖
+    if (root / "project.json").exists() or \
+       "cocos" in pkg_deps or "creator" in pkg_deps:
         return EngineType.COCOS_CREATOR
 
     return DEFAULT_ENGINE

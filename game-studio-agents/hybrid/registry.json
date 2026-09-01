@@ -431,8 +431,7 @@
     },
     "test_model_auto_switch.sh": {
       "covers": [
-        "game-studio-agents/config/model_config.py",
-        "game-studio-agents/config/agent_behavior.py"
+        "game-studio-agents/config/model_config.py"
       ],
       "depends_on": [],
       "cpu_cost_est": 1.0,

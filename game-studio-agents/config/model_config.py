@@ -66,7 +66,7 @@ LEGACY_MODEL_FLASH = "deepseek-v4-flash"  # 旧档位，已收敛到 GLM Flash
 # ============================================================
 
 # ── 切换开关（变量控制）─────────────────────────────────────
-# 环境变量 MODEL_AUTO_SWITCH=true 启用自动切换；否则固定用 DEFAULT_MODEL
+# 自动切换默认开启；环境变量 MODEL_AUTO_SWITCH=false 可关闭自动切换，固定用 DEFAULT_MODEL
 # 环境变量 MODEL_PEAK_START / MODEL_PEAK_END 自定义高峰时段（默认 09:00-18:00）
 # 环境变量 MODEL_PEAK_WEEKDAYS 自定义高峰工作日（默认 Mon-Fri，值为 0-6，逗号分隔）
 AUTO_SWITCH_ENV = "MODEL_AUTO_SWITCH"
