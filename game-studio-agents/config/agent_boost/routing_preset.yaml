@@ -5,7 +5,7 @@
 #        (spec/react/weak + 过渡带回避) 论文实测 P1-P23
 # 说明: 为 reference_learner 自动路由到最匹配的思维模式，
 #       不换模型，通过提示词/工具面条件推高能力上限。
-# 统一模型: deepseek-v4-flash-0731（见 config/model_config.py，Issue #126）
+# 统一模型: glm-5.3-flash（见 config/model_config.py，Issue #126）
 #           ——本仓库统一 Flash 档，Persona 默认走 flash，Pro 档仅留档不复用。
 # ============================================================
 
@@ -108,4 +108,4 @@ boost_preset:
     - "理解/评估类任务(spec路由): 深度拆解提升，减少盲目产出"
     - "Mod落地类任务(react路由): 直接交付可运行Mod，减少仪式/脚手架"
     - "复合借鉴(weak+深度引导): 决策更充分、收敛更快"
-  caveat: "实测数据来自 DeepSeek V4 Flash(0731)；已按 Issue #126 统一为 deepseek-v4-flash-0731，不再跨 Pro/Flash 档位，路由映射保持单一档位验证"
+  caveat: "路由映射基于统一模型 glm-5.3-flash 单档位验证（默认模型已由 DeepSeek V4 Flash 切换为 GLM 5.3 Flash）"

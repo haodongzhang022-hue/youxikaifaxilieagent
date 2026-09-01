@@ -2,11 +2,11 @@
 
 > 借鉴 dsh-router-standard 的三波段思维模式路由（spec/react/weak + 过渡带回避），
 > 为 `reference_learner` 自动路由到最匹配的思维模式，**不换模型**，
-> 通过提示词/工具面条件把 DeepSeek 能力往"正确方向"推高上限。
+> 通过提示词/工具面条件把 GLM 能力往"正确方向"推高上限。
 
 ## 1. 核心原理：双吸引子行为策略
 
-论文实测（DeepSeek V4 Flash 0731，21 个模式点 × n=2；Issue #126 统一模型）证明：模型沿 persona 轴的行为
+论文实测（GLM 5.3 Flash，21 个模式点 × n=2；Issue #126 统一模型）证明：模型沿 persona 轴的行为
 **坍缩为三个稳定区**，中间不是连续过渡：
 
 ```
@@ -113,4 +113,4 @@ def is_complex_task(text):
   减少不必要的仪式与脚手架（对应论文 10/10 vs 6 的绿地构建收益）。
 - **复合借鉴（weak + 深度引导）**：复杂借鉴任务决策更充分、收敛更快。
 
-> ⚠️ 实测数据来自 DeepSeek V4 Flash(0731)；本仓库已按 Issue #126 统一为 deepseek-v4-flash-0731，路由映射保持单档位验证。
+> ⚠️ 路由映射基于统一模型 glm-5.3-flash 单档位验证（默认模型已由 DeepSeek V4 Flash 切换为 GLM 5.3 Flash）。
