@@ -101,7 +101,8 @@ class PipelineReleaseReviewer:
 
     def run_pipeline_release(self, engine: str, domain: str,
                              execution_result: Optional[Dict[str, Any]] = None,
-                             stage_checks: Optional[Dict[str, bool]] = None) -> PipelineRelease:
+                             stage_checks: Optional[Dict[str, bool]] = None,
+                             released: Optional[set] = None) -> PipelineRelease:
         """单条管线发布评审。
 
         Args:
@@ -109,6 +110,9 @@ class PipelineReleaseReviewer:
             domain: 专业方向（character_animation 等）
             execution_result: 管线执行结果，含 quality_checks（逐项质量门禁）
             stage_checks: 管线级阶段边界审查（no_stage_crossing/reusable_assets/stage_alignment）
+            released: 已放行管线 id 集合。单管线评审若管线有依赖，应传入上游已放行
+                集合以正确判定依赖就绪；缺省(None)时对**有依赖**的管线保守判定为依赖
+                未就绪（避免假放行），无依赖管线不受影响。
 
         Returns:
             PipelineRelease 评审记录（含 GO/NO-GO）
@@ -150,8 +154,8 @@ class PipelineReleaseReviewer:
             "stage_alignment": bool(stage_checks.get("stage_alignment", True)),
         }
 
-        # ③ 依赖检查：依赖管线未放行则该管线阻塞
-        dep_blocked = self._check_dependencies(pipe)
+        # ③ 依赖检查：依赖管线未放行则该管线阻塞（统一单条/批量判定语义）
+        dep_blocked = self._check_dependencies(pipe, released)
 
         # ④ 综合判 GO/NO-GO
         quality_ok = all(quality_checks.values())
@@ -182,13 +186,19 @@ class PipelineReleaseReviewer:
         """检查管线依赖是否已被放行。
 
         依赖管线（如 skeleton_binding → character_animation）需先放行
-        才能放行下游。released 为已放行管线 id 集合；缺省视为全部就绪。
+        才能放行下游。released 为已放行管线 id 集合。
+
+        语义（统一单条与批量评审）：
+          - 管线无依赖 → 恒返回空（就绪）；
+          - released 提供 → 返回其中尚未放行的依赖（d not in released）；
+          - released 缺省(None) → 有依赖的管线**保守**判定为依赖未就绪，
+            返回全部依赖，避免因缺失放行上下文而假放行下游。
         """
         if not pipe.dependencies:
             return []
         if released is None:
-            # 未提供放行集时，认为依赖缺省就绪（依赖在编排器侧已保证）
-            return []
+            # 缺省放行上下文：对存在依赖的管线保守判定（不假放行下游）
+            return list(pipe.dependencies)
         return [d for d in pipe.dependencies if d not in released]
 
     # ---- M2: 全链路总评审聚合 ----
@@ -286,14 +296,9 @@ class PipelineReleaseReviewer:
                                 "reusable_assets": False,
                                 "stage_alignment": False}
             pr = self.run_pipeline_release(pipe.engine, pipe.domain,
-                                           exec_result, stage_checks)
-            # 依赖检查：下游依赖已放行则放行，否则阻塞
-            if pipe.dependencies:
-                if not all(d in released for d in pipe.dependencies):
-                    pr.release_verdict = "NO-GO"
-                    pr.state = PipelineState.BLOCKED
-                    missing_deps = [d for d in pipe.dependencies if d not in released]
-                    pr.notes = f"依赖管线未放行: {', '.join(missing_deps)}"
+                                           exec_result, stage_checks,
+                                           released=set(released))
+            # 依赖已放行且其余门禁达标 → 累积到 released，解锁下游
             if pr.release_verdict == "GO":
                 released.add(pipe.pipeline_id)
             releases.append(pr)
@@ -306,10 +311,11 @@ class PipelineReleaseReviewer:
 
 def run_pipeline_release(engine: str, domain: str,
                          execution_result: Optional[Dict[str, Any]] = None,
-                         stage_checks: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
+                         stage_checks: Optional[Dict[str, bool]] = None,
+                         released: Optional[set] = None) -> Dict[str, Any]:
     """便捷入口：单条管线发布评审 → dict 结果。"""
     reviewer = PipelineReleaseReviewer()
-    pr = reviewer.run_pipeline_release(engine, domain, execution_result, stage_checks)
+    pr = reviewer.run_pipeline_release(engine, domain, execution_result, stage_checks, released)
     return {
         "pipeline_id": pr.pipeline_id,
         "verdict": pr.release_verdict,
@@ -338,19 +344,33 @@ def demo():
     reviewer = PipelineReleaseReviewer()
 
     # --- M1: 单管线 GO/NO-GO ---
-    print("\n[1] 单管线发布评审（Unity 角色动作）")
+    print("\n[1] 单管线发布评审（Unity 角色动作 · 依赖已放行 → GO）")
+    # character_animation 依赖 skeleton_binding，须传入上游已放行集合才能放行
     go = reviewer.run_pipeline_release(
         "unity", "character_animation",
         {"state": PipelineState.COMPLETED,
          "quality_checks": {"动作流畅度": True, "性能基准": True, "风格一致性": True}},
         {"no_stage_crossing": True, "reusable_assets": True, "stage_alignment": True},
+        released={"pipeline.skeleton_binding.unity"},
     )
     print(f"    {go.pipeline_id} → {go.release_verdict} | {go.notes}")
 
+    # 依赖未放行（缺省 released）→ 保守 NO-GO（依赖阻塞），统一单条/批量判定
+    dep_no_go = reviewer.run_pipeline_release(
+        "unity", "character_animation",
+        {"state": PipelineState.COMPLETED,
+         "quality_checks": {"动作流畅度": True, "性能基准": True, "风格一致性": True}},
+        {"no_stage_crossing": True, "reusable_assets": True, "stage_alignment": True},
+    )
+    print(f"    {dep_no_go.pipeline_id} → {dep_no_go.release_verdict} | {dep_no_go.notes}")
+
+    # 质量门禁未达标 → NO-GO（依赖已放行，聚焦展示质量未达标）
     no_go = reviewer.run_pipeline_release(
         "unity", "character_animation",
-        {"state": PipelineState.IN_PROGRESS,
+        {"state": PipelineState.COMPLETED,
          "quality_checks": {"动作流畅度": False, "性能基准": True, "风格一致性": True}},
+        {"no_stage_crossing": True, "reusable_assets": True, "stage_alignment": True},
+        released={"pipeline.skeleton_binding.unity"},
     )
     print(f"    {no_go.pipeline_id} → {no_go.release_verdict} | {no_go.notes}")
 
@@ -377,6 +397,7 @@ def demo():
 
     # 断言
     assert go.release_verdict == "GO"
+    assert dep_no_go.release_verdict == "NO-GO" and dep_no_go.state == PipelineState.BLOCKED
     assert no_go.release_verdict == "NO-GO"
     assert report.overall == "GO"
     assert full.pipeline_count >= 40, f"应评审≥40条管线, got {full.pipeline_count}"

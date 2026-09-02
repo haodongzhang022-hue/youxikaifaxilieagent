@@ -40,7 +40,8 @@ class PipelineQualityGate:
     def check_pipeline(self, pipeline_id: str,
                        execution_state: str = PipelineState.COMPLETED,
                        quality_passed: Optional[Dict[str, bool]] = None,
-                       stage_checks: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
+                       stage_checks: Optional[Dict[str, bool]] = None,
+                       released: Optional[set] = None) -> Dict[str, Any]:
         """单条管线的质量门禁核对。
 
         Args:
@@ -48,6 +49,7 @@ class PipelineQualityGate:
             execution_state: 执行状态（默认 completed）
             quality_passed: 逐项质量门禁通过与否（缺省全通过）
             stage_checks: 阶段边界审查（缺省全通过）
+            released: 已放行管线 id 集合（有依赖的管线需传入上游放行集才能放行）
 
         Returns:
             {pipeline_id, gate_name, verdict, passed_checks, missing_checks, stage_gate}
@@ -69,7 +71,7 @@ class PipelineQualityGate:
         # 复用 pipeline_release 的评审逻辑
         exec_result = {"state": execution_state, "quality_checks": quality_passed}
         pr = self.reviewer.run_pipeline_release(pipe.engine, pipe.domain,
-                                                exec_result, stage_checks)
+                                                exec_result, stage_checks, released)
 
         passed_checks = [g for g, ok in pr.quality_checks.items() if ok]
         missing_checks = [g for g, ok in pr.quality_checks.items() if not ok]
@@ -191,13 +193,15 @@ def demo():
     # 单管线
     print("\n[1] 单管线质量门禁（Unity 角色动作 · 全部达标）")
     r = gate.check_pipeline("pipeline.character_animation.unity",
-                            quality_passed={"动作流畅度": True, "性能基准": True, "风格一致性": True})
+                            quality_passed={"动作流畅度": True, "性能基准": True, "风格一致性": True},
+                            released={"pipeline.skeleton_binding.unity"})
     print(f"    {r['pipeline_id']} → {r['verdict']} | 通过 {len(r['passed_checks'])} 项")
 
     # 单管线不达标
     print("\n[2] 单管线质量门禁（Unity 角色动作 · 帧率不达标）")
     r2 = gate.check_pipeline("pipeline.character_animation.unity",
-                             quality_passed={"动作流畅度": True, "性能基准": False, "风格一致性": True})
+                             quality_passed={"动作流畅度": True, "性能基准": False, "风格一致性": True},
+                             released={"pipeline.skeleton_binding.unity"})
     print(f"    {r2['pipeline_id']} → {r2['verdict']} | 缺: {r2['missing_checks']}")
 
     # 引擎级

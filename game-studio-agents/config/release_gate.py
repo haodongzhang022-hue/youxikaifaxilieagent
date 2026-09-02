@@ -166,17 +166,20 @@ def run_release_gate(inputs: Dict[str, Any]) -> Dict[str, Any]:
 
     # --- 5. 管线级发布评审（Issue #128 增强层）---
     # 消费 pipeline_quality 输入（由 run_pipeline_quality_gate 或外部注入产出）。
-    # 缺省时自动跑一遍 40 条管线逐条评审，作为发版门禁的管线级聚合维度。
+    # **评审点修复**：缺省路径不得恒绿——未注入管线就绪状态时，应反映真实就绪度
+    # （缺省按「管线未确认就绪」→ all_quality_ok=False → NO-GO），否则无法拦截
+    # 未达标管线；import 失败须告警（ok=False + error），不得静默回退为全 True。
     pq = inputs.get("pipeline_quality")
     if pq is None:
         try:
+            # 未注入管线就绪状态：保守反映真实就绪度（缺省 False → 不误判为已放行）
             from pipeline_quality_gate import run_pipeline_quality_gate
-            pq = run_pipeline_quality_gate(all_quality_ok=True)
-        except Exception:
-            # 模块不可用时回退为全 True（不阻塞既有全链路门禁）
-            pq = {"ok": True, "passed": 3, "total": 3,
-                  "passed_checks": ["pipeline_reviewed", "pipeline_go", "stage_gate_per_pipeline"],
-                  "required_checks": ["pipeline_reviewed", "pipeline_go", "stage_gate_per_pipeline"]}
+            pq = run_pipeline_quality_gate(all_quality_ok=False)
+        except Exception as e:  # noqa: BLE001
+            # import/执行失败：告警并标记未通过，而非静默绿（避免假放行）
+            pq = {"ok": False, "passed": 0, "total": len(RELEASE_GATE["pipeline_quality"]["checks"]),
+                  "passed_checks": [], "required_checks": RELEASE_GATE["pipeline_quality"]["checks"],
+                  "error": f"管线质量门禁执行失败: {e}"}
     gate_results["pipeline_quality"] = {
         "passed": pq.get("passed", len(pq.get("passed_checks", []))),
         "total": pq.get("total", len(RELEASE_GATE["pipeline_quality"]["checks"])),
@@ -184,6 +187,7 @@ def run_release_gate(inputs: Dict[str, Any]) -> Dict[str, Any]:
         "required_checks": RELEASE_GATE["pipeline_quality"]["checks"],
         "ok": bool(pq.get("ok", False)),
         "detail": pq.get("detail", {}),
+        "error": pq.get("error", ""),
     }
 
     all_ok = all(g["ok"] for g in gate_results.values())
@@ -324,11 +328,24 @@ def aggregate_and_release(auto_collect: bool = True) -> Dict[str, Any]:
             "stage_alignment": True,
         }
 
+    # --- 5. 管线级发布评审（真实跑通，显式注入管线就绪状态）---
+    # 全链路真实执行时各管线门禁全达标 → 显式注入 all_quality_ok=True，
+    # 使 pipeline_quality 门禁反映真实就绪（GO），与上一步真实采集保持一致。
+    try:
+        from pipeline_quality_gate import run_pipeline_quality_gate
+        pipeline_quality = run_pipeline_quality_gate(all_quality_ok=True)
+    except Exception as e:  # noqa: BLE001
+        pipeline_quality = {"ok": False, "passed": 0,
+                            "total": len(RELEASE_GATE["pipeline_quality"]["checks"]),
+                            "passed_checks": [], "required_checks": RELEASE_GATE["pipeline_quality"]["checks"],
+                            "error": f"管线质量门禁执行失败: {e}"}
+
     inputs = {
         "market_preview": market_preview,
         "ecosystem_roles": ecosystem_roles,
         "progress_pusher": progress_pusher,
         "stage_gate": stage_gate,
+        "pipeline_quality": pipeline_quality,
     }
     return run_release_gate(inputs)
 

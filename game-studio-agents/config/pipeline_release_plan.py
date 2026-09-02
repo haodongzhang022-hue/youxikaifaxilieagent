@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pipeline_registry import PipelineRegistry, PipelineDef, ENGINES
+from pipeline_registry import PipelineRegistry, PipelineDef
 from pipeline_release import PipelineReleaseReviewer, PipelineRelease
 
 

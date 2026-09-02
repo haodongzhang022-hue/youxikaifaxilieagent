@@ -40,12 +40,19 @@ if output=$(python3 -c "
 import sys; sys.path.insert(0, 'config')
 from pipeline_release import PipelineReleaseReviewer, run_pipeline_release
 r = PipelineReleaseReviewer()
-# GO 场景
+# GO 场景：character_animation 依赖 skeleton_binding，须传入上游已放行集合
 go = r.run_pipeline_release('unity','character_animation',
     {'state':'completed','quality_checks':{'动作流畅度':True,'性能基准':True,'风格一致性':True}},
-    {'no_stage_crossing':True,'reusable_assets':True,'stage_alignment':True})
+    {'no_stage_crossing':True,'reusable_assets':True,'stage_alignment':True},
+    released={'pipeline.skeleton_binding.unity'})
 assert go.release_verdict == 'GO', f'应 GO, got {go.release_verdict}'
-# NO-GO 场景（质量门禁未达标）
+# 依赖未放行（缺省 released）→ 保守 NO-GO/BLOCKED（统一单条/批量依赖判定）
+dep_nogo = r.run_pipeline_release('unity','character_animation',
+    {'state':'completed','quality_checks':{'动作流畅度':True,'性能基准':True,'风格一致性':True}},
+    {'no_stage_crossing':True,'reusable_assets':True,'stage_alignment':True})
+assert dep_nogo.release_verdict == 'NO-GO', f'依赖未放行应 NO-GO, got {dep_nogo.release_verdict}'
+assert dep_nogo.state == 'blocked', f'应 blocked, got {dep_nogo.state}'
+# NO-GO 场景（质量门禁未达标，无依赖的 cocos ai_trigger）
 nogo = run_pipeline_release('cocos','ai_trigger',
     {'state':'completed','quality_checks':{'行为覆盖率':True,'帧率影响≤5%':False}})
 assert nogo['verdict'] == 'NO-GO', f'应 NO-GO, got {nogo}'
@@ -94,11 +101,18 @@ if output=$(python3 -c "
 import sys; sys.path.insert(0, 'config')
 from release_gate import RELEASE_GATE, run_release_gate
 assert 'pipeline_quality' in RELEASE_GATE, 'RELEASE_GATE 应含 pipeline_quality'
+# 缺省路径（未注入管线就绪）应保守非就绪（不恒绿），能真实拦截未放行管线
 res = run_release_gate({})
 pq = res['gate_results']['pipeline_quality']
-assert pq['ok'], f'pipeline_quality 门禁应 ok, got {pq}'
-assert pq['passed'] == 3 and pq['total'] == 3
-assert res['total_checks'] >= 16, f'总检查数应≥16(含管线级), got {res[\"total_checks\"]}'
+assert not pq['ok'], f'缺省路径 pipeline_quality 不应恒绿, got {pq}'
+assert pq['total'] == 3
+# 显式注入管线全部就绪 → pipeline_quality 门禁 GO
+from pipeline_quality_gate import run_pipeline_quality_gate
+res2 = run_release_gate({'pipeline_quality': run_pipeline_quality_gate(all_quality_ok=True)})
+pq2 = res2['gate_results']['pipeline_quality']
+assert pq2['ok'], f'显式就绪时 pipeline_quality 应 ok, got {pq2}'
+assert pq2['passed'] == 3 and pq2['total'] == 3
+assert res2['total_checks'] >= 16, f'总检查数应≥16(含管线级), got {res2["total_checks"]}'
 print('release_gate 管线级聚合扩展验证通过')
 " 2>&1); then
     echo "[PASS] M2 release_gate 管线级聚合扩展通过"; PASS=$((PASS+1))
