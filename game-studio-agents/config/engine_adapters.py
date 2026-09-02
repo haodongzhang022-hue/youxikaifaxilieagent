@@ -27,10 +27,11 @@ from typing import Any, Dict, List, Optional
 # ============================================================
 
 class EngineType(str, Enum):
-    """支持的游戏引擎类型"""
-    COCOS_CREATOR = "cocos_creator"      # Cocos Creator（2D/3D 轻量游戏）
-    UNITY = "unity"                      # Unity/团结引擎（中度商业游戏）
-    UNREAL_ENGINE = "unreal_engine"      # Unreal Engine（3D 重度游戏）
+    """支持的游戏引擎类型（L0~L3，对齐 Issue #126 命名统一）"""
+    REACT = "react_web"                  # L0 纯网页（React/Web 玩法验证/引流）
+    COCOS_CREATOR = "cocos_creator"      # L1 Cocos Creator（2D/3D 轻量游戏）
+    UNITY = "unity"                      # L2 Unity/团结引擎（中度商业游戏）
+    UNREAL_ENGINE = "unreal_engine"      # L3 Unreal Engine（3D 重度游戏）
     CUSTOM = "custom"                    # 自定义/其他引擎
 
 
@@ -141,6 +142,128 @@ class EngineAdapter:
                 for r in self.resource_specs()
             ],
         }
+
+
+# ============================================================
+
+# ============================================================
+# 三、L0 纯网页 React 适配器（玩法验证/引流分享）
+# ============================================================
+
+class ReactEngineAdapter(EngineAdapter):
+    """L0 纯网页 React 引擎适配器。
+
+    React (Web/WASM) 特性:
+      - 网页/H5 玩法验证、引流分享、快速传播
+      - TypeScript 前端逻辑，Canvas/SVG/CSS 动画
+      - 轻量渲染（Lottie/序列帧/2D 精灵）
+      - 支持 Web 多平台发布（桌面/移动浏览器）
+    """
+
+    @property
+    def engine_type(self) -> EngineType:
+        return EngineType.REACT
+
+    @property
+    def engine_name(self) -> str:
+        return "React (Web/WASM)"
+
+    @property
+    def engine_version(self) -> str:
+        return "18.x"
+
+    def build_command(self, target_platform: str = "web") -> str:
+        """React 构建命令"""
+        return f"npm run build -- --platform {target_platform}"
+
+    def run_command(self, project_path: str = "") -> str:
+        """React 运行命令（本地 dev server）"""
+        if project_path:
+            return f"cd {project_path} && npm run dev"
+        return "npm run dev"
+
+    def supported_platforms(self) -> List[str]:
+        return ["web", "web-mobile", "web-desktop", "wasm"]
+
+    def resource_specs(self) -> List[ResourceSpec]:
+        return [
+            ResourceSpec(
+                engine=EngineType.REACT,
+                resource_type="sprite",
+                extension=".png",
+                import_dir="src/assets/textures",
+                export_dir="dist/",
+                build_tool="npm run build",
+                max_size_mb=5.0,
+                notes="2D 精灵图资源（PNG/WebP）",
+            ),
+            ResourceSpec(
+                engine=EngineType.REACT,
+                resource_type="audio",
+                extension=".mp3",
+                import_dir="src/assets/audio",
+                export_dir="dist/",
+                build_tool="npm run build",
+                max_size_mb=10.0,
+                notes="音效/背景音乐（.mp3/.ogg）",
+            ),
+            ResourceSpec(
+                engine=EngineType.REACT,
+                resource_type="animation",
+                extension=".json",
+                import_dir="src/assets/animations",
+                export_dir="dist/",
+                build_tool="npm run build",
+                max_size_mb=10.0,
+                notes="Lottie/序列帧动画（JSON 中立格式）",
+            ),
+            ResourceSpec(
+                engine=EngineType.REACT,
+                resource_type="scene",
+                extension=".tsx",
+                import_dir="src/pages",
+                export_dir="dist/",
+                build_tool="npm run build",
+                max_size_mb=5.0,
+                notes="页面/场景（React TSX 组件）",
+            ),
+            ResourceSpec(
+                engine=EngineType.REACT,
+                resource_type="script",
+                extension=".ts",
+                import_dir="src/scripts",
+                export_dir="dist/",
+                build_tool="tsc",
+                max_size_mb=5.0,
+                notes="TypeScript 逻辑脚本（纯 TS，解耦渲染层）",
+            ),
+        ]
+
+    def resource_import_path(self, resource_type: str) -> str:
+        mapping = {
+            "sprite": "src/assets/textures",
+            "audio": "src/assets/audio",
+            "animation": "src/assets/animations",
+            "scene": "src/pages",
+            "script": "src/scripts",
+        }
+        return mapping.get(resource_type, "src/")
+
+    def resource_export_path(self, resource_type: str) -> str:
+        return "dist/"
+
+    def project_structure(self) -> Dict[str, str]:
+        return {
+            "src": "源码目录（components/hooks/pages/assets/scripts）",
+            "public": "静态资源（favicon/index.html）",
+            "dist": "构建产物（发布到 CDN）",
+            "src/assets": "资源目录（textures/audio/animations）",
+            "src/scripts": "纯 TS 逻辑（引擎无关核心）",
+        }
+
+    @property
+    def script_languages(self) -> List[str]:
+        return ["TypeScript", "JavaScript"]
 
 
 # ============================================================
@@ -575,6 +698,7 @@ class UnrealEngineAdapter(EngineAdapter):
 # ============================================================
 
 _ENGINE_REGISTRY: Dict[str, EngineAdapter] = {
+    EngineType.REACT.value: ReactEngineAdapter(),
     EngineType.COCOS_CREATOR.value: CocosCreatorAdapter(),
     EngineType.UNITY.value: UnityEngineAdapter(),
     EngineType.UNREAL_ENGINE.value: UnrealEngineAdapter(),
@@ -608,9 +732,11 @@ def get_engine(engine_type: str = None) -> EngineAdapter:
 def detect_engine_from_project(project_path: str = "") -> EngineType:
     """根据项目文件探测使用的引擎类型。
 
-    通过检查项目目录中的特征文件判断引擎:
-      - Cocos Creator: project.json / package.json (cocos 依赖)
+    通过检查项目目录中的特征文件判断引擎（L0~L3）:
       - Unreal Engine: .uproject 文件
+      - Unity: ProjectSettings/ProjectVersion.txt
+      - React (L0 纯网页): package.json 含 react/react-dom 依赖，或 vite.config.ts + src
+      - Cocos Creator: project.json / package.json (cocos/creator 依赖)
       - 默认返回 cocos_creator
 
     Args:
@@ -619,29 +745,42 @@ def detect_engine_from_project(project_path: str = "") -> EngineType:
     Returns:
         EngineType: 探测到的引擎类型
     """
-    import os
+    import json
     from pathlib import Path
 
     root = Path(project_path) if project_path else Path(".")
     if not root.exists():
         return DEFAULT_ENGINE
 
-    # 检查 Unreal Engine 标志文件 (.uproject)
-    for f in root.glob("*.uproject"):
+    # 1. Unreal Engine 标志文件 (.uproject)
+    if list(root.glob("*.uproject")):
         return EngineType.UNREAL_ENGINE
 
-    # 检查 Cocos Creator 标志文件 (project.json)
-    if (root / "project.json").exists() or (root / "package.json").exists():
+    # 2. Unity 标志文件 (ProjectSettings/ProjectVersion.txt)
+    if (root / "ProjectSettings" / "ProjectVersion.txt").exists():
+        return EngineType.UNITY
+
+    # 3. 读取 package.json（若存在）判断 React / Cocos
+    pkg_deps: dict = {}
+    if (root / "package.json").exists():
         try:
-            import json
-            if (root / "package.json").exists():
-                with open(root / "package.json") as f:
-                    pkg = json.load(f)
-                if "cocos" in pkg.get("dependencies", {}) or \
-                   "creator" in pkg.get("dependencies", {}):
-                    return EngineType.COCOS_CREATOR
+            with open(root / "package.json", encoding="utf-8") as f:
+                pkg = json.load(f)
+            pkg_deps = {
+                **pkg.get("dependencies", {}),
+                **pkg.get("devDependencies", {}),
+            }
         except Exception:
-            pass
+            pkg_deps = {}
+
+    # React (L0 纯网页)：仅当 package.json 含 react / react-dom 依赖时判定为 React
+    # （vite.config 不作为独立判定条件，避免 Vue/Svelte/Solid 等使用 Vite 的项目被误判）
+    if "react" in pkg_deps or "react-dom" in pkg_deps:
+        return EngineType.REACT
+
+    # Cocos Creator：project.json 或 cocos/creator 依赖
+    if (root / "project.json").exists() or \
+       "cocos" in pkg_deps or "creator" in pkg_deps:
         return EngineType.COCOS_CREATOR
 
     return DEFAULT_ENGINE
@@ -746,6 +885,17 @@ if __name__ == "__main__":
     print(f"  构建命令: {cocos.build_command('windows')}")
     print(f"  资源规格数: {len(cocos.resource_specs())}")
     for rs in cocos.resource_specs()[:3]:
+        print(f"    - {rs.resource_type} ({rs.extension}) → {rs.import_dir}")
+
+    # 2.5 L0 纯网页 React 适配器
+    print("\n== 2.5 L0 纯网页 React 适配器 ==")
+    react = get_engine("react_web")
+    print(f"  引擎名称: {react.engine_name} ({react.engine_version})")
+    print(f"  支持平台: {react.supported_platforms()}")
+    print(f"  脚本语言: {react.script_languages}")
+    print(f"  构建命令: {react.build_command('web')}")
+    print(f"  资源规格数: {len(react.resource_specs())}")
+    for rs in react.resource_specs()[:3]:
         print(f"    - {rs.resource_type} ({rs.extension}) → {rs.import_dir}")
 
     # 3. Unreal Engine 适配器

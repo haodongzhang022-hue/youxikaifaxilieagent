@@ -38,7 +38,9 @@ class HarnessContext:
 
 # 本地运行时可调用的工具链（对应引擎）
 _ENGINE_TOOLS = {
+    "react": ["npm run build", "npm run dev", "tsc", "resource_import"],
     "cocos": ["cocos build", "cocos creator", "tsc", "resource_import"],
+    "unity": ["Unity -batchmode", "Unity Editor", "dotnet build", "resource_import"],
     "unreal": ["RunUAT", "Unreal Editor", "Visual Studio", "cook"],
 }
 
@@ -80,10 +82,10 @@ def plan_execution(ctx: HarnessContext, work_package: Dict[str, Any]) -> Dict[st
     """结合目标引擎生成本地执行计划（工具调用面）。"""
     module = work_package.get("module", "generic")
     module_map = {
-        "client": ["cocos build", "resource_import"],
-        "engine": ["tsc", "cocos build"],
-        "scene": ["cocos creator", "resource_import"],
-        "audio": ["resource_import", "cocos build"],
+        "client": ["npm run build", "resource_import"] if ctx.engine == "react" else (["dotnet build", "resource_import"] if ctx.engine == "unity" else ["cocos build", "resource_import"]),
+        "engine": ["tsc", "npm run build"] if ctx.engine == "react" else (["dotnet build", "tsc"] if ctx.engine == "unity" else ["tsc", "cocos build"]),
+        "scene": ["npm run dev", "resource_import"] if ctx.engine == "react" else (["Unity Editor", "resource_import"] if ctx.engine == "unity" else ["cocos creator", "resource_import"]),
+        "audio": ["resource_import", "npm run build"] if ctx.engine == "react" else (["resource_import", "dotnet build"] if ctx.engine == "unity" else ["resource_import", "cocos build"]),
         "blueprint": ["RunUAT", "Unreal Editor"],
         "map": ["Unreal Editor"],
         "generic": ctx.tool_chain,
@@ -105,11 +107,12 @@ def execute_locally(ctx: HarnessContext, plan: Dict[str, Any]) -> Dict[str, Any]
     真实环境会调用 Cocos/UE 工具链构建；此原型返回可验收的产物描述。
     """
     module = plan.get("work_package", "wp")
-    engine_dir = "assets" if ctx.engine == "cocos" else "Content"
+    engine_dir = "assets" if ctx.engine == "cocos" else ("Assets" if ctx.engine == "unity" else "Content")
     output_files = []
     for t in plan.get("tools", []):
         ext_map = {"cocos build": ".prefab", "resource_import": ".png",
-                   "tsc": ".ts", "RunUAT": ".uasset", "Unreal Editor": ".umap"}
+                   "tsc": ".ts", "RunUAT": ".uasset", "Unreal Editor": ".umap",
+                   "dotnet build": ".dll", "Unity Editor": ".unity"}
         ext = ext_map.get(t, ".bin")
         output_files.append(f"{engine_dir}/{module}/{module}{ext}")
     return {
@@ -179,6 +182,17 @@ def _demo():
         "work_package": {"id": "wp_level", "label": "关卡", "module": "map"}})
     plan2 = plan_execution(ctx2, wp2)
     print(f"  承接 {wp2['id']} tools={plan2['tools']}")
+
+    print("\n[Unity 侧运行时]")
+    ctx3 = build_context(agent_role="unity_dev", engine="unity")
+    print(f"  agent_role={ctx3.agent_role} tool_chain={ctx3.tool_chain}")
+    wp3 = receive_dispatch(ctx3, {
+        "event": "TASK_ASSIGN", "assignee": "unity_dev",
+        "work_package": {"id": "wp_scene", "label": "场景", "module": "scene"}})
+    plan3 = plan_execution(ctx3, wp3)
+    print(f"  承接 {wp3['id']} tools={plan3['tools']}")
+    result3 = execute_locally(ctx3, plan3)
+    print(f"  产出引擎目录: Assets，示例产物: {result3['output_files'][:2]}")
 
 
 if __name__ == "__main__":

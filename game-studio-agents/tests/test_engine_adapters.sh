@@ -33,12 +33,14 @@ sys.path.insert(0, '.')
 from engine_adapters import get_engine, get_all_engines, detect_engine_from_project
 
 # 获取引擎
+react = get_engine('react_web')
 cocos = get_engine('cocos_creator')
 unity = get_engine('unity')
 unreal = get_engine('unreal_engine')
 all_engines = get_all_engines()
 detected = detect_engine_from_project()
 
+print(f"REACT_ENGINE={react.engine_name}")
 print(f"COCOS_ENGINE={cocos.engine_name}")
 print(f"UNITY_ENGINE={unity.engine_name}")
 print(f"UNREAL_ENGINE={unreal.engine_name}")
@@ -53,6 +55,9 @@ print(f"UNREAL_PLATFORMS={','.join(unreal.supported_platforms())}")
 print(f"COCOS_SCRIPTS={','.join(cocos.script_languages)}")
 print(f"UNITY_SCRIPTS={','.join(unity.script_languages)}")
 print(f"UNREAL_SCRIPTS={','.join(unreal.script_languages)}")
+print(f"REACT_SCRIPTS={','.join(react.script_languages)}")
+print(f"REACT_PLATFORMS={','.join(react.supported_platforms())}")
+print(f"REACT_BUILD={react.build_command('web')}")
 PYEOF
 )
 
@@ -63,11 +68,18 @@ else
   report "两个引擎适配器均可获取" 1
 fi
 
-# 2. 引擎总数
-if echo "$out" | grep -q "ALL_COUNT=3"; then
-  report "引擎注册表包含 3 个适配器(Cocos/Unity/UE)" 0
+# 1.5 L0 纯网页 React 适配器
+if echo "$out" | grep -q "REACT_ENGINE=React"; then
+  report "L0 React 适配器可获取" 0
 else
-  report "引擎注册表包含 3 个适配器(Cocos/Unity/UE)" 1
+  report "L0 React 适配器可获取" 1
+fi
+
+# 2. 引擎总数
+if echo "$out" | grep -q "ALL_COUNT=4"; then
+  report "引擎注册表包含 4 个适配器(L0 React/Cocos/Unity/UE)" 0
+else
+  report "引擎注册表包含 4 个适配器(L0 React/Cocos/Unity/UE)" 1
 fi
 
 # 2.5 Unity 引擎也可获取
@@ -96,6 +108,27 @@ if echo "$out" | grep -q "UNITY_SCRIPTS=C#"; then
   report "Unity 脚本语言正确" 0
 else
   report "Unity 脚本语言正确" 1
+fi
+
+# 2.9 L0 React 脚本语言
+if echo "$out" | grep -q "REACT_SCRIPTS=TypeScript,JavaScript"; then
+  report "L0 React 脚本语言正确" 0
+else
+  report "L0 React 脚本语言正确" 1
+fi
+
+# 2.10 L0 React 构建命令
+if echo "$out" | grep -q "REACT_BUILD=npm run build"; then
+  report "L0 React 构建命令正确" 0
+else
+  report "L0 React 构建命令正确" 1
+fi
+
+# 2.11 L0 React 平台列表
+if echo "$out" | grep -q "REACT_PLATFORMS=web,web-mobile,web-desktop,wasm"; then
+  report "L0 React 平台列表正确" 0
+else
+  report "L0 React 平台列表正确" 1
 fi
 
 # 3. Cocos 构建命令

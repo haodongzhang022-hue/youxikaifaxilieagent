@@ -5,6 +5,11 @@
 #        (spec/react/weak + 过渡带回避) 论文实测 P1-P23
 # 说明: 为 reference_learner 自动路由到最匹配的思维模式，
 #       不换模型，通过提示词/工具面条件推高能力上限。
+# 统一模型: 自动切换（见 config/model_config.py，Issue #126）
+#           ——高峰(工作日 09:00-18:00)→ glm-5.3-flash；
+#           ——低峰 → deepseek-v4-flash-0731；
+#           通过 MODEL_AUTO_SWITCH / MODEL_PEAK_START / MODEL_PEAK_END
+#           变量控制自动切换，见 model_config.get_auto_model()。
 # ============================================================
 
 boost_preset:
@@ -106,4 +111,4 @@ boost_preset:
     - "理解/评估类任务(spec路由): 深度拆解提升，减少盲目产出"
     - "Mod落地类任务(react路由): 直接交付可运行Mod，减少仪式/脚手架"
     - "复合借鉴(weak+深度引导): 决策更充分、收敛更快"
-  caveat: "实测数据来自 DeepSeek V4 Pro/Flash，迁移到自有模型需重新验证路由映射"
+  caveat: "路由映射基于高峰/低峰双模型自动切换验证（高峰→GLM 5.3 Flash 稳定、低峰→DeepSeek V4 Flash 0731 成本优；默认已由 DeepSeek V4 Flash 切换为 GLM 5.3 Flash，可通过 MODEL_AUTO_SWITCH / MODEL_PEAK_* 变量调整）"

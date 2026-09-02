@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
-# 四阶段感知引擎模块测试信号灯（stage_aware_engine）
+# 五阶段感知引擎模块测试信号灯（stage_aware_engine, L0~L3 + 资产库）
 # 说明: 验证 Issue #112「游戏向架构师的开发」引擎感知架构——
-#       1. 四阶段枚举可用（Cocos → Unity → UE → 资产库）
+#       1. 五阶段枚举可用（L0 网页 → Cocos → Unity → UE → 资产库）
 #       2. 阶段选型决策正确
 #       3. 阶段边界检查（阶段不对=错）功能正确
 #       4. 阶段切换规则正确
@@ -47,16 +47,17 @@ print(f"ORDER={order}")
 print(f"LABEL_1={GameStage.STAGE1_COCOS.label}")
 
 # 阶段选型
-for st in [GameStage.STAGE1_COCOS, GameStage.STAGE2_UNITY, GameStage.STAGE3_UE]:
+for st in [GameStage.STAGE0_WEB, GameStage.STAGE1_COCOS, GameStage.STAGE2_UNITY, GameStage.STAGE3_UE]:
     d = EngineStageSelector.select(st)
     print(f"SELECT_{st.order}={d['engine']}|{len(d['boundary_in'])}|{len(d['boundary_out'])}")
 
 # 引擎对应阶段
-for eng in [StageEngineType.COCOS_CREATOR, StageEngineType.UNITY, StageEngineType.UNREAL]:
+for eng in [StageEngineType.REACT, StageEngineType.COCOS_CREATOR, StageEngineType.UNITY, StageEngineType.UNREAL]:
     st = EngineStageSelector.get_stage_for_engine(eng)
     print(f"ENGINE_STAGE_{eng.value}={st.value if st else 'None'}")
 
 # 阶段切换
+print(f"CAN_0_TO_1={EngineStageSelector.can_transition(GameStage.STAGE0_WEB, GameStage.STAGE1_COCOS)}")
 print(f"CAN_1_TO_2={EngineStageSelector.can_transition(GameStage.STAGE1_COCOS, GameStage.STAGE2_UNITY)}")
 print(f"CAN_3_TO_2={EngineStageSelector.can_transition(GameStage.STAGE3_UE, GameStage.STAGE2_UNITY)}")
 print(f"NEXT_3={EngineStageSelector.next_stage(GameStage.STAGE3_UE).value if EngineStageSelector.next_stage(GameStage.STAGE3_UE) else 'None'}")
@@ -70,20 +71,27 @@ PYEOF
 )
 
 # 1. 四阶段
-if echo "$out" | grep -q "STAGE_COUNT=4"; then
-  report "四阶段枚举完整" 0
+if echo "$out" | grep -q "STAGE_COUNT=5"; then
+  report "五阶段枚举完整(L0~L3+资产库)" 0
 else
   report "四阶段枚举完整" 1
 fi
 
 # 2. 阶段顺序
-if echo "$out" | grep -q "ORDER=\[1, 2, 3, 4\]"; then
-  report "阶段顺序正确(1→2→3→4)" 0
+if echo "$out" | grep -q "ORDER=\[0, 1, 2, 3, 4\]"; then
+  report "阶段顺序正确(L0→L1→L2→L3→资产库)" 0
 else
   report "阶段顺序正确(1→2→3→4)" 1
 fi
 
-# 3. 阶段1选型
+# 3. L0 选型
+if echo "$out" | grep -q "SELECT_0=react_web|5|5"; then
+  report "L0选型正确(React/纯网页)" 0
+else
+  report "L0选型正确(React/纯网页)" 1
+fi
+
+# 3.1 阶段1选型
 if echo "$out" | grep -q "SELECT_1=cocos_creator|5|5"; then
   report "阶段1选型正确(Cocos Creator)" 0
 else
@@ -105,22 +113,22 @@ else
 fi
 
 # 6. 引擎对应阶段
-if echo "$out" | grep -q "ENGINE_STAGE_cocos_creator=stage1_cocos" && echo "$out" | grep -q "ENGINE_STAGE_unity=stage2_unity"; then
+if echo "$out" | grep -q "ENGINE_STAGE_react_web=stage0_web" && echo "$out" | grep -q "ENGINE_STAGE_cocos_creator=stage1_cocos" && echo "$out" | grep -q "ENGINE_STAGE_unity=stage2_unity"; then
   report "引擎-阶段绑定正确" 0
 else
   report "引擎-阶段绑定正确" 1
 fi
 
 # 7. 阶段切换规则
-if echo "$out" | grep -q "CAN_1_TO_2=True" && echo "$out" | grep -q "CAN_3_TO_2=False"; then
+if echo "$out" | grep -q "CAN_0_TO_1=True" && echo "$out" | grep -q "CAN_1_TO_2=True" && echo "$out" | grep -q "CAN_3_TO_2=False"; then
   report "阶段切换规则正确(只能向后演进)" 0
 else
   report "阶段切换规则正确(只能向后演进)" 1
 fi
 
 # 8. 感知引擎模型
-if echo "$out" | grep -q "ENGINE_COUNT=3"; then
-  report "感知引擎模型覆盖3引擎" 0
+if echo "$out" | grep -q "ENGINE_COUNT=4"; then
+  report "感知引擎模型覆盖4引擎(L0~L3)" 0
 else
   report "感知引擎模型覆盖3引擎" 1
 fi
@@ -231,6 +239,14 @@ if echo "$out2" | grep -q "VIOLATIONS=4"; then
   report "越界计数正确(4项)" 0
 else
   report "越界计数正确(4项)" 1
+fi
+
+# 19. 模块自测收尾文案应为「五阶段」
+selftest_out=$($PY stage_aware_engine.py 2>&1 || true)
+if echo "$selftest_out" | grep -q "五阶段感知引擎模块自测通过" && ! echo "$selftest_out" | grep -q "四阶段感知引擎模块自测通过"; then
+  report "stage_aware_engine 模块自测收尾文案为五阶段" 0
+else
+  report "stage_aware_engine 模块自测收尾文案为五阶段" 1
 fi
 
 echo ""

@@ -209,6 +209,85 @@ else
   report "部门 Agent 引擎资源格式感知（Cocos .mp3 / Unreal .fbx）" 1
 fi
 
+echo "== 6. detect_engine_from_project 多引擎探测（L0~L3）=="
+probe_out=$($PY -c "
+import sys, tempfile, os, json; sys.path.insert(0, '.')
+from engine_adapters import detect_engine_from_project, EngineType
+tmp = tempfile.mkdtemp()
+# React (L0): package.json 含 react 依赖
+r = os.path.join(tmp, 'react'); os.makedirs(r)
+open(os.path.join(r, 'package.json'), 'w').write(json.dumps({'dependencies': {'react': '^18', 'react-dom': '^18'}}))
+# Unity (L2): ProjectSettings/ProjectVersion.txt
+u = os.path.join(tmp, 'unity'); os.makedirs(os.path.join(u, 'ProjectSettings'))
+open(os.path.join(u, 'ProjectSettings', 'ProjectVersion.txt'), 'w').write('2021.3.0f1')
+# Cocos: project.json
+c = os.path.join(tmp, 'cocos'); os.makedirs(c)
+open(os.path.join(c, 'project.json'), 'w').write('{}')
+# Unreal: .uproject
+ue = os.path.join(tmp, 'unreal'); os.makedirs(ue)
+open(os.path.join(ue, 'Game.uproject'), 'w').write('{}')
+print('react=' + detect_engine_from_project(r).value)
+print('unity=' + detect_engine_from_project(u).value)
+print('cocos=' + detect_engine_from_project(c).value)
+print('unreal=' + detect_engine_from_project(ue).value)
+" 2>&1)
+if echo "$probe_out" | grep -q "react=react_web" && echo "$probe_out" | grep -q "unity=unity" \
+   && echo "$probe_out" | grep -q "cocos=cocos_creator" && echo "$probe_out" | grep -q "unreal=unreal_engine"; then
+  report "detect_engine_from_project 识别 React/Unity/Cocos/Unreal" 0
+else
+  report "detect_engine_from_project 识别 React/Unity/Cocos/Unreal" 1
+  echo "  $probe_out"
+fi
+
+# detect_engine_from_project 未识别 React 依赖时不误判（空 package.json → Cocos 兜底）
+probe2=$($PY -c "
+import sys, tempfile, os, json; sys.path.insert(0, '.')
+from engine_adapters import detect_engine_from_project
+tmp = tempfile.mkdtemp()
+n = os.path.join(tmp, 'plain'); os.makedirs(n)
+open(os.path.join(n, 'package.json'), 'w').write(json.dumps({'name': 'plain'}))
+print('plain=' + detect_engine_from_project(n).value)
+" 2>&1)
+if echo "$probe2" | grep -q "plain=cocos_creator"; then
+  report "detect_engine_from_project 无引擎特征时回退 Cocos" 0
+else
+  report "detect_engine_from_project 无引擎特征时回退 Cocos" 1
+fi
+
+# Vue + Vite 项目不应误判为 React（vite.config 不作为独立判定条件）
+vue_probe=$($PY -c "
+import sys, tempfile, os, json; sys.path.insert(0, '.')
+from engine_adapters import detect_engine_from_project
+tmp = tempfile.mkdtemp()
+v = os.path.join(tmp, 'vue'); os.makedirs(v)
+open(os.path.join(v, 'package.json'), 'w').write(json.dumps({'dependencies': {'vue': '^3'}}))
+open(os.path.join(v, 'vite.config.ts'), 'w').write('export default {}')
+print('vue=' + detect_engine_from_project(v).value)
+" 2>&1)
+if echo "$vue_probe" | grep -q "vue=cocos_creator"; then
+  report "detect_engine_from_project Vue+Vite 项目不误判为 React" 0
+else
+  report "detect_engine_from_project Vue+Vite 项目不误判为 React" 1
+fi
+
+# pipeline_orchestrator 识别 react_web 引擎别名
+po_probe=$($PY -c "
+import sys; sys.path.insert(0, '.')
+from pipeline_orchestrator import PipelineOrchestrator
+po = PipelineOrchestrator()
+pipes = po.suggest_pipeline('角色动画', 'react_web')
+# 应命中 react 引擎管线
+hit = any(str(p.get('engine', '')).lower() in ('react', 'react_web') for p in pipes)
+print('react_web_hit=' + str(hit))
+print('n=' + str(len(pipes)))
+" 2>&1)
+if echo "$po_probe" | grep -q "react_web_hit=True"; then
+  report "pipeline_orchestrator 识别 react_web 引擎别名" 0
+else
+  report "pipeline_orchestrator 识别 react_web 引擎别名" 1
+  echo "  $po_probe"
+fi
+
 echo ""
 echo "测试信号灯结果: $pass 通过 / $fail 失败"
 if [ "$fail" = "0" ]; then

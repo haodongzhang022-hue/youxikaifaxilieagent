@@ -250,6 +250,12 @@ class GameProducerAgent(BaseAgent):
                 # 识别生态角色部门，不参与六大部门派单。
                 if key == "support":
                     continue
+                # 只保留 DEPARTMENTS 全局中已登记的角色。
+                # DepartmentAgents 依据 DEPARTMENTS（而非 roles.yaml）注册总线消息处理器，
+                # 若 roles.yaml 中有 DEPARTMENTS 之外的角色（如 game_architect / cocos_dev / ue_dev），
+                # 会被 _assign_resources 选为主责但无总线监听者 → 派单石沉大海。
+                if role_id not in DEPARTMENTS.get(key, {}).get("roles", []):
+                    continue
                 built.setdefault(key, {"name": dept_name, "roles": []})
                 if role_id not in built[key]["roles"]:
                     built[key]["roles"].append(role_id)

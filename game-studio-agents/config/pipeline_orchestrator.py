@@ -110,7 +110,7 @@ class PipelineOrchestrator:
         engine = engine.lower()
         # 归一化引擎别名
         engine_aliases = {
-            "web": "react", "react": "react", "网页": "react", "h5": "react",
+            "web": "react", "react": "react", "react_web": "react", "网页": "react", "h5": "react",
             "cocos": "cocos", "creator": "cocos", "小程序": "cocos",
             "unity": "unity", "团结": "unity", "u3d": "unity",
             "unreal": "unreal", "ue": "unreal", "ue5": "unreal", "虚幻": "unreal",
