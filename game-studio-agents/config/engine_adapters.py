@@ -773,9 +773,9 @@ def detect_engine_from_project(project_path: str = "") -> EngineType:
         except Exception:
             pkg_deps = {}
 
-    # React (L0 纯网页)：react / react-dom 依赖，或 vite 项目特征
-    if "react" in pkg_deps or "react-dom" in pkg_deps or \
-       (root / "vite.config.ts").exists() or (root / "vite.config.js").exists():
+    # React (L0 纯网页)：仅当 package.json 含 react / react-dom 依赖时判定为 React
+    # （vite.config 不作为独立判定条件，避免 Vue/Svelte/Solid 等使用 Vite 的项目被误判）
+    if "react" in pkg_deps or "react-dom" in pkg_deps:
         return EngineType.REACT
 
     # Cocos Creator：project.json 或 cocos/creator 依赖

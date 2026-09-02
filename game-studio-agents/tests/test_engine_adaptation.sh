@@ -254,6 +254,40 @@ else
   report "detect_engine_from_project 无引擎特征时回退 Cocos" 1
 fi
 
+# Vue + Vite 项目不应误判为 React（vite.config 不作为独立判定条件）
+vue_probe=$($PY -c "
+import sys, tempfile, os, json; sys.path.insert(0, '.')
+from engine_adapters import detect_engine_from_project
+tmp = tempfile.mkdtemp()
+v = os.path.join(tmp, 'vue'); os.makedirs(v)
+open(os.path.join(v, 'package.json'), 'w').write(json.dumps({'dependencies': {'vue': '^3'}}))
+open(os.path.join(v, 'vite.config.ts'), 'w').write('export default {}')
+print('vue=' + detect_engine_from_project(v).value)
+" 2>&1)
+if echo "$vue_probe" | grep -q "vue=cocos_creator"; then
+  report "detect_engine_from_project Vue+Vite 项目不误判为 React" 0
+else
+  report "detect_engine_from_project Vue+Vite 项目不误判为 React" 1
+fi
+
+# pipeline_orchestrator 识别 react_web 引擎别名
+po_probe=$($PY -c "
+import sys; sys.path.insert(0, '.')
+from pipeline_orchestrator import PipelineOrchestrator
+po = PipelineOrchestrator()
+pipes = po.suggest_pipeline('角色动画', 'react_web')
+# 应命中 react 引擎管线
+hit = any(str(p.get('engine', '')).lower() in ('react', 'react_web') for p in pipes)
+print('react_web_hit=' + str(hit))
+print('n=' + str(len(pipes)))
+" 2>&1)
+if echo "$po_probe" | grep -q "react_web_hit=True"; then
+  report "pipeline_orchestrator 识别 react_web 引擎别名" 0
+else
+  report "pipeline_orchestrator 识别 react_web 引擎别名" 1
+  echo "  $po_probe"
+fi
+
 echo ""
 echo "测试信号灯结果: $pass 通过 / $fail 失败"
 if [ "$fail" = "0" ]; then

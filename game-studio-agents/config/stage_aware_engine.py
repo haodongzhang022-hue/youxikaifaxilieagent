@@ -585,4 +585,4 @@ if __name__ == "__main__":
         print(f"  {sae.engine.value}: 阶段={sae.stage_label}, "
               f"语言={sae.languages}, 能力={len(sae.capabilities)}项")
 
-    print("\n🟢 四阶段感知引擎模块自测通过")
+    print("\n🟢 五阶段感知引擎模块自测通过")

@@ -241,6 +241,14 @@ else
   report "越界计数正确(4项)" 1
 fi
 
+# 19. 模块自测收尾文案应为「五阶段」
+selftest_out=$($PY stage_aware_engine.py 2>&1 || true)
+if echo "$selftest_out" | grep -q "五阶段感知引擎模块自测通过" && ! echo "$selftest_out" | grep -q "四阶段感知引擎模块自测通过"; then
+  report "stage_aware_engine 模块自测收尾文案为五阶段" 0
+else
+  report "stage_aware_engine 模块自测收尾文案为五阶段" 1
+fi
+
 echo ""
 echo "=== 汇总: $pass 通过 / $fail 失败 ==="
 if [ "$fail" -gt 0 ]; then
