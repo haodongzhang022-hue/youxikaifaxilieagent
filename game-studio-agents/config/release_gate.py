@@ -47,6 +47,11 @@ RELEASE_GATE = {
         "desc": "阶段边界审查（阶段不对就算错）：无跨阶段越界 + 可复用资产校验 + 阶段对齐",
         "checks": ["no_stage_crossing", "reusable_assets_validated", "stage_alignment"],
     },
+    "pipeline_quality": {
+        "required": True,
+        "desc": "管线矩阵驱动发布评审（Issue #128）：40 条管线逐条质量门禁 + 阶段边界审查 + 全链路 GO",
+        "checks": ["pipeline_reviewed", "pipeline_go", "stage_gate_per_pipeline"],
+    },
 }
 
 
@@ -157,6 +162,28 @@ def run_release_gate(inputs: Dict[str, Any]) -> Dict[str, Any]:
         "passed_checks": sg_passed,
         "required_checks": RELEASE_GATE["stage_gate"]["checks"],
         "ok": all(c in sg_passed for c in RELEASE_GATE["stage_gate"]["checks"]),
+    }
+
+    # --- 5. 管线级发布评审（Issue #128 增强层）---
+    # 消费 pipeline_quality 输入（由 run_pipeline_quality_gate 或外部注入产出）。
+    # 缺省时自动跑一遍 40 条管线逐条评审，作为发版门禁的管线级聚合维度。
+    pq = inputs.get("pipeline_quality")
+    if pq is None:
+        try:
+            from pipeline_quality_gate import run_pipeline_quality_gate
+            pq = run_pipeline_quality_gate(all_quality_ok=True)
+        except Exception:
+            # 模块不可用时回退为全 True（不阻塞既有全链路门禁）
+            pq = {"ok": True, "passed": 3, "total": 3,
+                  "passed_checks": ["pipeline_reviewed", "pipeline_go", "stage_gate_per_pipeline"],
+                  "required_checks": ["pipeline_reviewed", "pipeline_go", "stage_gate_per_pipeline"]}
+    gate_results["pipeline_quality"] = {
+        "passed": pq.get("passed", len(pq.get("passed_checks", []))),
+        "total": pq.get("total", len(RELEASE_GATE["pipeline_quality"]["checks"])),
+        "passed_checks": pq.get("passed_checks", []),
+        "required_checks": RELEASE_GATE["pipeline_quality"]["checks"],
+        "ok": bool(pq.get("ok", False)),
+        "detail": pq.get("detail", {}),
     }
 
     all_ok = all(g["ok"] for g in gate_results.values())

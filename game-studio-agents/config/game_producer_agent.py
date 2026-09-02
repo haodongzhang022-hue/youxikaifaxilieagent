@@ -106,6 +106,40 @@ MODULE_SQUAD_DOMAIN = {
     "data_ops":        "data_ops",
 }
 
+# 架构模块 → 管线专业方向（pipeline domain）映射
+# 拆包时据 module 自动标注 pipeline_id（对齐 Issue #128 M3 蓝图）：
+#   每条架构工作包绑定一条管线矩阵中的专业方向，使发布评审能按管线粒度评审。
+# engine 上下文（architecture.engine）决定最终 pipeline_id 的引擎段，
+# 缺省时用默认引擎（react/L0）作为编排基线，具体引擎由后续里程碑升级。
+MODULE_PIPELINE_DOMAIN = {
+    "gameplay":        "gameplay_optimization",
+    "numeric_model":   "numeric_design",
+    "narrative":       "director_booth",
+    "combat":          "ai_trigger",
+    "client":          "character_animation",
+    "server":          "numeric_design",
+    "engine":          "gameplay_optimization",
+    "ai_logic":        "ai_trigger",
+    "art_direction":   "character_animation",
+    "ui_ux":           "scene_vfx",
+    "audio":           "director_booth",
+    "testing":         "numeric_design",
+    "release":         "numeric_design",
+    "data_ops":        "numeric_design",
+}
+
+# 默认编排引擎（缺省按 L0 React 作为管线矩阵定位基线）
+DEFAULT_PIPELINE_ENGINE = "react"
+
+# 引擎别名归一化
+PIPELINE_ENGINE_ALIAS = {
+    "react": "react", "web": "react", "react_web": "react", "网页": "react", "h5": "react",
+    "cocos": "cocos", "creator": "cocos", "小程序": "cocos",
+    "unity": "unity", "团结": "unity", "u3d": "unity",
+    "unreal": "unreal", "ue": "unreal", "ue5": "unreal", "虚幻": "unreal",
+}
+
+
 
 # ============================================================
 # 游戏向经理状态机（角色 manager 编排）
@@ -422,6 +456,9 @@ class GameProducerAgent(BaseAgent):
                               "未被 handle_task 正确读取")
         project = architecture.get("project", "未命名项目")
         modules = architecture.get("modules", list(ARCHITECTURE_MODULES.keys()))
+        # M3（Issue #128）：保存当前架构蓝图，供 _split_work_packages 读取 engine 上下文
+        # 以标注管线矩阵 pipeline_id（拆包即自动绑定管线）。
+        self._current_architecture = architecture
         self.biz_state = "INPUT_PENDING"
         self._log("orchestrate", f"收到架构蓝图: {project}")
         # v0.9 修复：_owner_load 只增不减会跨编排累积，污染后续负载均衡决策。
@@ -497,6 +534,13 @@ class GameProducerAgent(BaseAgent):
         # 依赖规则：程序需要策划先给设计，QA 需要程序/美术产出，发版依赖 QA
         dept_order = {"design": 0, "program": 1, "art": 1, "qa": 2, "pm": 3, "ops": 2}
         wps = []
+        # M3（Issue #128）：从架构蓝图提取引擎上下文，用于拆包标注 pipeline_id。
+        # 缺省用 DEFAULT_PIPELINE_ENGINE（L0 React）作为管线矩阵定位基线。
+        engine = DEFAULT_PIPELINE_ENGINE
+        arch = getattr(self, "_current_architecture", None) or {}
+        arch_engine = (arch.get("engine") or "").strip().lower()
+        if arch_engine:
+            engine = PIPELINE_ENGINE_ALIAS.get(arch_engine, arch_engine)
         for i, mod in enumerate(decomposed):
             dept = mod["department"]
             deps = []
@@ -505,6 +549,9 @@ class GameProducerAgent(BaseAgent):
                 if dept_order.get(prev["department"], 0) < dept_order.get(dept, 0):
                     deps.append(f"wp_{prev['module']}")
             module_key = mod["module"]
+            # M3（Issue #128）：拆包时标注 pipeline_id（模块 → 管线专业方向）
+            pipeline_domain = MODULE_PIPELINE_DOMAIN.get(module_key, "")
+            pipeline_id = f"pipeline.{pipeline_domain}.{engine}" if pipeline_domain else ""
             wps.append({
                 "id": f"wp_{module_key}",
                 "module": module_key,
@@ -515,6 +562,10 @@ class GameProducerAgent(BaseAgent):
                 "status": "pending",
                 # 自动标注可调配小组领域（经理拆包即自动，无需手写标记）
                 "squad_domain": MODULE_SQUAD_DOMAIN.get(module_key, ""),
+                # M3（Issue #128）：管线矩阵定位——工作包绑定具体管线，供发布评审按管线粒度追踪
+                "pipeline_id": pipeline_id,
+                "pipeline_engine": engine,
+                "pipeline_domain": pipeline_domain,
             })
         return wps
 

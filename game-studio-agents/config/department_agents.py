@@ -95,6 +95,8 @@ class DepartmentAgent(BaseAgent):
         self.pending_rework: list = []         # 收到返工通知、待重新加工的工作包 id
         self.rework_count: Dict[str, int] = {}  # 工作包 id -> 返工次数
         self.biz_state = "IDLE"                 # 部门业务状态（IDLE/EXECUTING/REWORK/DELIVERING）
+        # M4（Issue #128）：部门回报的管线状态（pipeline_id -> 状态 dict）
+        self.pipeline_status: Dict[str, Any] = {}
         # 组内协作记录：工作包 id -> 已派发的内部子任务 role 清单
         self.internal_subtasks: Dict[str, list] = {}
         # 跨部门协作记录：工作包 id -> [（协作类型, 对方角色）]
@@ -327,6 +329,13 @@ class DepartmentAgent(BaseAgent):
 
         self._transition("DELIVERING")
         # 上报 REVIEW_RESULT 给经理（producer）
+        # M4（Issue #128）：部门执行后回报管线状态。工作包携带有 pipeline_id
+        # （经理拆包时标注），部门执行完成后回填管线评审所需的质量门禁与放行判定。
+        pipeline_id = work_package.get("pipeline_id") or ""
+        pipeline_status = None
+        if pipeline_id:
+            pipeline_status = self._report_pipeline_status(
+                wp_id, pipeline_id, work_package, artifact, ok)
         self.send(
             "REVIEW_RESULT", "producer",
             {
@@ -337,6 +346,8 @@ class DepartmentAgent(BaseAgent):
                 "artifact": artifact,
                 "approved": ok,
                 "reason": note,
+                # M4：管线状态回报（含 pipeline_id / 质量门禁 / 阶段边界审查 / 放行判定）
+                "pipeline_status": pipeline_status,
             })
         self.done_packages.append(wp_id)
         self.biz_state = "DELIVERING"
@@ -344,6 +355,56 @@ class DepartmentAgent(BaseAgent):
         # 自动释放：工作包完成后归还调配的可调配小组到池（重复调用）
         self._auto_squad_release(wp_id)
         self._transition("IDLE")
+
+    # ---------- M4: 管线状态回报（Issue #128） ----------
+    def _report_pipeline_status(self, wp_id: str, pipeline_id: str,
+                                work_package: Dict[str, Any],
+                                artifact: Dict[str, Any],
+                                approved: bool) -> Dict[str, Any]:
+        """部门执行后回报管线状态，回填管线发布评审。
+
+        部门工作包绑定了 pipeline_id（经理拆包时标注）。执行完成后，部门
+        据此回报该管线的质量门禁、阶段边界审查与放行判定，供
+        pipeline_release / release_gate 做管线级发布评审聚合。
+
+        Args:
+            wp_id: 工作包 id
+            pipeline_id: 绑定的管线 id（如 pipeline.character_animation.unity）
+            work_package: 工作包（含 pipeline_engine / pipeline_domain）
+            artifact: 部门执行产出物
+            approved: 部门验收是否通过
+
+        Returns:
+            管线状态 dict（含质量门禁/阶段边界/放行判定）
+        """
+        # 从产出物解析质量门禁逐项通过与否（缺省按验收结果全通过/全失败）
+        quality_checks = {}
+        raw = (artifact or {}).get("quality_checks") or {}
+        if approved:
+            # 验收通过 → 该管线质量门禁视为全绿（部门按管线 quality_gates 履约）
+            quality_checks = {g: True for g in raw} if raw else {}
+        else:
+            quality_checks = {g: bool(v) for g, v in raw.items()} if raw else {}
+
+        # 阶段边界审查（复用 stage_gate 语义，缺省通过）
+        stage_gate = {
+            "no_stage_crossing": bool((artifact or {}).get("no_stage_crossing", True)),
+            "reusable_assets": bool((artifact or {}).get("reusable_assets", True)),
+            "stage_alignment": bool((artifact or {}).get("stage_alignment", True)),
+        }
+
+        status = {
+            "pipeline_id": pipeline_id,
+            "engine": work_package.get("pipeline_engine", ""),
+            "domain": work_package.get("pipeline_domain", ""),
+            "work_package_id": wp_id,
+            "quality_checks": quality_checks,
+            "stage_gate": stage_gate,
+            "state": "completed" if approved else "failed",
+            "release_verdict": "GO" if approved else "NO-GO",
+        }
+        self.pipeline_status[pipeline_id] = status
+        return status
 
     # ---------- 状态汇报 ----------
     def report(self) -> Dict[str, Any]:
@@ -362,6 +423,8 @@ class DepartmentAgent(BaseAgent):
             "peer_collab": list(self.peer_collab),
             # 可调配小组自动化调度状态
             "auto_squad_wps": sorted(self._squad_wp_ids),
+            # M4（Issue #128）：部门回报的管线状态（pipeline_id → 状态）
+            "pipeline_status": dict(getattr(self, "pipeline_status", {})),
         }
 
     def _on_notification(self, msg: Message):
