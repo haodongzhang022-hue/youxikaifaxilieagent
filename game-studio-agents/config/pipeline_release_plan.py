@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from pipeline_registry import PipelineRegistry, PipelineDef
-from pipeline_release import PipelineReleaseReviewer, PipelineRelease
+from pipeline_release import PipelineReleaseReviewer, PipelineRelease, topo_sort
 
 
 # 四引擎阶段（L0-L3）
@@ -39,24 +39,8 @@ class PipelineReleasePlanner:
         self.reviewer = PipelineReleaseReviewer(self.registry)
 
     def _topo_sort(self, pipes: List[PipelineDef]) -> List[PipelineDef]:
-        """拓扑排序：依赖管线在前（发版时先放行依赖）。"""
-        by_id = {p.pipeline_id: p for p in pipes}
-        ordered: List[PipelineDef] = []
-        visited: set = set()
-
-        def _visit(p: PipelineDef):
-            if p.pipeline_id in visited:
-                return
-            visited.add(p.pipeline_id)
-            for dep_id in p.dependencies:
-                dep = by_id.get(dep_id)
-                if dep is not None:
-                    _visit(dep)
-            ordered.append(p)
-
-        for p in pipes:
-            _visit(p)
-        return ordered
+        """拓扑排序：依赖管线在前（复用 pipeline_release.topo_sort 单处实现）。"""
+        return topo_sort(pipes)
 
     # ---- M5: 管线依赖链发版编排 ----
 

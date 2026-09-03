@@ -221,11 +221,18 @@ def run_release_gate(inputs: Dict[str, Any]) -> Dict[str, Any]:
 # 四、聚合全链路产出并执行发版验收（主入口）
 # ============================================================
 
-def aggregate_and_release(auto_collect: bool = True) -> Dict[str, Any]:
+def aggregate_and_release(auto_collect: bool = True,
+                           pipeline_statuses: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """聚合上游全链路产出，执行发版门禁与验收放行。
 
     auto_collect=True 时自动从各产出模块采集验收输入（真实跑通），
     供 wp_release 验收放行。
+
+    pipeline_statuses: {pipeline_id: pipeline_status}，部门 _report_pipeline_status 真实
+        回报的逐管线状态。提供时，pipeline_quality 门禁**优先走真实闭环**——由部门
+        release_verdict / stage_gate 推导管线级就绪，不再凭注册表存在即全量放行。
+        缺省(None)时按全链路真实跑通注入全量就绪（注册表覆盖率自检口径），
+        保持既有全链路 GO 语义不变。
     """
     # --- 1. 市场预演产出（wp_numeric_model + wp_data_ops）---
     from market_input_bridge import build_market_input
@@ -328,12 +335,19 @@ def aggregate_and_release(auto_collect: bool = True) -> Dict[str, Any]:
             "stage_alignment": True,
         }
 
-    # --- 5. 管线级发布评审（真实跑通，显式注入管线就绪状态）---
-    # 全链路真实执行时各管线门禁全达标 → 显式注入 all_quality_ok=True，
-    # 使 pipeline_quality 门禁反映真实就绪（GO），与上一步真实采集保持一致。
+    # --- 5. 管线级发布评审（真实闭环优先）---
+    # 有真实部门回报的 pipeline_statuses → 优先走真实状态驱动门禁；
+    # 无真实状态 → 全链路真实跑通时各管线门禁全达标 → 显式注入全量就绪
+    # （注册表覆盖率自检口径，保持既有全链路 GO 语义不变）。
     try:
         from pipeline_quality_gate import run_pipeline_quality_gate
-        pipeline_quality = run_pipeline_quality_gate(all_quality_ok=True)
+        if pipeline_statuses is not None and len(pipeline_statuses) > 0:
+            # 真实部门状态闭环：由实际 release_verdict 推导门禁，不再恒绿
+            pipeline_quality = run_pipeline_quality_gate(
+                pipeline_statuses=pipeline_statuses)
+        else:
+            # 无真实状态（自检口径）：全链路真实跑通 → 注入全量就绪保持既有 GO 语义
+            pipeline_quality = run_pipeline_quality_gate(all_quality_ok=True)
     except Exception as e:  # noqa: BLE001
         pipeline_quality = {"ok": False, "passed": 0,
                             "total": len(RELEASE_GATE["pipeline_quality"]["checks"]),

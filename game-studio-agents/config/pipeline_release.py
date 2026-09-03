@@ -81,6 +81,33 @@ def _now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def topo_sort(pipes: List[PipelineDef]) -> List[PipelineDef]:
+    """按依赖关系拓扑排序：依赖管线在前，被依赖方在后。
+
+    确保评审时依赖管线已先放行，使下游管线能正确判定依赖是否就绪
+    （对齐 pipeline_orchestrator 的依赖检测语义）。
+    收敛 `_topo_sort` 重复实现：pipeline_release / pipeline_release_plan 共用，
+    避免两处依赖语义日后漂移不一致。
+    """
+    by_id = {p.pipeline_id: p for p in pipes}
+    ordered: List[PipelineDef] = []
+    visited: set = set()
+
+    def _visit(p: PipelineDef):
+        if p.pipeline_id in visited:
+            return
+        visited.add(p.pipeline_id)
+        for dep_id in p.dependencies:
+            dep = by_id.get(dep_id)
+            if dep is not None:
+                _visit(dep)
+        ordered.append(p)
+
+    for p in pipes:
+        _visit(p)
+    return ordered
+
+
 # ============================================================
 # 管线发布评审核心
 # ============================================================
@@ -242,28 +269,8 @@ class PipelineReleaseReviewer:
 
 
     def _topo_sort(self, pipes: List[PipelineDef]) -> List[PipelineDef]:
-        """按依赖关系拓扑排序：依赖管线在前，被依赖方在后。
-
-        确保评审时依赖管线已先放行，使下游管线能正确判定依赖是否就绪
-        （对齐 pipeline_orchestrator 的依赖检测语义）。
-        """
-        by_id = {p.pipeline_id: p for p in pipes}
-        ordered: List[PipelineDef] = []
-        visited: set = set()
-
-        def _visit(p: PipelineDef):
-            if p.pipeline_id in visited:
-                return
-            visited.add(p.pipeline_id)
-            for dep_id in p.dependencies:
-                dep = by_id.get(dep_id)
-                if dep is not None:
-                    _visit(dep)
-            ordered.append(p)
-
-        for p in pipes:
-            _visit(p)
-        return ordered
+        """按依赖关系拓扑排序：依赖管线在前（复用模块级 topo_sort）。"""
+        return topo_sort(pipes)
 
     # ---- 便捷批量评审 ----
 
