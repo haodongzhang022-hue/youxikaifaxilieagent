@@ -45,6 +45,9 @@ ok_inputs = {
     "ecosystem_roles": {"registered": 21, "dispatchable": 21, "publish_to_bus": True},
     "progress_pusher": {"watch": 5, "push": 2, "escalate": 1, "warn": 1},
     "stage_gate": {"no_stage_crossing": True, "reusable_assets_validated": True, "stage_alignment": True},
+    # Issue #128 引入的管线级发布评审门禁，需喂全达标输入才会 GO
+    "pipeline_quality": {"ok": True, "passed": 3, "total": 3,
+                         "passed_checks": ["pipeline_reviewed", "pipeline_go", "stage_gate_per_pipeline"]},
 }
 result = run_release_gate(ok_inputs)
 print(f"MANUAL_GO={result.get('go_no_go')}")
@@ -68,11 +71,11 @@ print(f"MISSING_ITEMS={missing}")
 PYEOF
 )
 
-# 1. 门禁项目定义
-if echo "$out" | grep -q "GATE_ITEMS=.*market_preview.*ecosystem_roles.*progress_pusher.*stage_gate" && echo "$out" | grep -q "GATE_COUNT=4"; then
-  report "发版门禁四项标准定义完整（含 stage_gate）" 0
+# 1. 门禁项目定义（含 Issue#128 新增的 pipeline_quality，共 5 项）
+if echo "$out" | grep -q "GATE_ITEMS=.*market_preview.*ecosystem_roles.*progress_pusher.*stage_gate.*pipeline_quality" && echo "$out" | grep -q "GATE_COUNT=5"; then
+  report "发版门禁五项标准定义完整（含 stage_gate + pipeline_quality）" 0
 else
-  report "发版门禁四项标准定义完整（含 stage_gate）" 1
+  report "发版门禁五项标准定义完整（含 stage_gate + pipeline_quality）" 1
 fi
 
 # 2. 聚合验收 GO
@@ -110,11 +113,11 @@ else
   report "缺项输入→NO-GO 阻塞" 1
 fi
 
-# 7. 全部达标时门禁结果全 True
-if echo "$out" | grep -q "MANUAL_RESULT:market_preview=True" && echo "$out" | grep -q "MANUAL_RESULT:progress_pusher=True"; then
-  report "达标输入门禁逐项全部通过" 0
+# 7. 全部达标时门禁结果全 True（含第 5 项 pipeline_quality）
+if echo "$out" | grep -q "MANUAL_RESULT:market_preview=True" && echo "$out" | grep -q "MANUAL_RESULT:progress_pusher=True" && echo "$out" | grep -q "MANUAL_RESULT:pipeline_quality=True"; then
+  report "达标输入门禁逐项全部通过（含 pipeline_quality）" 0
 else
-  report "达标输入门禁逐项全部通过" 1
+  report "达标输入门禁逐项全部通过（含 pipeline_quality）" 1
 fi
 
 echo ""
