@@ -142,6 +142,60 @@ class PipelineQualityGate:
         }
 
 
+    # ---- M4: 真实部门状态驱动门禁 ----
+
+    def gate_from_statuses(self, pipeline_statuses: Dict[str, Any]) -> Dict[str, Any]:
+        """由真实部门回报的逐管线状态推导管线质量门禁。
+
+        Args:
+            pipeline_statuses: {pipeline_id: pipeline_status}，其中 pipeline_status
+                含 quality_checks / stage_gate / release_verdict（部门 _report_pipeline_status 产出）
+
+        Returns:
+            与 check_all_engines 结构对齐的门禁结果（含 real_status 标注）
+        """
+        required = PIPELINE_QUALITY_GATE["pipeline_quality"]["checks"]
+        passed_checks = []
+        total_registered = len(self.registry.all())
+        status_count = len(pipeline_statuses)
+
+        # pipeline_reviewed：注册管线全部覆盖 + 有真实状态
+        if total_registered >= 40 and status_count >= 1:
+            passed_checks.append("pipeline_reviewed")
+
+        # pipeline_go：全部真实回报管线为 GO（无 NO-GO 即视为就绪），且状态数与注册数匹配度
+        all_go = all(
+            ps.get("release_verdict") == "GO"
+            for ps in pipeline_statuses.values()
+        ) if pipeline_statuses else False
+        if all_go and status_count > 0:
+            passed_checks.append("pipeline_go")
+
+        # stage_gate_per_pipeline：真实阶段边界审查逐条通过
+        stage_all_ok = all(
+            all(ps.get("stage_gate", {}).get(k, False)
+                for k in ("no_stage_crossing", "reusable_assets", "stage_alignment"))
+            for ps in pipeline_statuses.values()
+        ) if pipeline_statuses else False
+        if stage_all_ok and status_count > 0:
+            passed_checks.append("stage_gate_per_pipeline")
+
+        ok = all(c in passed_checks for c in required)
+        return {
+            "passed": len(passed_checks),
+            "total": len(required),
+            "passed_checks": passed_checks,
+            "required_checks": required,
+            "ok": ok,
+            "detail": {
+                "real_status": True,
+                "registered_total": total_registered,
+                "reported_count": status_count,
+                "pipeline_ids": sorted(pipeline_statuses.keys()),
+            },
+        }
+
+
 # ============================================================
 # release_gate 管线级聚合扩展（M2 · 增强层，不破坏现有逻辑）
 # ============================================================
@@ -156,9 +210,33 @@ PIPELINE_QUALITY_GATE = {
 }
 
 
-def run_pipeline_quality_gate(all_quality_ok: bool = True) -> Dict[str, Any]:
-    """管线级质量门禁执行（供 release_gate 扩展聚合调用）。"""
+def run_pipeline_quality_gate(all_quality_ok: bool = True,
+                                 pipeline_statuses: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """管线级质量门禁执行（供 release_gate 扩展聚合调用）。
+
+    Args:
+        all_quality_ok: 无真实部门状态时，是否让静态注册管线全量放行
+            （True=注册表覆盖率自检口径，False=保守真实就绪度）
+        pipeline_statuses: {pipeline_id: pipeline_status}，由部门 _report_pipeline_status
+            真实回报。提供时**优先走真实闭环**（pipeline_go 由部门 release_verdict 推导），
+            不再凭注册表存在即放行。
+    """
     gate = PipelineQualityGate()
+    required = PIPELINE_QUALITY_GATE["pipeline_quality"]["checks"]
+
+    if pipeline_statuses is not None and len(pipeline_statuses) > 0:
+        # 真实部门状态驱动：由实际逐管线 release_verdict / stage_gate 推导门禁
+        result = gate.gate_from_statuses(pipeline_statuses)
+        return {
+            "passed": result["passed"],
+            "total": result["total"],
+            "passed_checks": result["passed_checks"],
+            "required_checks": required,
+            "ok": result["ok"],
+            "detail": result["detail"],
+        }
+
+    # 无真实状态（注册表覆盖率自检口径）：静态全量评审
     result = gate.check_all_engines(all_quality_ok=all_quality_ok)
     passed = []
     if result["pipeline_count"] >= 40:
@@ -168,7 +246,6 @@ def run_pipeline_quality_gate(all_quality_ok: bool = True) -> Dict[str, Any]:
     # 阶段边界审查逐管线校验（全引擎 all_gates_ok 时 stage_gate 均通过）
     if all_quality_ok:
         passed.append("stage_gate_per_pipeline")
-    required = PIPELINE_QUALITY_GATE["pipeline_quality"]["checks"]
     ok = all(c in passed for c in required)
     return {
         "passed": len(passed),
