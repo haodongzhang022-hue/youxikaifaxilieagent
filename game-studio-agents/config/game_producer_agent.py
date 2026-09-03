@@ -111,6 +111,14 @@ MODULE_SQUAD_DOMAIN = {
 #   每条架构工作包绑定一条管线矩阵中的专业方向，使发布评审能按管线粒度评审。
 # engine 上下文（architecture.engine）决定最终 pipeline_id 的引擎段，
 # 缺省时用默认引擎（react/L0）作为编排基线，具体引擎由后续里程碑升级。
+#
+# ⚠️ 映射口径说明（评审点）：
+#   server / release / data_ops / testing 等**跨工序模块**为就近 best-effort 关联
+#   （管线矩阵无对应内容管线：server/release 偏服务端&发版 → 归 numeric_design 的
+#   数值/配置基线；data_ops 偏数据支撑 → 归 numeric_design 便于与数值评审对齐；
+#   testing 为跨管线质量验证 → 归 numeric_design 以服务端数值/功能验收口径）。
+#   评审口径按实际专业产出理解：这些模块的管线绑定用于定位评审归属，而非宣称
+#   该模块产出"数值设计"本身。各模块实际验收仍以部门 _verify 真实产出为准。
 MODULE_PIPELINE_DOMAIN = {
     "gameplay":        "gameplay_optimization",
     "numeric_model":   "numeric_design",
@@ -214,6 +222,10 @@ class GameProducerAgent(BaseAgent):
         self._owner_load: Dict[str, int] = {}
         # 角色间协作工作台：支持多角色互相@（任务转交/分工协作/协作请求）
         self.collab = CollaborationWorkbench()
+        # M4（Issue #128）：部门回报的管线状态（pipeline_id → pipeline_status）。
+        # _on_department_delivery 消费部门 REVIEW_RESULT 中的 pipeline_status，
+        # 存入此处并暴露于 report()，供下游 release_gate 真实闭环门禁读取。
+        self.pipeline_status: Dict[str, Any] = {}
 
     def _get_squad_pool(self):
         """懒加载共享可调配小组池（独立于部门，灵活调配/重复调用）。
@@ -797,6 +809,18 @@ class GameProducerAgent(BaseAgent):
             else:
                 self._log("blocked", f"部门产出 {wp_id} 被打回，但未在队列中找到对应任务")
 
+        # M4（Issue #128）：消费部门回报的 pipeline_status（此前未消费）。
+        # 部门执行 REVIEW_RESULT 携带 pipeline_status（含 release_verdict /
+        # quality_checks / stage_gate），存入 self.pipeline_status 供下游
+        # release_gate 的 pipeline_quality 门禁做**真实闭环判定**（不再只凭
+        # 注册表存在即放行）。
+        pipeline_status = content.get("pipeline_status") or {}
+        if pipeline_status and pipeline_status.get("pipeline_id"):
+            self.pipeline_status[pipeline_status["pipeline_id"]] = pipeline_status
+            self._log("pipeline_status",
+                      f"管线 {pipeline_status['pipeline_id']} 状态回报："
+                      f"{pipeline_status.get('release_verdict', '')}")
+
     def _inject_upstream_output(self, wp_id: str, content: Dict[str, Any]):
         """把验收通过的上游产出物注入依赖它的下游任务 payload，打通跨部门数据流。
 
@@ -883,6 +907,8 @@ class GameProducerAgent(BaseAgent):
             "accepted": len(self.accepted),
             "accepted_ids": self.accepted,
             "log_len": len(self.log),
+            # M4（Issue #128）：经理已消费的管线状态（供下游门禁真实闭环）
+            "pipeline_status": dict(getattr(self, "pipeline_status", {})),
         }
 
 

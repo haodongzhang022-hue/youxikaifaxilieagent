@@ -196,6 +196,97 @@ else
 fi
 
 echo ""
+echo "=== 10. 真实部门状态驱动门禁（评审点修复：NO-GO 拦截 / 全 GO 放行） ==="
+if output=$(python3 -c "
+import sys; sys.path.insert(0, 'config')
+from pipeline_quality_gate import run_pipeline_quality_gate
+
+# 全部 GO → 门禁通过
+all_go = {
+    'pipeline.character_animation.unity': {
+        'release_verdict': 'GO',
+        'quality_checks': {'动作流畅度': True, '性能基准': True, '风格一致性': True},
+        'stage_gate': {'no_stage_crossing': True, 'reusable_assets': True, 'stage_alignment': True},
+    },
+    'pipeline.ai_trigger.cocos': {
+        'release_verdict': 'GO',
+        'quality_checks': {'行为覆盖率': True, '帧率影响≤5%': True},
+        'stage_gate': {'no_stage_crossing': True, 'reusable_assets': True, 'stage_alignment': True},
+    },
+}
+r1 = run_pipeline_quality_gate(pipeline_statuses=all_go)
+assert r1['ok'], f'全部 GO 应通过门禁, got {r1}'
+assert 'pipeline_go' in r1['passed_checks']
+
+# 任一 NO-GO → 门禁拦截
+mixed = dict(all_go)
+mixed['pipeline.ai_trigger.cocos'] = {
+    'release_verdict': 'NO-GO',
+    'quality_checks': {'行为覆盖率': False, '帧率影响≤5%': False},
+    'stage_gate': {'no_stage_crossing': False, 'reusable_assets': False, 'stage_alignment': False},
+}
+r2 = run_pipeline_quality_gate(pipeline_statuses=mixed)
+assert not r2['ok'], f'存在 NO-GO 应拦截, got {r2}'
+assert 'pipeline_go' not in r2['passed_checks']
+
+# 空状态集 → 回退全量就绪
+r3 = run_pipeline_quality_gate(pipeline_statuses={}, all_quality_ok=True)
+assert r3['ok']
+print('真实部门状态驱动门禁验证通过（NO-GO拦截/全GO放行）')
+" 2>&1); then
+    echo "[PASS] 真实部门状态驱动门禁：NO-GO拦截/全GO放行"; PASS=$((PASS+1))
+else
+    echo "[FAIL] 真实部门状态驱动门禁"; echo "$output" | tail -5; FAIL=$((FAIL+1))
+fi
+
+echo ""
+echo "=== 11. 部门回报口径自洽 + producer 消费 pipeline_status ==="
+if output=$(python3 -c "
+import sys; sys.path.insert(0, 'config')
+from message_bus import MessageBus
+from department_agents import ProgramDeptAgent
+
+# 部门回报：验收通过 → 全绿 GO（与管线矩阵门禁集归一化）
+bus = MessageBus()
+agent = ProgramDeptAgent(bus)
+wp = {'id':'wp_client','module':'client','department_name':'程序线',
+      'pipeline_id':'pipeline.character_animation.unity',
+      'pipeline_engine':'unity','pipeline_domain':'character_animation'}
+st = agent._report_pipeline_status('wp_client', 'pipeline.character_animation.unity', wp,
+                                   {'quality_checks':{'动作流畅度':True}}, True)
+assert st['release_verdict'] == 'GO', f'验收通过应 GO, got {st}'
+# 注册表门禁集归一化：不再空 quality_checks
+assert len(st['quality_checks']) >= 3, f'应含注册表全部门禁, got {st}'
+assert all(v is True for v in st['quality_checks'].values())
+
+# 驳回时 → 显式 False 门禁（不出现「驳回但质量全绿」矛盾）
+st2 = agent._report_pipeline_status('wp_client2', 'pipeline.character_animation.unity', wp,
+                                    {'quality_checks':{'动作流畅度':False}}, False)
+assert st2['release_verdict'] == 'NO-GO'
+assert not all(st2['quality_checks'].values()), f'驳回时不应全绿: {st2}'
+
+# producer 消费部门回报的 pipeline_status
+from game_producer_agent import GameProducerAgent
+pbus = MessageBus()
+p = GameProducerAgent(bus=pbus)
+p.boot()
+p._on_department_delivery({
+    'work_package_id': 'wp_client',
+    'approved': True,
+    'reason': '通过',
+    'pipeline_status': st,
+})
+assert 'pipeline.character_animation.unity' in p.pipeline_status
+assert p.pipeline_status['pipeline.character_animation.unity']['release_verdict'] == 'GO'
+assert 'pipeline_status' in p.report()
+print('部门回报口径自洽 + producer 消费验证通过')
+" 2>&1); then
+    echo "[PASS] 部门回报口径自洽 + producer 消费 pipeline_status"; PASS=$((PASS+1))
+else
+    echo "[FAIL] 部门回报口径自洽"; echo "$output" | tail -5; FAIL=$((FAIL+1))
+fi
+
+echo ""
 echo "=============================="
 echo "管线矩阵驱动发布评审测试结果: $PASS 通过 / $FAIL 失败"
 echo "=============================="

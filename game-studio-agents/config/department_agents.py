@@ -377,21 +377,51 @@ class DepartmentAgent(BaseAgent):
         Returns:
             管线状态 dict（含质量门禁/阶段边界/放行判定）
         """
-        # 从产出物解析质量门禁逐项通过与否（缺省按验收结果全通过/全失败）
-        quality_checks = {}
+        # 从产出物解析质量门禁逐项通过与否。
+        # 评审点修复：verdict 不再仅由 approved 布尔决定，须与 quality_checks /
+        # stage_gate 数据口径一致，避免出现「驳回但质量/阶段全绿」自相矛盾。
+        # 若管线已在注册表中（可按 pipeline_id 查询 quality_gates），按注册表
+        # 完整门禁集归一化（批准→全绿，驳回→显式落未达）；注册表查不到时
+        # 回退到产出物自带 raw 数据。
         raw = (artifact or {}).get("quality_checks") or {}
-        if approved:
-            # 验收通过 → 该管线质量门禁视为全绿（部门按管线 quality_gates 履约）
-            quality_checks = {g: True for g in raw} if raw else {}
-        else:
-            quality_checks = {g: bool(v) for g, v in raw.items()} if raw else {}
-
-        # 阶段边界审查（复用 stage_gate 语义，缺省通过）
+        # 阶段边界审查：缺省通过仅限验收通过时；验收未通过且无显式阶段数据时，
+        # 缺省应反映未确认（False），避免「驳回但 stage_gate 全绿」的误导性上报。
+        _default_stage = bool(approved)
         stage_gate = {
-            "no_stage_crossing": bool((artifact or {}).get("no_stage_crossing", True)),
-            "reusable_assets": bool((artifact or {}).get("reusable_assets", True)),
-            "stage_alignment": bool((artifact or {}).get("stage_alignment", True)),
+            "no_stage_crossing": bool((artifact or {}).get("no_stage_crossing", _default_stage)),
+            "reusable_assets": bool((artifact or {}).get("reusable_assets", _default_stage)),
+            "stage_alignment": bool((artifact or {}).get("stage_alignment", _default_stage)),
         }
+        # 尝试查注册表获取管线完整门禁集（评审点：让 verdict 与 GO 判定口径一致）
+        registered_gates = None
+        try:
+            from pipeline_registry import PipelineRegistry
+            reg_pipe = PipelineRegistry().get(pipeline_id)
+            if reg_pipe is not None:
+                registered_gates = list(reg_pipe.quality_gates)
+        except Exception:  # noqa: BLE001 注册表不可用时不阻塞（回退 raw）
+            registered_gates = None
+
+        quality_checks = {}
+        if registered_gates:
+            # 有注册表门禁集 → 归一化：批准=全绿，驳回=按 raw 逐项判定（缺省 False）
+            for g in registered_gates:
+                quality_checks[g] = bool(raw.get(g, True)) if approved else bool(raw.get(g, False))
+        else:
+            # 无注册表 → 回退 raw（与旧行为一致）
+            quality_checks = {g: bool(v) for g, v in raw.items()} if raw else {}
+            if approved and not raw:
+                quality_checks = {}
+
+        # 由数据推导 release_verdict：GO = 验收通过 ∧ 质量门禁全绿 ∧ 阶段边界全通过。
+        # 避免出现「approved=True 但 quality_checks 有空项/阶段未过」的矛盾上报，
+        # 也避免「approved=False 但 quality/阶段全绿」的误导（此时仍 NO-GO 但备注注明）。
+        quality_all_ok = all(quality_checks.values()) if quality_checks else bool(approved)
+        stage_all_ok = all(stage_gate.values())
+        if approved and quality_all_ok and stage_all_ok:
+            release_verdict = "GO"
+        else:
+            release_verdict = "NO-GO"
 
         status = {
             "pipeline_id": pipeline_id,
@@ -400,8 +430,11 @@ class DepartmentAgent(BaseAgent):
             "work_package_id": wp_id,
             "quality_checks": quality_checks,
             "stage_gate": stage_gate,
-            "state": "completed" if approved else "failed",
-            "release_verdict": "GO" if approved else "NO-GO",
+            "state": "completed" if release_verdict == "GO" else "failed",
+            "release_verdict": release_verdict,
+            "notes": "部门验收通过且质量/阶段全绿" if release_verdict == "GO"
+                     else ("部门验收未通过或质量/阶段存在未达标"
+                           if not approved else "验收通过但质量/阶段存在未达标项"),
         }
         self.pipeline_status[pipeline_id] = status
         return status
