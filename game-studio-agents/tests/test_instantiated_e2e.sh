@@ -176,6 +176,40 @@ if echo "$nc_out" | grep -q "NARRATIVE_OK" && echo "$nc_out" | grep -q "COMBAT_O
 else
   report "实例化场景 narrative/combat owner 不为 None（回归修复）" 1
 fi
+# 11. 评审修复点回归：程序线未注册角色（game_architect/assistant/cocos_dev/ue_dev）
+#     被动态剔除，owner 不落在无总线 Agent 角色上。
+#     修复前：_known_bad 硬编码仅含 game_architect/game_architect_assistant，遗漏
+#     roles.yaml 程序线中的 cocos_dev/ue_dev（同样不在模块级 DEPARTMENTS["program"]
+#     中、无总线 Agent 承接派单）。修复后改为动态计算未注册角色集合，程序线主责
+#     恒落在可承接的注册角色（如 cto/client_dev）上。
+prog_out=$($PY - <<'PYINNER'
+from message_bus import MessageBus
+from game_producer_agent import GameProducerAgent
+import sys
+sys.path.insert(0, '.')
+bus = MessageBus()
+manager = GameProducerAgent(bus=bus)
+manager.boot()
+# 模拟 roles.yaml 程序线完整加载：未注册角色排在 roles 首位（复现 PR#125 原 bug：
+# 角色不在模块级 DEPARTMENTS 中、无总线 Agent，若被误派主责则 TASK_ASSIGN 石沉大海）。
+_bad = ['game_architect', 'game_architect_assistant', 'cocos_dev', 'ue_dev']
+_prog = list(manager.departments['program']['roles'])
+manager.departments['program']['roles'] = _bad + _prog
+# 纯 roles.yaml（非实例化）场景下指派程序线 client 模块
+wp_p = {'department': 'program', 'module': 'client', 'module_role': None}
+manager._assign_resources(wp_p)
+p_owner = wp_p.get('owner')
+# owner 不得落在无总线 Agent 的未注册角色上
+print('PROG_OK' if p_owner is not None and p_owner not in _bad else 'PROG_BAD')
+if p_owner:
+    print(f'p_owner={p_owner}')
+PYINNER
+)
+if echo "$prog_out" | grep -q "PROG_OK" && ! echo "$prog_out" | grep -q "PROG_BAD"; then
+  report "程序线未注册角色(game_architect/cocos_dev/ue_dev)被过滤，owner 落在有效角色" 0
+else
+  report "程序线未注册角色(game_architect/cocos_dev/ue_dev)被过滤，owner 落在有效角色" 1
+fi
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"

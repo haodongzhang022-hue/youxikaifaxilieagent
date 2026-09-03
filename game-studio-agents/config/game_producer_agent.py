@@ -635,16 +635,20 @@ class GameProducerAgent(BaseAgent):
             因为实例化装配场景下仅实例化角色装配了总线 Agent、能承接派单。
         """
         dept_roles = self.departments[wp["department"]]["roles"]
-        # 关键过滤：仅剔除已知未装配总线 Agent 的坏角色（如 game_architect /
-        # game_architect_assistant），同时保留模块级 DEPARTMENTS 角色与已注册
-        # 实例化角色。roles.yaml 中可能包含架构师/助理等跨部门协作角色，它们在
-        # 总线上无 Agent 承接，若被误派主责会导致 TASK_ASSIGN 石沉大海。
+        # 关键过滤：动态剔除未装配总线 Agent 的未注册角色（不在模块级 DEPARTMENTS
+        # 中、且未被实例化装配的角色，如 roles.yaml 程序线中的 game_architect /
+        # game_architect_assistant / cocos_dev / ue_dev 等跨部门协作角色）。它们在
+        # 总线上无 Agent 承接，若被误派主责会导致 TASK_ASSIGN 石沉大海。保留
+        # 模块级 DEPARTMENTS 角色与已注册实例化角色（不影响实例化装配场景）。
+        # 动态计算使未来 roles.yaml 新增未注册角色时无需维护黑名单。
         _builtin_roles = DEPARTMENTS.get(wp["department"], {}).get("roles", [])
         _instantiated_roles = [r for r in dept_roles if r in self.instantiated_role_ids]
-        _known_bad = {"game_architect", "game_architect_assistant"}
-        if _builtin_roles or _instantiated_roles:
-            _filtered = [r for r in dept_roles
-                         if r in _builtin_roles or r in _instantiated_roles or r not in _known_bad]
+        _unregistered = set(dept_roles) - set(_builtin_roles) - set(_instantiated_roles)
+        # 守卫说明：对六大标准部门 _builtin_roles 恒非空，此时 _unregistered 仅含
+        # roles.yaml 中额外引入的未注册角色；若部门 roles 全部合法，_unregistered
+        # 为空则跳过过滤。该守卫为防御性保护（兼容非标准 department / 动态 roles）。
+        if _unregistered:
+            _filtered = [r for r in dept_roles if r not in _unregistered]
             if _filtered:
                 dept_roles = _filtered
         # 主责指派融合策略（main 的模块级覆盖 + v0.9 实例化负载均衡）：
