@@ -436,6 +436,32 @@
       "depends_on": [],
       "cpu_cost_est": 1.0,
       "kind": "core"
+    },
+    "test_pipeline_release.sh": {
+      "covers": [
+        "game-studio-agents/config/pipeline_release.py",
+        "game-studio-agents/config/pipeline_quality_gate.py",
+        "game-studio-agents/config/pipeline_release_plan.py",
+        "game-studio-agents/config/release_gate.py",
+        "game-studio-agents/config/game_producer_agent.py",
+        "game-studio-agents/config/department_agents.py",
+        "game-studio-agents/config/pipeline_registry.py"
+      ],
+      "depends_on": [
+        "test_release_gate.sh",
+        "test_pipeline_matrix.sh"
+      ],
+      "cpu_cost_est": 2.0,
+      "kind": "integration"
+    },
+    "test_pipeline_matrix.sh": {
+      "covers": [
+        "game-studio-agents/config/pipeline_registry.py",
+        "game-studio-agents/config/pipeline_orchestrator.py"
+      ],
+      "depends_on": [],
+      "cpu_cost_est": 1.0,
+      "kind": "core"
     }
   }
 }
