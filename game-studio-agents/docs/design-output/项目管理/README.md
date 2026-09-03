@@ -79,3 +79,29 @@
 |---------|------|---------|---------|
 | 上游消费 | 程序线 | 消费 PR #115 交付的 dev_team_loop + squad_pool 工具链 | PR #115 合并后 |
 | 上游消费 | 游戏向经理 | 消费 `MODULE_SQUAD_DOMAIN` release→release_pm 映射 | 经理拆包自动标注后 |
+
+## 六、PR #130 下游解锁 · 本轮承接记录（wp_release 发版收口闭环）
+
+> PR #129（管线矩阵驱动发布评审，Issue#128 wp_pipeline_release）+ 收口修复 PR #130 合并 → 下游路由标记指向项目管理承接 **wp_release 发版收口闭环**。
+
+| 工作包 | 状态 | 说明 |
+|--------|------|------|
+| wp_release（发版收口闭环） | ✅ DONE | 管线矩阵驱动发布评审真正达成闭环（真实部门状态驱动门禁/部门回报口径自洽/producer 消费 pipeline_status/topo_sort 收敛 4 点修复核对），发版收口验收放行 GO。经 @分工 拆派 project_manager + release_manager 完成 |
+
+详细见：`PR130_closure/承接报告_wp_release_发版收口闭环.md`
+审计流水：`PR130_closure/wp_release_closure_group_audit.json`
+
+## 七、组内分工表（新增 PR#130）
+
+| 子任务 | 承接角色 | 内容 | 产出物文件 |
+|--------|---------|------|-----------|
+| wp_release_closure__sub1 | project_manager | 发版收口闭环验收（真实部门状态驱动门禁/口径自洽/producer 消费核对） | PR130_closure/承接报告_wp_release_发版收口闭环.md |
+| wp_release_closure__sub2 | release_manager | 发版门禁收口复核（release_gate/pipeline_release GO-NO-GO 收口一致 + 回归全绿） | PR130_closure/承接报告_wp_release_发版收口闭环.md |
+
+## 八、跨部门协作记录（新增 PR#130）
+
+| 协作方向 | 部门 | 协作内容 | 触发时机 |
+|---------|------|---------|---------|
+| 上游消费 | 程序线 | 消费 PR #129/#130 管线矩阵驱动发布评审核心代码合并状态 | PR #130 合并后 |
+| 上游消费 | 测试线/策划线/美术线 | 消费各线验收回归全绿做发版收口门禁依据 | 各线验收通过后 |
+| 下游解锁 | 运营线 | wp_release 发版收口验收通过后解锁运营线下游 | PM 验收后 |

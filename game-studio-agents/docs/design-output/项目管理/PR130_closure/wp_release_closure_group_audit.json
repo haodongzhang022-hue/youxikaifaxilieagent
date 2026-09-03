@@ -1,0 +1,74 @@
+{
+  "task_id": "wp_release_closure",
+  "title": "wp_release 发版收口闭环（Issue#128 wp_pipeline_release / PR129+PR130 管线矩阵驱动发布评审收口验收）",
+  "origin": "项目管理_统一头",
+  "owner": "project_manager|release_manager",
+  "status": "OFFERED",
+  "event_count": 5,
+  "events": [
+    {
+      "event": "DELEGATE",
+      "from": "项目管理_统一头",
+      "to": "project_manager|release_manager",
+      "action": "SPLIT",
+      "detail": {
+        "sub_tasks": [
+          "wp_release_closure__sub1",
+          "wp_release_closure__sub2"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "project_manager",
+      "to": "项目管理_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "wp_release_closure__sub1",
+        "note": "承接"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "project_manager",
+      "to": "项目管理_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "wp_release_closure__sub1",
+        "note": "验收通过：管线矩阵驱动发布评审收口闭环达成，11/11+24/24+15/15+22/22 回归全绿"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "release_manager",
+      "to": "项目管理_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "wp_release_closure__sub2",
+        "note": "承接"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "release_manager",
+      "to": "项目管理_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "wp_release_closure__sub2",
+        "note": "复核通过：release_gate 9/9 收口一致，逐管线 GO-NO-GO 收口口径自洽"
+      }
+    }
+  ],
+  "sub_progress": {
+    "ok": true,
+    "total": 2,
+    "done": 2,
+    "blocked": 0,
+    "pending": 0,
+    "detail": {
+      "wp_release_closure__sub1": "DONE",
+      "wp_release_closure__sub2": "DONE"
+    }
+  }
+}
