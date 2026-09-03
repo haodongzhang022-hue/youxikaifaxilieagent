@@ -138,7 +138,44 @@ if echo "$gate_out" | grep -q "GATE_OK"; then
 else
   report "发版门禁复用真实全链路产出（非硬编码全 True）" 1
 fi
-
+# 10. 评审修复点回归：实例化场景 narrative/combat 模块 owner 不为 None
+#     修复前：过滤逻辑按模块级 DEPARTMENTS 白名单一刀切，将已注册实例化角色
+#     过滤掉，导致 team_unity 实例化装配场景中 narrative/combat 模块（无对应
+#     实例化成员）owner=None 阻塞下游。修复后：仅剔除坏角色，保留模块级角色
+#     与已注册实例化角色，narrative/combat 可回退到 balance_designer 等可承接角色。
+nc_out=$($PY - <<'PYINNER'
+from message_bus import MessageBus
+from game_producer_agent import GameProducerAgent
+import sys
+sys.path.insert(0, '.')
+bus = MessageBus()
+manager = GameProducerAgent(bus=bus)
+manager.boot()
+# 模拟标准实例化团队：balance_designer 有实例化成员，narrative/combat 无
+manager.instantiated_role_ids.add('balance_designer_ptype_mobile_game')
+# 将实例化角色加入部门 roles（模拟 run_end_to_end_instantiated.py 的注册行为）
+if 'balance_designer_ptype_mobile_game' not in manager.departments['design']['roles']:
+    manager.departments['design']['roles'].append('balance_designer_ptype_mobile_game')
+manager.instantiated_by_base = {'balance_designer': ['balance_designer_ptype_mobile_game']}
+wp_n = {'department': 'design', 'module': 'narrative', 'module_role': None}
+manager._assign_resources(wp_n)
+wp_c = {'department': 'design', 'module': 'combat', 'module_role': None}
+manager._assign_resources(wp_c)
+n_owner = wp_n.get('owner')
+c_owner = wp_c.get('owner')
+print('NARRATIVE_OK' if n_owner is not None else 'NARRATIVE_NONE')
+print('COMBAT_OK' if c_owner is not None else 'COMBAT_NONE')
+if n_owner:
+    print(f'n_owner={n_owner}')
+if c_owner:
+    print(f'c_owner={c_owner}')
+PYINNER
+)
+if echo "$nc_out" | grep -q "NARRATIVE_OK" && echo "$nc_out" | grep -q "COMBAT_OK"; then
+  report "实例化场景 narrative/combat owner 不为 None（回归修复）" 0
+else
+  report "实例化场景 narrative/combat owner 不为 None（回归修复）" 1
+fi
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "测试信号灯结果: $pass 通过 / $fail 失败"
