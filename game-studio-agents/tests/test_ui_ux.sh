@@ -75,13 +75,32 @@ wp = {"module":"ui_ux","label":"生态UI/UX","project":"P",
       "id":"wp_ui_ux","department_name":"美术线"}
 a = agent._execute(wp, {})
 content = a.get("content", {})
+ds = content.get("design_system", {})
 print('ARTIFACT_TYPE=', a.get("artifact_type"))
 print('HAS_INTERACTION=', 'interaction_spec' in content)
 print('HAS_VISUAL=', 'visual_consistency' in content)
 print('HAS_BINDING=', 'ui_binding' in content)
 print('DISPATCHABLE_OWNER=', a.get("dispatchable_owner"))
 print('DISPATCHABLE_ECO=', a.get("dispatchable_eco_owner"))
+print('HAS_DESIGN_SYSTEM=', 'design_system' in content)
+print('HAS_PALETTE_HEX=', 'palette' in ds and all(str(c).startswith('#') for c in ds['palette'].get('colors', {}).values()))
+print('HAS_TYPE_SCALE=', 'type_scale' in ds and bool(ds['type_scale'].get('tiers')))
+print('ICON_VECTOR=', ds.get('iconography', {}).get('format') == 'vector_sprite')
+print('HAS_BREAKPOINTS=', bool(ds.get('responsive', {}).get('breakpoints')))
+print('HAS_ASSET_UPLOAD=', bool(a.get('asset_upload')))
+print('QUALITY_VIOLATIONS=', len(agent._ui_quality_violations(a)))
 print('VERIFY=', agent._verify(wp, a)[0])
+# 质检规则可拦截：构造一个占位/违规 ui_ux 资产应被打回
+bad = agent._execute(wp, {})
+bad['content'] = {
+    'design_system': {
+        'palette': {'colors': {'primary': '配色方案'}},
+        'iconography': {'format': 'emoji'},  # 违规：emoji 当图标
+        'responsive': {},  # 违规：无断点
+        'type_scale': {},  # 违规：无字号层级
+    },
+}
+print('BAD_VERIFY=', agent._verify(wp, bad)[0])
 PYEOF
 )
 
@@ -104,6 +123,55 @@ if echo "$out2" | grep -q "VERIFY= True"; then
   report "wp_ui_ux 产出自检通过" 0
 else
   report "wp_ui_ux 产出自检通过" 1
+fi
+
+echo "== 3. 美术增强：可检索 + 可校验设计系统资产（Issue #133 P0/P1） =="
+if echo "$out2" | grep -q "HAS_DESIGN_SYSTEM= True"; then
+  report "wp_ui_ux 产出 design_system 分层设计系统资产" 0
+else
+  report "wp_ui_ux 产出 design_system 分层设计系统资产" 1
+fi
+
+if echo "$out2" | grep -q "HAS_PALETTE_HEX= True"; then
+  report "design_system.palette 落真实 hex 配色（可消费/可校验）" 0
+else
+  report "design_system.palette 落真实 hex 配色（可消费/可校验）" 1
+fi
+
+if echo "$out2" | grep -q "HAS_TYPE_SCALE= True"; then
+  report "design_system.type_scale 落字号层级（非默认字重）" 0
+else
+  report "design_system.type_scale 落字号层级（非默认字重）" 1
+fi
+
+if echo "$out2" | grep -q "ICON_VECTOR= True"; then
+  report "design_system.iconography 强制矢量/切图（禁 emoji 当图标）" 0
+else
+  report "design_system.iconography 强制矢量/切图（禁 emoji 当图标）" 1
+fi
+
+if echo "$out2" | grep -q "HAS_BREAKPOINTS= True"; then
+  report "design_system.responsive 覆盖多端断点（响应式）" 0
+else
+  report "design_system.responsive 覆盖多端断点（响应式）" 1
+fi
+
+if echo "$out2" | grep -q "HAS_ASSET_UPLOAD= True"; then
+  report "产出挂载资产回传展示（cnb-upload-attachment）" 0
+else
+  report "产出挂载资产回传展示（cnb-upload-attachment）" 1
+fi
+
+if echo "$out2" | grep -q "QUALITY_VIOLATIONS= 0"; then
+  report "美术质检门禁：合规 ui_ux 资产零违规通过" 0
+else
+  report "美术质检门禁：合规 ui_ux 资产零违规通过" 1
+fi
+
+if echo "$out2" | grep -q "BAD_VERIFY= False"; then
+  report "美术质检门禁：违规 ui_ux 资产（占位/emoji/无断点）被拦截" 0
+else
+  report "美术质检门禁：违规 ui_ux 资产（占位/emoji/无断点）被拦截" 1
 fi
 
 echo ""
