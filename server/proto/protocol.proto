@@ -1,6 +1,6 @@
 // ============================================================
 // 游戏统一通信协议 (Game Unified Protocol)
-// 版本: v1.0
+// 版本: v1.1 (M-A 协议冻结 · Issue #135)
 // 对齐: Issue #112「游戏向架构师的开发」· wp_server 协议先行
 // 说明: 前后端通信全部使用本协议定义。协议一旦定下，除非大版本更新，
 //       否则不改。这是前后端解耦的唯一桥梁。
@@ -198,4 +198,164 @@ message StageTransitionResponse {
   string message = 2;
   repeated string assets_preserved = 3;  // 跨阶段保留的资产列表
   repeated string assets_to_migrate = 4; // 需要迁移的资产列表
+}
+
+// ============================================================
+// 发布转化协议 · M-A 协议冻结 (Issue #135 / WP-02)
+// 里程碑: M-A 协议冻结（MVP 首开发里程碑）
+// 原则: 字段只增不改，新增用 optional，protocol_version 递增（1.0 -> 1.1）
+// ============================================================
+
+// 播放状态机（对齐 WP-01 三态状态机）
+// LOCAL_LITE(本地轻量) -> CG_ANCHOR(CG锚点) -> CLOUD_PLAY(云) -> LOCAL_FULL(本地完整)
+enum PlayState {
+  PLAY_STATE_UNKNOWN = 0;
+  PLAY_STATE_LOCAL_LITE = 1;   // 本地轻量版（首次进入网页/小程序）
+  PLAY_STATE_CG_ANCHOR = 2;    // CG 锚点播放（点击「增强画质」后）
+  PLAY_STATE_CLOUD_PLAY = 3;   // 云会话中（云渲染/假跳云 Demo）
+  PLAY_STATE_LOCAL_FULL = 4;   // 本地完整版（下载完成无缝接管）
+}
+
+// ============================================================
+// 存档同步协议 (SaveSync) - 切端续接，四端共用
+// ============================================================
+
+// 存档推送（云端/本地切换时上传存档）
+message SaveSyncPush {
+  string player_id = 1;
+  string progress_checkpoint = 2;   // 进度 checkpoint（对齐 WP-01 三态 checkpoint）
+  Platform platform = 3;            // 来源端
+  int32 data_version = 4;           // 存档数据版本（乐观锁）
+  string session_token = 5;         // 会话令牌（无状态服务端校验）
+}
+
+// 存档拉取（切换后从目标端拉回同 checkpoint 续玩）
+message SaveSyncPull {
+  string player_id = 1;
+  string progress_checkpoint = 2;   // 目标续玩 checkpoint
+  Platform platform = 3;            // 目标端
+  int32 data_version = 4;
+  string session_token = 5;
+}
+
+// 存档同步响应
+message SaveSyncResponse {
+  bool success = 1;
+  string progress_checkpoint = 2;
+  int32 data_version = 3;
+  string message = 4;
+}
+
+// ============================================================
+// 云会话协议 (CloudSession) - CG遮罩预热/心跳/超时释放
+// ============================================================
+
+// 会话超时策略
+enum TimeoutPolicy {
+  TIMEOUT_UNKNOWN = 0;
+  TIMEOUT_DEFAULT = 1;      // 单次会话默认上限 30-60min
+  TIMEOUT_PRE_RELEASE = 2;  // 下载 90%+ 预释放
+  TIMEOUT_USER_EXIT = 3;    // 用户主动退出
+}
+
+// 云会话申请
+message CloudSessionApply {
+  string player_id = 1;
+  string session_id = 2;      // 云实例=抽象资源单元 ID
+  PlayState from_state = 3;   // 申请前状态（LOCAL_LITE / CG_ANCHOR）
+  int32 bandwidth_budget = 4; // 云渲染带宽预算（%）
+  string session_token = 5;
+}
+
+// 云会话预热（CG 播放期后台静默申请，掩盖 5-15s 启动等待）
+message CloudSessionPrewarm {
+  string player_id = 1;
+  string play_stage = 2;      // CG 播放阶段
+  int32 expected_duration = 3; // 预估需要时长（秒）
+  string session_token = 4;
+}
+
+// 云会话心跳（保活防僵尸会话）
+message CloudSessionHeartbeat {
+  string player_id = 1;
+  string session_id = 2;
+  int64 sequence = 3;          // 心跳序号
+  string session_token = 4;
+}
+
+// 云会话释放（超时/退出/下载90%+预释放）
+message CloudSessionRelease {
+  string player_id = 1;
+  string session_id = 2;
+  TimeoutPolicy timeout_policy = 3;
+  PlayState target_state = 4;  // 释放后去向（如 LOCAL_FULL 本地接管）
+  string session_token = 5;
+}
+
+// 云会话状态响应
+message CloudSessionState {
+  string session_id = 1;
+  bool active = 2;
+  int64 remaining_seconds = 3;
+  string message = 4;
+}
+
+// ============================================================
+// 下载状态协议 (DownloadStatus) - 边下边玩/断点续传
+// ============================================================
+
+// 下载状态上报
+message DownloadStatusReport {
+  string player_id = 1;
+  string download_id = 2;
+  int32 bytes_done = 3;         // 已下载字节数
+  int32 bytes_total = 4;
+  int32 resume_point = 5;       // 断点（%或字节偏移）
+  int32 bandwidth_budget = 6;   // 当前调度档位（%），服务端写回驱动客户端限速
+  string session_token = 7;
+}
+
+// 分片完成上报（逐 chunk 落盘）
+message DownloadChunkComplete {
+  string player_id = 1;
+  string download_id = 2;
+  int32 chunk_index = 3;        // 第几个分片
+  int32 bytes_done = 4;
+  bool pre_release_signal = 5;  // 达 90%+ 触发预释放信号
+  string session_token = 6;
+}
+
+// 下载状态响应
+message DownloadStatusResponse {
+  string download_id = 1;
+  int32 bandwidth_budget = 2;   // 调度器回写的限速档位
+  bool paused = 3;
+}
+
+// ============================================================
+// 增强入口协议 (EnhancementRequest) - 「增强画质」跳云
+// ============================================================
+
+// 增强请求类型
+enum EnhancementType {
+  ENHANCE_UNKNOWN = 0;
+  ENHANCE_CG_PLAY = 1;     // 播放画质锚点 CG
+  ENHANCE_CLOUD_UPGRADE = 2; // 跳云高画质
+}
+
+// 增强画质请求（点击「增强画质」）
+message EnhancementRequest {
+  string player_id = 1;
+  PlayState from_state = 2;     // LOCAL_LITE / CLOUD_PLAY
+  PlayState target_stage = 3;   // 目标阶段（CG_ANCHOR / CLOUD_PLAY）
+  EnhancementType request_type = 4;
+  string session_token = 5;
+}
+
+// 增强请求响应
+message EnhancementResponse {
+  bool success = 1;
+  PlayState next_state = 2;
+  string session_id = 3;        // 若跳云则回会话 ID
+  string message = 4;
 }
