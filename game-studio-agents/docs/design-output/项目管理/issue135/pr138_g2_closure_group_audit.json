@@ -1,0 +1,22 @@
+{
+  "workpackage": "PR138_G2_门禁发版收口_MC编排派发",
+  "milestone": "M-B收口 / G2单版体验门禁GO / M-C排期解锁",
+  "department": "项目管理",
+  "origin": "项目管理部门统一头",
+  "repo_slug": "dongdongxiaozu/youxikaifaxilieagent",
+  "trigger_event": "PR138 merged post-merge-orchestrate 下游解锁(G2门禁+M-C)",
+  "routing_active": ["程序线", "测试线", "项目管理"],
+  "events": [
+    {"seq": 1, "ts": "2026-09-06T07:05:00Z", "type": "DELEGATE", "action": "SPLIT", "wp": "G2门禁发版收口+M-C排期派发", "from": "项目管理_统一头", "note": "消费程序线代码侧GO + 测试线测试侧GO，release_manager签核G2 GO + project_manager编排M-C"},
+    {"seq": 2, "ts": "2026-09-06T07:05:10Z", "type": "SUB_DELEGATE", "role": "release_manager", "task": "G2单版体验门禁正式评审签核（回归复核76/76 + 漏斗五环节 + GO）", "from": "项目管理_统一头"},
+    {"seq": 3, "ts": "2026-09-06T07:05:10Z", "type": "SUB_DELEGATE", "role": "project_manager", "task": "M-C排期编排派发 MC-01~04 + G3门禁链路登记", "from": "项目管理_统一头"},
+    {"seq": 4, "ts": "2026-09-06T07:05:20Z", "type": "SUB_ACCEPT", "role": "release_manager", "task": "G2门禁评审签核 GO（MB-01/02/03齐备 + 76回归 + e2e漏斗LOCAL_FULL）", "from": "release_manager"},
+    {"seq": 5, "ts": "2026-09-06T07:05:20Z", "type": "SUB_ACCEPT", "role": "project_manager", "task": "M-C排期编排 + MC-01~04派发（G3门禁后置）", "from": "project_manager"},
+    {"seq": 6, "ts": "2026-09-06T07:05:30Z", "type": "SUB_COMPLETE", "role": "release_manager", "task": "G2门禁GO签核完成 → 解锁M-C", "from": "release_manager"},
+    {"seq": 7, "ts": "2026-09-06T07:05:30Z", "type": "SUB_COMPLETE", "role": "project_manager", "task": "M-C排期派发登记完成", "from": "project_manager"},
+    {"seq": 8, "ts": "2026-09-06T07:06:00Z", "type": "DONE", "wp": "G2门禁发版收口_MC编排派发", "from": "项目管理_统一头", "review_result": "通过(GO)"}
+  ],
+  "total_events": 8,
+  "review_result": "通过(GO)",
+  "report": "承接报告_PR138_项目管理_G2门禁发版收口_MC编排_REVIEW_RESULT.md"
+}
