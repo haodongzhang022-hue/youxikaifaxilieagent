@@ -1,0 +1,27 @@
+{
+  "workpackage": "MC-01/02/03",
+  "milestone": "M-C Unity App 内容落地",
+  "department": "程序线",
+  "origin": "程序线部门统一头",
+  "repo_slug": "dongdongxiaozu/youxikaifaxilieagent",
+  "trigger_event": "Issue #135 · G2 门禁 GO → M-C 解锁派发",
+  "routing_active": ["程序线", "测试线", "项目管理"],
+  "events": [
+    {"seq": 1, "ts": "2026-09-06T15:30:00Z", "type": "DELEGATE", "action": "SPLIT", "wp": "MC-01/02/03", "from": "程序线_统一头", "note": "M-C Unity App 内容落地拆派"},
+    {"seq": 2, "ts": "2026-09-06T15:30:10Z", "type": "SUB_DELEGATE", "role": "client_dev", "task": "MC-02 UnityParallelDownloader 并行下载", "from": "程序线_统一头"},
+    {"seq": 3, "ts": "2026-09-06T15:30:10Z", "type": "SUB_DELEGATE", "role": "engine_dev", "task": "MC-01 UnityAppSession 增强跳云 + MC-03 UnityAppContent", "from": "程序线_统一头"},
+    {"seq": 4, "ts": "2026-09-06T15:30:10Z", "type": "SUB_DELEGATE", "role": "server_dev", "task": "协议消费契约校验 + 云会话生命周期", "from": "程序线_统一头"},
+    {"seq": 5, "ts": "2026-09-06T15:30:10Z", "type": "SUB_DELEGATE", "role": "cto", "task": "阶段护栏 + 门禁 G3 回归统筹 + UnityAdapter.cs P/Invoke", "from": "程序线_统一头"},
+    {"seq": 6, "ts": "2026-09-06T15:35:00Z", "type": "SUB_ACCEPT", "role": "client_dev", "task": "MC-02 分片并行/断点续传/边下边玩", "from": "client_dev"},
+    {"seq": 7, "ts": "2026-09-06T15:35:00Z", "type": "SUB_ACCEPT", "role": "engine_dev", "task": "MC-01 增强跳云链路 + MC-03 确定性内容生成", "from": "engine_dev"},
+    {"seq": 8, "ts": "2026-09-06T15:35:00Z", "type": "SUB_ACCEPT", "role": "server_dev", "task": "M-A 协议字段对齐校验", "from": "server_dev"},
+    {"seq": 9, "ts": "2026-09-06T15:35:00Z", "type": "SUB_ACCEPT", "role": "cto", "task": "UnityAdapter.cs P/Invoke 扩展 + 105/105 全量回归", "from": "cto"},
+    {"seq": 10, "ts": "2026-09-06T15:40:00Z", "type": "SUB_COMPLETE", "role": "client_dev", "task": "MC-02 并行下载完成", "from": "client_dev"},
+    {"seq": 11, "ts": "2026-09-06T15:40:00Z", "type": "SUB_COMPLETE", "role": "engine_dev", "task": "MC-01/03 完成", "from": "engine_dev"},
+    {"seq": 12, "ts": "2026-09-06T15:40:00Z", "type": "SUB_COMPLETE", "role": "server_dev", "task": "协议对齐完成", "from": "server_dev"},
+    {"seq": 13, "ts": "2026-09-06T15:40:00Z", "type": "SUB_COMPLETE", "role": "cto", "task": "回归统筹完成", "from": "cto"},
+    {"seq": 14, "ts": "2026-09-06T15:45:00Z", "type": "DONE", "wp": "MC-01/02/03", "from": "程序线_统一头", "review_result": "通过"}
+  ],
+  "total_events": 14,
+  "review_result": "通过"
+}
