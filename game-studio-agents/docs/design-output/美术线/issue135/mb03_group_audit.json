@@ -1,0 +1,135 @@
+{
+  "ok": true,
+  "task_id": "mb03_cg_anchor_placeholder",
+  "title": "MB-03 CG锚点占位素材（WP-03标准落地 Demo桩呈现）- Issue#135 M-B 美术线",
+  "origin": "美术线_统一头",
+  "owner": "art_director|concept_artist|animator|vfx_artist|tech_artist",
+  "status": "DONE",
+  "transfer_chain": [],
+  "event_count": 11,
+  "events": [
+    {
+      "event": "DELEGATE",
+      "from": "美术线_统一头",
+      "to": "art_director|concept_artist|animator|vfx_artist|tech_artist",
+      "action": "SPLIT",
+      "detail": {
+        "sub_tasks": [
+          "mb03_cg_anchor_placeholder__sub1",
+          "mb03_cg_anchor_placeholder__sub2",
+          "mb03_cg_anchor_placeholder__sub3",
+          "mb03_cg_anchor_placeholder__sub4",
+          "mb03_cg_anchor_placeholder__sub5"
+        ],
+        "note": "部门级@分工 group_audit 留痕"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "art_director",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub1",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "art_director",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub1",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "concept_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub2",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "concept_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub2",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "animator",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub3",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "animator",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub3",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "vfx_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub4",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "vfx_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub4",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "tech_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub5",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "tech_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb03_cg_anchor_placeholder__sub5",
+        "note": ""
+      }
+    }
+  ],
+  "sub_task_roles": {
+    "mb03_cg_anchor_placeholder__sub1": "art_director",
+    "mb03_cg_anchor_placeholder__sub2": "concept_artist",
+    "mb03_cg_anchor_placeholder__sub3": "animator",
+    "mb03_cg_anchor_placeholder__sub4": "vfx_artist",
+    "mb03_cg_anchor_placeholder__sub5": "tech_artist"
+  }
+}
