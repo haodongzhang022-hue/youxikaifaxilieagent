@@ -186,3 +186,472 @@ def deserialize(data: str, msg_cls) -> Any:
     import json
     d = json.loads(data)
     return msg_cls.from_dict(d)
+
+
+# ============================================================
+# M-A 协议冻结 · 发布转化协议 (Issue #135 / WP-02)
+# 里程碑: M-A（MVP 首开发里程碑）
+# ============================================================
+
+# 播放状态机（对齐 WP-01 三态状态机）
+PLAY_STATE_UNKNOWN = 0
+PLAY_STATE_LOCAL_LITE = 1    # 本地轻量版
+PLAY_STATE_CG_ANCHOR = 2     # CG 锚点播放
+PLAY_STATE_CLOUD_PLAY = 3    # 云会话中
+PLAY_STATE_LOCAL_FULL = 4    # 本地完整版
+
+
+class PlayState:
+    """播放状态枚举（对齐 protocol.proto PlayState）"""
+    UNKNOWN = PLAY_STATE_UNKNOWN
+    LOCAL_LITE = PLAY_STATE_LOCAL_LITE
+    CG_ANCHOR = PLAY_STATE_CG_ANCHOR
+    CLOUD_PLAY = PLAY_STATE_CLOUD_PLAY
+    LOCAL_FULL = PLAY_STATE_LOCAL_FULL
+
+    # 状态机合法流转（本地轻量 -> CG锚点 -> 云 -> 本地完整）
+    TRANSITIONS = {
+        LOCAL_LITE: frozenset({CG_ANCHOR}),          # 点击增强 -> CG
+        CG_ANCHOR: frozenset({CLOUD_PLAY, LOCAL_FULL}),  # 云就绪/用户跳过
+        CLOUD_PLAY: frozenset({LOCAL_FULL, LOCAL_LITE}), # 下载接管/断网回退
+        LOCAL_FULL: frozenset(),                     # 终态
+    }
+
+    @classmethod
+    def can_transition(cls, src: int, dst: int) -> bool:
+        """判断状态机流转是否合法"""
+        return dst in cls.TRANSITIONS.get(src, frozenset())
+
+    @classmethod
+    def to_str(cls, state: int) -> str:
+        names = {
+            cls.UNKNOWN: "UNKNOWN",
+            cls.LOCAL_LITE: "LOCAL_LITE",
+            cls.CG_ANCHOR: "CG_ANCHOR",
+            cls.CLOUD_PLAY: "CLOUD_PLAY",
+            cls.LOCAL_FULL: "LOCAL_FULL",
+        }
+        return names.get(state, "UNKNOWN")
+
+
+# 会话超时策略
+TIMEOUT_UNKNOWN = 0
+TIMEOUT_DEFAULT = 1
+TIMEOUT_PRE_RELEASE = 2
+TIMEOUT_USER_EXIT = 3
+
+
+class TimeoutPolicy:
+    """会话超时策略枚举"""
+    UNKNOWN = TIMEOUT_UNKNOWN
+    DEFAULT = TIMEOUT_DEFAULT
+    PRE_RELEASE = TIMEOUT_PRE_RELEASE
+    USER_EXIT = TIMEOUT_USER_EXIT
+
+
+# 增强请求类型
+ENHANCE_UNKNOWN = 0
+ENHANCE_CG_PLAY = 1
+ENHANCE_CLOUD_UPGRADE = 2
+
+
+class EnhancementType:
+    """增强请求类型枚举"""
+    UNKNOWN = ENHANCE_UNKNOWN
+    CG_PLAY = ENHANCE_CG_PLAY
+    CLOUD_UPGRADE = ENHANCE_CLOUD_UPGRADE
+
+
+# ============================================================
+# 存档同步协议 (SaveSync)
+# ============================================================
+
+@dataclass
+class SaveSyncPush:
+    """存档推送（云端/本地切换时上传存档）"""
+    player_id: str
+    progress_checkpoint: str = ""
+    platform: str = "web"
+    data_version: int = 1
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "progress_checkpoint": self.progress_checkpoint,
+            "platform": self.platform,
+            "data_version": self.data_version,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "SaveSyncPush":
+        return cls(
+            player_id=d["player_id"],
+            progress_checkpoint=d.get("progress_checkpoint", ""),
+            platform=d.get("platform", "web"),
+            data_version=d.get("data_version", 1),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str, progress_checkpoint: str,
+               platform: str = "web", data_version: int = 1,
+               session_token: str = "") -> "SaveSyncPush":
+        return cls(
+            player_id=player_id,
+            progress_checkpoint=progress_checkpoint,
+            platform=platform,
+            data_version=data_version,
+            session_token=session_token,
+        )
+
+
+@dataclass
+class SaveSyncPull:
+    """存档拉取（切换后从目标端拉回同 checkpoint 续玩）"""
+    player_id: str
+    progress_checkpoint: str = ""
+    platform: str = "web"
+    data_version: int = 1
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "progress_checkpoint": self.progress_checkpoint,
+            "platform": self.platform,
+            "data_version": self.data_version,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "SaveSyncPull":
+        return cls(
+            player_id=d["player_id"],
+            progress_checkpoint=d.get("progress_checkpoint", ""),
+            platform=d.get("platform", "web"),
+            data_version=d.get("data_version", 1),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str, progress_checkpoint: str,
+               platform: str = "web", data_version: int = 1,
+               session_token: str = "") -> "SaveSyncPull":
+        return cls(
+            player_id=player_id,
+            progress_checkpoint=progress_checkpoint,
+            platform=platform,
+            data_version=data_version,
+            session_token=session_token,
+        )
+
+
+# ============================================================
+# 云会话协议 (CloudSession)
+# ============================================================
+
+@dataclass
+class CloudSessionApply:
+    """云会话申请"""
+    player_id: str
+    session_id: str = ""
+    from_state: int = PLAY_STATE_LOCAL_LITE
+    bandwidth_budget: int = 0
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "session_id": self.session_id,
+            "from_state": self.from_state,
+            "bandwidth_budget": self.bandwidth_budget,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "CloudSessionApply":
+        return cls(
+            player_id=d["player_id"],
+            session_id=d.get("session_id", ""),
+            from_state=d.get("from_state", PLAY_STATE_LOCAL_LITE),
+            bandwidth_budget=d.get("bandwidth_budget", 0),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str, session_id: str = "",
+               from_state: int = PLAY_STATE_LOCAL_LITE,
+               bandwidth_budget: int = 0,
+               session_token: str = "") -> "CloudSessionApply":
+        return cls(
+            player_id=player_id,
+            session_id=session_id or str(uuid.uuid4()),
+            from_state=from_state,
+            bandwidth_budget=bandwidth_budget,
+            session_token=session_token,
+        )
+
+
+@dataclass
+class CloudSessionPrewarm:
+    """云会话预热（CG 播放期后台静默申请）"""
+    player_id: str
+    play_stage: str = ""
+    expected_duration: int = 0
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "play_stage": self.play_stage,
+            "expected_duration": self.expected_duration,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "CloudSessionPrewarm":
+        return cls(
+            player_id=d["player_id"],
+            play_stage=d.get("play_stage", ""),
+            expected_duration=d.get("expected_duration", 0),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str, play_stage: str = "",
+               expected_duration: int = 0,
+               session_token: str = "") -> "CloudSessionPrewarm":
+        return cls(
+            player_id=player_id,
+            play_stage=play_stage,
+            expected_duration=expected_duration,
+            session_token=session_token,
+        )
+
+
+@dataclass
+class CloudSessionHeartbeat:
+    """云会话心跳（保活防僵尸会话）"""
+    player_id: str
+    session_id: str = ""
+    sequence: int = 0
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "session_id": self.session_id,
+            "sequence": self.sequence,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "CloudSessionHeartbeat":
+        return cls(
+            player_id=d["player_id"],
+            session_id=d.get("session_id", ""),
+            sequence=d.get("sequence", 0),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str, session_id: str = "",
+               sequence: int = 0,
+               session_token: str = "") -> "CloudSessionHeartbeat":
+        return cls(
+            player_id=player_id,
+            session_id=session_id,
+            sequence=sequence,
+            session_token=session_token,
+        )
+
+
+@dataclass
+class CloudSessionRelease:
+    """云会话释放（超时/退出/下载90%+预释放）"""
+    player_id: str
+    session_id: str = ""
+    timeout_policy: int = TIMEOUT_DEFAULT
+    target_state: int = PLAY_STATE_LOCAL_FULL
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "session_id": self.session_id,
+            "timeout_policy": self.timeout_policy,
+            "target_state": self.target_state,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "CloudSessionRelease":
+        return cls(
+            player_id=d["player_id"],
+            session_id=d.get("session_id", ""),
+            timeout_policy=d.get("timeout_policy", TIMEOUT_DEFAULT),
+            target_state=d.get("target_state", PLAY_STATE_LOCAL_FULL),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str, session_id: str = "",
+               timeout_policy: int = TIMEOUT_DEFAULT,
+               target_state: int = PLAY_STATE_LOCAL_FULL,
+               session_token: str = "") -> "CloudSessionRelease":
+        return cls(
+            player_id=player_id,
+            session_id=session_id,
+            timeout_policy=timeout_policy,
+            target_state=target_state,
+            session_token=session_token,
+        )
+
+
+# ============================================================
+# 下载状态协议 (DownloadStatus)
+# ============================================================
+
+@dataclass
+class DownloadStatusReport:
+    """下载状态上报"""
+    player_id: str
+    download_id: str = ""
+    bytes_done: int = 0
+    bytes_total: int = 0
+    resume_point: int = 0
+    bandwidth_budget: int = 100
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "download_id": self.download_id,
+            "bytes_done": self.bytes_done,
+            "bytes_total": self.bytes_total,
+            "resume_point": self.resume_point,
+            "bandwidth_budget": self.bandwidth_budget,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "DownloadStatusReport":
+        return cls(
+            player_id=d["player_id"],
+            download_id=d.get("download_id", ""),
+            bytes_done=d.get("bytes_done", 0),
+            bytes_total=d.get("bytes_total", 0),
+            resume_point=d.get("resume_point", 0),
+            bandwidth_budget=d.get("bandwidth_budget", 100),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str, download_id: str = "",
+               bytes_done: int = 0, bytes_total: int = 0,
+               resume_point: int = 0, bandwidth_budget: int = 100,
+               session_token: str = "") -> "DownloadStatusReport":
+        return cls(
+            player_id=player_id,
+            download_id=download_id or str(uuid.uuid4()),
+            bytes_done=bytes_done,
+            bytes_total=bytes_total,
+            resume_point=resume_point,
+            bandwidth_budget=bandwidth_budget,
+            session_token=session_token,
+        )
+
+
+@dataclass
+class DownloadChunkComplete:
+    """分片完成上报"""
+    player_id: str
+    download_id: str = ""
+    chunk_index: int = 0
+    bytes_done: int = 0
+    pre_release_signal: bool = False
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "download_id": self.download_id,
+            "chunk_index": self.chunk_index,
+            "bytes_done": self.bytes_done,
+            "pre_release_signal": self.pre_release_signal,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "DownloadChunkComplete":
+        return cls(
+            player_id=d["player_id"],
+            download_id=d.get("download_id", ""),
+            chunk_index=d.get("chunk_index", 0),
+            bytes_done=d.get("bytes_done", 0),
+            pre_release_signal=d.get("pre_release_signal", False),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str, download_id: str = "",
+               chunk_index: int = 0, bytes_done: int = 0,
+               pre_release_signal: bool = False,
+               session_token: str = "") -> "DownloadChunkComplete":
+        return cls(
+            player_id=player_id,
+            download_id=download_id,
+            chunk_index=chunk_index,
+            bytes_done=bytes_done,
+            pre_release_signal=pre_release_signal,
+            session_token=session_token,
+        )
+
+
+# ============================================================
+# 增强入口协议 (EnhancementRequest)
+# ============================================================
+
+@dataclass
+class EnhancementRequest:
+    """增强画质请求（点击「增强画质」跳云）"""
+    player_id: str
+    from_state: int = PLAY_STATE_LOCAL_LITE
+    target_stage: int = PLAY_STATE_CG_ANCHOR
+    request_type: int = ENHANCE_CG_PLAY
+    session_token: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "player_id": self.player_id,
+            "from_state": self.from_state,
+            "target_stage": self.target_stage,
+            "request_type": self.request_type,
+            "session_token": self.session_token,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "EnhancementRequest":
+        return cls(
+            player_id=d["player_id"],
+            from_state=d.get("from_state", PLAY_STATE_LOCAL_LITE),
+            target_stage=d.get("target_stage", PLAY_STATE_CG_ANCHOR),
+            request_type=d.get("request_type", ENHANCE_CG_PLAY),
+            session_token=d.get("session_token", ""),
+        )
+
+    @classmethod
+    def create(cls, player_id: str,
+               from_state: int = PLAY_STATE_LOCAL_LITE,
+               target_stage: int = PLAY_STATE_CG_ANCHOR,
+               request_type: int = ENHANCE_CG_PLAY,
+               session_token: str = "") -> "EnhancementRequest":
+        return cls(
+            player_id=player_id,
+            from_state=from_state,
+            target_stage=target_stage,
+            request_type=request_type,
+            session_token=session_token,
+        )
