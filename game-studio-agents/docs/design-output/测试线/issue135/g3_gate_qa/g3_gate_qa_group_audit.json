@@ -1,0 +1,22 @@
+{
+  "workpackage": "MC04_G3_门禁QA独立验收",
+  "milestone": "M-C 收口 / G3 单版完整门禁",
+  "department": "测试线",
+  "origin": "测试线部门统一头",
+  "repo_slug": "dongdongxiaozu/youxikaifaxilieagent",
+  "trigger_event": "PR139 merged post-merge-orchestrate 下游解锁",
+  "routing_active": ["测试线"],
+  "events": [
+    {"seq": 1, "ts": "2026-09-06T11:00:00Z", "type": "DELEGATE", "action": "SPLIT", "wp": "MC04_G3门禁QA独立验收", "from": "测试线_统一头", "note": "M-C Unity App 独立功能验收（G3 单版完整门禁测试侧 GO 依据）"},
+    {"seq": 2, "ts": "2026-09-06T11:00:10Z", "type": "SUB_DELEGATE", "role": "qa_engineer", "task": "Unity App 增强跳云/并行下载/确定性地图/状态机护栏独立功能验收（73 断言场景）", "from": "测试线_统一头"},
+    {"seq": 3, "ts": "2026-09-06T11:00:10Z", "type": "SUB_DELEGATE", "role": "auto_qa", "task": "G3 全量回归统筹 + 端到端 runner 验证 + 框架级回归确认 + UnityAdapter P/Invoke 契约校验", "from": "测试线_统一头"},
+    {"seq": 4, "ts": "2026-09-06T11:01:00Z", "type": "SUB_ACCEPT", "role": "qa_engineer", "task": "73/73 独立功能验收断言全绿", "from": "qa_engineer"},
+    {"seq": 5, "ts": "2026-09-06T11:01:00Z", "type": "SUB_ACCEPT", "role": "auto_qa", "task": "105 服务端回归 + middleware 7/7 + adapters 9/9 golden + routing 16/16 + stage 20/20 + adapters 25/25 + producer 24/24 + full-suite 154 全绿", "from": "auto_qa"},
+    {"seq": 6, "ts": "2026-09-06T11:02:00Z", "type": "SUB_COMPLETE", "role": "qa_engineer", "task": "功能验收完成", "from": "qa_engineer"},
+    {"seq": 7, "ts": "2026-09-06T11:02:00Z", "type": "SUB_COMPLETE", "role": "auto_qa", "task": "回归统筹完成", "from": "auto_qa"},
+    {"seq": 8, "ts": "2026-09-06T11:03:00Z", "type": "DONE", "wp": "MC04_G3门禁QA独立验收", "from": "测试线_统一头", "review_result": "通过"}
+  ],
+  "total_events": 8,
+  "review_result": "通过",
+  "report": "承接报告_PR139_测试线_G3门禁QA验收_REVIEW_RESULT.md"
+}
