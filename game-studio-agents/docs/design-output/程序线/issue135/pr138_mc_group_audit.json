@@ -1,0 +1,28 @@
+{
+  "workpackage": "PR138_G2_MC_收口与承接登记",
+  "milestone": "M-B 收口 / G2 单版体验门禁 / M-C 承接",
+  "department": "程序线",
+  "origin": "程序线部门统一头",
+  "repo_slug": "dongdongxiaozu/youxikaifaxilieagent",
+  "trigger_event": "PR138 merged post-merge-orchestrate 下游解锁",
+  "routing_active": ["程序线", "测试线", "项目管理"],
+  "events": [
+    {"seq": 1, "ts": "2026-09-06T14:55:00Z", "type": "DELEGATE", "action": "SPLIT", "wp": "MB_收口_MC承接登记", "from": "程序线_统一头", "note": "MB-01/02 合入后收口 + M-C 程序线承接登记"},
+    {"seq": 2, "ts": "2026-09-06T14:55:10Z", "type": "SUB_DELEGATE", "role": "client_dev", "task": "MB-01 funnel_demo G2 方向回归", "from": "程序线_统一头"},
+    {"seq": 3, "ts": "2026-09-06T14:55:10Z", "type": "SUB_DELEGATE", "role": "server_dev", "task": "MB-02 cloud_stub G2 方向回归", "from": "程序线_统一头"},
+    {"seq": 4, "ts": "2026-09-06T14:55:10Z", "type": "SUB_DELEGATE", "role": "engine_dev", "task": "M-B 集成边界 + e2e runner 走通", "from": "程序线_统一头"},
+    {"seq": 5, "ts": "2026-09-06T14:55:10Z", "type": "SUB_DELEGATE", "role": "cto", "task": "M-C 承接登记 + 阶段合规 + 全量回归统筹", "from": "程序线_统一头"},
+    {"seq": 6, "ts": "2026-09-06T14:56:00Z", "type": "SUB_ACCEPT", "role": "client_dev", "task": "MB-01 funnel_demo 回归 19/19 全绿", "from": "client_dev"},
+    {"seq": 7, "ts": "2026-09-06T14:56:00Z", "type": "SUB_ACCEPT", "role": "server_dev", "task": "MB-02 cloud_stub 会话/下载/带宽回归全绿", "from": "server_dev"},
+    {"seq": 8, "ts": "2026-09-06T14:56:00Z", "type": "SUB_ACCEPT", "role": "engine_dev", "task": "e2e L0/L1 漏斗走通至 LOCAL_FULL", "from": "engine_dev"},
+    {"seq": 9, "ts": "2026-09-06T14:56:00Z", "type": "SUB_ACCEPT", "role": "cto", "task": "M-C 承接登记 + 76 全量回归统筹", "from": "cto"},
+    {"seq": 10, "ts": "2026-09-06T14:57:00Z", "type": "SUB_COMPLETE", "role": "client_dev", "task": "MB-01 回归确认完成", "from": "client_dev"},
+    {"seq": 11, "ts": "2026-09-06T14:57:00Z", "type": "SUB_COMPLETE", "role": "server_dev", "task": "MB-02 回归确认完成", "from": "server_dev"},
+    {"seq": 12, "ts": "2026-09-06T14:57:00Z", "type": "SUB_COMPLETE", "role": "engine_dev", "task": "e2e 集成确认完成", "from": "engine_dev"},
+    {"seq": 13, "ts": "2026-09-06T14:57:00Z", "type": "SUB_COMPLETE", "role": "cto", "task": "M-C 承接登记完成", "from": "cto"},
+    {"seq": 14, "ts": "2026-09-06T14:58:00Z", "type": "DONE", "wp": "MB_收口_MC承接登记", "from": "程序线_统一头", "review_result": "通过"}
+  ],
+  "total_events": 14,
+  "review_result": "通过",
+  "report": "承接报告_PR138_下游解锁_G2_MC_REVIEW_RESULT.md"
+}
