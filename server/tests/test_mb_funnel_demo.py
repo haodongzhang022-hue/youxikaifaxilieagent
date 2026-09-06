@@ -76,6 +76,32 @@ class TestFunnelDemoStateMachine(unittest.TestCase):
         self.assertEqual(f.takeover_log, ["local_takeover_ok"])
         self.assertIn("L0/L1_轻量入口", r["funnel"])
 
+    # ---- 防回退断言：整除偏差 steps=3/7/11 均补足至 100% ----
+    def test_download_integer_div_rounding_reaches_100(self):
+        for steps in (3, 7, 11):
+            f = FunnelState("P_IV", platform="web")
+            r = f.run_full_funnel(download_steps=steps)
+            self.assertEqual(r["final_state"], "LOCAL_FULL")
+            self.assertEqual(
+                r["takeover"]["download_pct"], 100.0,
+                f"steps={steps} 应补足至 100%（整除偏差）")
+
+    # ---- 防回退断言：steps=0 拒绝接管 ----
+    def test_download_steps_zero_rejected(self):
+        f = FunnelState("P_ZERO")
+        with self.assertRaises(ValueError):
+            f.run_full_funnel(download_steps=0)
+        # 状态应保持 CLOUD_PLAY 不被改变
+        self.assertEqual(f.state, PLAY_STATE_CLOUD_PLAY)
+
+    # ---- 防回退断言：enter_lite 重置 enhance_count ----
+    def test_enter_lite_resets_enhance_count(self):
+        f = FunnelState("P_EC")
+        f.run_full_funnel(download_steps=5)
+        self.assertEqual(f.enhance_count, 1)
+        f.run_full_funnel(download_steps=5)
+        self.assertEqual(f.enhance_count, 1, "重复运行应重置增强计数")
+
 
 class TestCloudStub(unittest.TestCase):
     """MB-02 · 假云/下载 Demo 桩"""
@@ -87,6 +113,9 @@ class TestCloudStub(unittest.TestCase):
         self.assertIsInstance(apply_msg, CloudSessionApply)
         # 云激活后带宽预算应受调度限速（下载非全速）
         self.assertLess(apply_msg.bandwidth_budget, 100)
+        # 【防回退】apply 时应先激活云再算带宽预算，云预算 > 0
+        self.assertGreater(apply_msg.bandwidth_budget, 0,
+                           "云激活后 cloud_budget_ratio 应 > 0")
 
     def test_prewarm_heartbeat_release_flow(self):
         stub = CloudStub("P2")
@@ -131,6 +160,25 @@ class TestCloudStub(unittest.TestCase):
         blob = stub.serialized_report()
         restored = deserialize(blob, DownloadStatusReport)
         self.assertEqual(restored.download_id, stub.download_id)
+
+    # ---- 防回退断言：serialized_report 无副作用（不推进 bytes_done）----
+    def test_serialized_report_no_side_effect(self):
+        stub = CloudStub("P_SIDE")
+        stub.apply()
+        before = stub.bytes_done
+        blob = stub.serialized_report()
+        after = stub.bytes_done
+        self.assertEqual(before, after,
+                         "serialized_report 不应推进下载进度（无副作用）")
+
+    # ---- 防回退断言：download_step 的 chunk_index 独立递增 ----
+    def test_chunk_index_auto_increment(self):
+        stub = CloudStub("P_CHUNK")
+        stub.apply()
+        for i in range(3):
+            r = stub.download_step(step_mb=20)
+            self.assertEqual(r["chunk"].chunk_index, i + 1,
+                             f"第 {i} 次 download_step 的 chunk_index 应为 {i+1}")
 
 
 class TestEndToEndFunnel(unittest.TestCase):

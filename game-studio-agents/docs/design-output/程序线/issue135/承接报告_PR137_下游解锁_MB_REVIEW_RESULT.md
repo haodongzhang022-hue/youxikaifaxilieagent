@@ -46,11 +46,11 @@ M-B 为**部门级**跨角色工作包，经协作工作台拆 **5 子任务**�
 1. `server/core/funnel_demo.py`（MB-01）— L0/L1 轻量版漏斗引擎，PlayState 状态机 + 非法流转护栏
 2. `server/core/cloud_stub.py`（MB-02）— 假云/下载 Demo 桩，消费云会话/下载/增强协议 + 带宽调度 + 90% 预释放
 3. `server/core/mb_funnel_runner.py` — 端到端演示 runner（L0 web + L1 cocos）
-4. `server/tests/test_mb_funnel_demo.py` — G2 方向单测 **14 用例**
+4. `server/tests/test_mb_funnel_demo.py` — G2 方向单测 **19 用例**
 5. `mb_funnel_demo_实现说明.md` + `mb_funnel_demo_group_audit.json`
 
 **门禁回归**：
-- `test_mb_funnel_demo.py` **14/14** · `test_ma_protocol_freeze.py` **18/18** · `test_server.py` **25/25** · `test_pitfalls_scan.py` **14/14**（全绿）
+- `test_mb_funnel_demo.py` **19/19** · `test_ma_protocol_freeze.py` **18/18** · `test_server.py` **25/25** · `test_pitfalls_scan.py` **14/14**（全绿）
 - 端到端 runner：L0 网页 + L1 Cocos 漏斗五环节走通至 LOCAL_FULL（本地接管）
 
 **关键要点**：

@@ -22,7 +22,6 @@ funnel_demo.py - L0/L1 轻量版漏斗 Demo 引擎（MB-01 · Issue #135 M-B 里
 from typing import Dict, Optional
 
 from server.proto.messages import (
-    serialize, deserialize,
     PlayState,
     EnhancementRequest, EnhancementType,
     PLAY_STATE_LOCAL_LITE, PLAY_STATE_CG_ANCHOR,
@@ -59,6 +58,7 @@ class FunnelState:
         self.state = PLAY_STATE_LOCAL_LITE
         self.cloud = None
         self.cg_completed = False
+        self.enhance_count = 0
         self.takeover_log = []
         return True
 
@@ -103,9 +103,13 @@ class FunnelState:
 
         :param steps: 下载推进步数（默认按 step 使下载达 100%）
         :param step_mb: 单步字节数（None 自动按 steps 均分）
+        :raises ValueError: steps < 1 时拒绝（无法通过循环推进下载）
+        :raises RuntimeError: 下载未达 100% 即尝试接管时拒绝
         """
         if self.cloud is None or self.state != PLAY_STATE_CLOUD_PLAY:
             raise RuntimeError(f"需在 CLOUD_PLAY 中下载，当前 {PlayState.to_str(self.state)}")
+        if steps < 1:
+            raise ValueError(f"steps 必须 ≥ 1，当前 steps={steps}（无法推进下载即接管）")
         from server.proto.messages import TIMEOUT_PRE_RELEASE
 
         if step_mb is None:
@@ -124,6 +128,11 @@ class FunnelState:
                                    target_state=PLAY_STATE_LOCAL_FULL)
         # 下载完成后云会话正式释放 + 本地接管
         self._require(self.state, PLAY_STATE_LOCAL_FULL, "下载完成本地接管")
+        # 【修复】下载未达 100% 前拒绝接管——整除偏差/步数不足时先补足剩余下载量
+        if not self.cloud.is_download_complete():
+            # 一次性补足剩余下载量（含整除偏差 steps=3/6/7… 与 steps<所需 场景）
+            self.cloud.download_step(
+                step_mb=self.cloud.bytes_total - self.cloud.bytes_done)
         if not self.cloud.released and self.cloud.cloud_active:
             self.cloud.release(target_state=PLAY_STATE_LOCAL_FULL)
         self.state = PLAY_STATE_LOCAL_FULL

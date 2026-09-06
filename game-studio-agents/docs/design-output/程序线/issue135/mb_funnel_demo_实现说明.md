@@ -14,7 +14,7 @@
 | MB-01 | L0/L1 轻量版漏斗 Demo 引擎（Web/H5 + Cocos 共享逻辑 + PlayState 状态流转） | `server/core/funnel_demo.py` |
 | MB-02 | 假云/下载 Demo 桩（消费 CloudSession/DownloadStatus/Enhancement 协议做假跳云流转） | `server/core/cloud_stub.py` |
 | MB-01+02 | 端到端演示 runner（L0 web + L1 cocos 双入口） | `server/core/mb_funnel_runner.py` |
-| MB-01+02 | 门禁 G2 方向单测（14 用例） | `server/tests/test_mb_funnel_demo.py` |
+| MB-01+02 | 门禁 G2 方向单测（19 用例） | `server/tests/test_mb_funnel_demo.py` |
 | — | 设计说明 + 分工审计留痕 | `…/issue135/mb_funnel_demo_实现说明.md` + `mb_funnel_demo_group_audit.json` |
 
 ---
@@ -45,9 +45,9 @@ LOCAL_LITE(轻量秒开入口)
 
 ## 四、门禁与回归（WP-04 G2 方向）
 
-- `test_mb_funnel_demo.py`：**14/14 ✅**（状态机流转 + 非法流转护栏 + 假云生命周期 + 带宽调度 + 端到端 L0/L1）
+- `test_mb_funnel_demo.py`：**19/19 ✅**（状态机流转 + 非法流转护栏 + 假云生命周期 + 带宽调度 + 端到端 L0/L1）
 - 端到端 runner：`PYTHONPATH=. python3 server/core/mb_funnel_runner.py` → L0 web + L1 cocos 漏斗五环节全部走通至 LOCAL_FULL
-- **全量门禁回归**：`test_ma_protocol_freeze` 18/18 · `test_server` 25/25 · `test_pitfalls_scan` 14/14 · `test_mb_funnel_demo` 14/14 全绿
+- **全量门禁回归**：`test_ma_protocol_freeze` 18/18 · `test_server` 25/25 · `test_pitfalls_scan` 14/14 · `test_mb_funnel_demo` 19/19 全绿
 
 ## 五、衔接下一里程碑
 

@@ -15,22 +15,21 @@ cloud_stub.py - 假云/下载 Demo 桩（MB-02 · Issue #135 M-B 里程碑）
   - 全部消息走 M-A 协议 dataclass（to_dict/from_dict/serialize），跨引擎同一契约
 """
 
-import time
 import uuid
 from typing import Dict, Optional
 
 from server.proto.messages import (
-    serialize, deserialize,
+    serialize,
     PlayState,
     CloudSessionApply, CloudSessionPrewarm,
     CloudSessionHeartbeat, CloudSessionRelease,
     DownloadStatusReport, DownloadChunkComplete,
     PLAY_STATE_LOCAL_LITE, PLAY_STATE_CG_ANCHOR,
-    PLAY_STATE_CLOUD_PLAY, PLAY_STATE_LOCAL_FULL,
+    PLAY_STATE_LOCAL_FULL,
 )
 from server.core.bandwidth_scheduler import (
     schedule_download_budget,
-    PREF_DEFAULT, PREF_QUALITY, PREF_DOWNLOAD,
+    PREF_DEFAULT,
 )
 
 # 下载总量（Demo 用，单位：虚拟 MB）
@@ -59,6 +58,7 @@ class CloudStub:
         self.prewarm_count = 0
         self.released = False
         self.prefer = PREF_DEFAULT
+        self._chunk_seq = 0    # 独立分片序号，递增与 heartbeat 解耦
 
     # ---------- 带宽感知下载预算 ----------
     def _budget(self) -> Dict:
@@ -75,9 +75,10 @@ class CloudStub:
 
     def apply(self, from_state: int = PLAY_STATE_LOCAL_LITE) -> CloudSessionApply:
         """假跳云：申请云会话（CloudSession Apply），置云激活态"""
-        budget = self._budget()
+        # 【修复】先激活云再算带宽预算——避免 _budget() 在 cloud_active=False 时返回 0
         self.cloud_active = True
         self.released = False
+        budget = self._budget()
         return CloudSessionApply.create(
             player_id=self.player_id, session_id=self.session_id,
             from_state=from_state,
@@ -130,7 +131,9 @@ class CloudStub:
             bandwidth_budget=budget["download_budget_ratio"],
             session_token=self.session_token)
 
-        ci = chunk_index if chunk_index is not None else self.heartbeats
+        # 【修复】独立自增序号，不再依赖 heartbeat 计数（不调心跳时分片序号也应递增）
+        self._chunk_seq += 1
+        ci = chunk_index if chunk_index is not None else self._chunk_seq
         chunk = DownloadChunkComplete.create(
             player_id=self.player_id, download_id=self.download_id,
             chunk_index=ci, bytes_done=self.bytes_done,
@@ -144,5 +147,16 @@ class CloudStub:
         return self.bytes_done >= self.bytes_total
 
     def serialized_report(self) -> str:
-        """返回 DownloadStatusReport 的 JSON 载体（跨引擎契约对齐 serialize）"""
-        return serialize(self.download_step()["report"])
+        """返回 DownloadStatusReport 的 JSON 载体（跨引擎契约对齐 serialize）。
+
+        基于当前状态直接构造 report，无副作用（不调用 download_step()）。
+        """
+        # 基于当前状态计算带宽档位（不推进 bytes_done）
+        budget = self._budget()
+        report = DownloadStatusReport.create(
+            player_id=self.player_id, download_id=self.download_id,
+            bytes_done=self.bytes_done, bytes_total=self.bytes_total,
+            resume_point=self.bytes_done,
+            bandwidth_budget=budget["download_budget_ratio"],
+            session_token=self.session_token)
+        return serialize(report)
