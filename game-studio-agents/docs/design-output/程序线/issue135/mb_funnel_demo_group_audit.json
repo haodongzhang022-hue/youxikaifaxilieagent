@@ -1,0 +1,128 @@
+{
+  "ok": true,
+  "task_id": "mb_funnel_demo_wp",
+  "title": "M-B 工作包：MB-01 L0/L1漏斗Demo + MB-02 假云/下载Demo桩（Issue#135 / PR#137解锁）",
+  "origin": "程序线_统一头",
+  "owner": "client_dev|cocos_dev|server_dev|engine_dev|cto",
+  "status": "OFFERED",
+  "transfer_chain": [],
+  "event_count": 11,
+  "events": [
+    {
+      "event": "DELEGATE",
+      "from": "程序线_统一头",
+      "to": "client_dev|cocos_dev|server_dev|engine_dev|cto",
+      "action": "SPLIT",
+      "detail": {
+        "sub_tasks": [
+          "mb_funnel_demo_wp__sub1",
+          "mb_funnel_demo_wp__sub2",
+          "mb_funnel_demo_wp__sub3",
+          "mb_funnel_demo_wp__sub4",
+          "mb_funnel_demo_wp__sub5"
+        ],
+        "note": "跨角色部门级 @分工 group_audit 留痕"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "client_dev",
+      "to": "程序线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub1",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "client_dev",
+      "to": "程序线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub1",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "cocos_dev",
+      "to": "程序线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub2",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "cocos_dev",
+      "to": "程序线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub2",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "server_dev",
+      "to": "程序线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub3",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "server_dev",
+      "to": "程序线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub3",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "engine_dev",
+      "to": "程序线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub4",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "engine_dev",
+      "to": "程序线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub4",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "cto",
+      "to": "程序线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub5",
+        "note": ""
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "cto",
+      "to": "程序线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "mb_funnel_demo_wp__sub5",
+        "note": ""
+      }
+    }
+  ]
+}
