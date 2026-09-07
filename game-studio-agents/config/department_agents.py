@@ -1311,9 +1311,7 @@ class ArtDeptAgent(DepartmentAgent):
 
         # 规则⑤ 对比度 ≥4.5:1 —— 基于真实 hex 程序化计算 WCAG 对比度，
         #    不再采信 palette.contrast 硬编码值，杜绝"声明达标/实际不达标"造假。
-        if self._ui_contrast_ok(colors):
-            pass
-        else:
+        if not self._ui_contrast_ok(colors):
             violations.append("contrast_min")
 
         # 规则⑥ 设计稿需可回传展示（挂载上传工具，artifact 根级）
