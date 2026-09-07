@@ -75,13 +75,48 @@ wp = {"module":"ui_ux","label":"生态UI/UX","project":"P",
       "id":"wp_ui_ux","department_name":"美术线"}
 a = agent._execute(wp, {})
 content = a.get("content", {})
+ds = content.get("design_system", {})
 print('ARTIFACT_TYPE=', a.get("artifact_type"))
 print('HAS_INTERACTION=', 'interaction_spec' in content)
 print('HAS_VISUAL=', 'visual_consistency' in content)
 print('HAS_BINDING=', 'ui_binding' in content)
 print('DISPATCHABLE_OWNER=', a.get("dispatchable_owner"))
 print('DISPATCHABLE_ECO=', a.get("dispatchable_eco_owner"))
+print('HAS_DESIGN_SYSTEM=', 'design_system' in content)
+print('HAS_PALETTE_HEX=', 'palette' in ds and all(str(c).startswith('#') for c in ds['palette'].get('colors', {}).values()))
+print('HAS_TYPE_SCALE=', 'type_scale' in ds and bool(ds['type_scale'].get('tiers')))
+print('ICON_VECTOR=', ds.get('iconography', {}).get('format') == 'vector_sprite')
+print('HAS_BREAKPOINTS=', bool(ds.get('responsive', {}).get('breakpoints')))
+print('HAS_ASSET_UPLOAD=', bool(a.get('asset_upload')))
+print('QUALITY_VIOLATIONS=', len(agent._ui_quality_violations(a)))
 print('VERIFY=', agent._verify(wp, a)[0])
+# 质检规则可拦截：构造一个占位/违规 ui_ux 资产应被打回
+bad = agent._execute(wp, {})
+bad['content'] = {
+    'design_system': {
+        'palette': {'colors': {'primary': '配色方案'}},
+        'iconography': {'format': 'emoji'},  # 违规：emoji 当图标
+        'responsive': {},  # 违规：无断点
+        'type_scale': {},  # 违规：无字号层级
+    },
+}
+print('BAD_VERIFY=', agent._verify(wp, bad)[0])
+# 规则⑥ 违规：删除 asset_upload（无回传工具）应被打回
+bad6 = agent._execute(wp, {})
+del bad6['asset_upload']
+print('BAD6_NO_ASSET_UPLOAD_VERIFY=', agent._verify(wp, bad6)[0])
+# 规则① 违规：非法 hex 字符（非 #+hex）应被打回
+badhex = agent._execute(wp, {})
+badhex['content']['design_system']['palette']['colors']['primary'] = '#GGGGGG'
+print('BADHEX_VIOLATIONS=', len(agent._ui_quality_violations(badhex)))
+print('BADHEX_VERIFY=', agent._verify(wp, badhex)[0])
+# 规则⑤ 违规：低对比度配色（白字@近白底，实测<4.5）应被打回
+badcon = agent._execute(wp, {})
+dsc = badcon['content']['design_system']
+dsc['palette']['colors']['text_high'] = '#F8FAFC'
+dsc['palette']['colors']['primary'] = '#F0F0F0'
+print('BADCONTRAST_VIOLATIONS=', len(agent._ui_quality_violations(badcon)))
+print('BADCONTRAST_VERIFY=', agent._verify(wp, badcon)[0])
 PYEOF
 )
 
@@ -104,6 +139,73 @@ if echo "$out2" | grep -q "VERIFY= True"; then
   report "wp_ui_ux 产出自检通过" 0
 else
   report "wp_ui_ux 产出自检通过" 1
+fi
+
+echo "== 3. 美术增强：可检索 + 可校验设计系统资产（Issue #133 P0/P1） =="
+if echo "$out2" | grep -q "HAS_DESIGN_SYSTEM= True"; then
+  report "wp_ui_ux 产出 design_system 分层设计系统资产" 0
+else
+  report "wp_ui_ux 产出 design_system 分层设计系统资产" 1
+fi
+
+if echo "$out2" | grep -q "HAS_PALETTE_HEX= True"; then
+  report "design_system.palette 落真实 hex 配色（可消费/可校验）" 0
+else
+  report "design_system.palette 落真实 hex 配色（可消费/可校验）" 1
+fi
+
+if echo "$out2" | grep -q "HAS_TYPE_SCALE= True"; then
+  report "design_system.type_scale 落字号层级（非默认字重）" 0
+else
+  report "design_system.type_scale 落字号层级（非默认字重）" 1
+fi
+
+if echo "$out2" | grep -q "ICON_VECTOR= True"; then
+  report "design_system.iconography 强制矢量/切图（禁 emoji 当图标）" 0
+else
+  report "design_system.iconography 强制矢量/切图（禁 emoji 当图标）" 1
+fi
+
+if echo "$out2" | grep -q "HAS_BREAKPOINTS= True"; then
+  report "design_system.responsive 覆盖多端断点（响应式）" 0
+else
+  report "design_system.responsive 覆盖多端断点（响应式）" 1
+fi
+
+if echo "$out2" | grep -q "HAS_ASSET_UPLOAD= True"; then
+  report "产出挂载资产回传展示（cnb-upload-attachment）" 0
+else
+  report "产出挂载资产回传展示（cnb-upload-attachment）" 1
+fi
+
+if echo "$out2" | grep -q "QUALITY_VIOLATIONS= 0"; then
+  report "美术质检门禁：合规 ui_ux 资产零违规通过" 0
+else
+  report "美术质检门禁：合规 ui_ux 资产零违规通过" 1
+fi
+
+if echo "$out2" | grep -q "BAD_VERIFY= False"; then
+  report "美术质检门禁：违规 ui_ux 资产（占位/emoji/无断点）被拦截" 0
+else
+  report "美术质检门禁：违规 ui_ux 资产（占位/emoji/无断点）被拦截" 1
+fi
+
+if echo "$out2" | grep -q "BAD6_NO_ASSET_UPLOAD_VERIFY= False"; then
+  report "美术质检门禁：规则⑥ 无 asset_upload 资产被拦截" 0
+else
+  report "美术质检门禁：规则⑥ 无 asset_upload 资产被拦截" 1
+fi
+
+if echo "$out2" | grep -q "BADHEX_VERIFY= False"; then
+  report "美术质检门禁：规则① 非法 hex 字符（#GGGGGG）被拦截" 0
+else
+  report "美术质检门禁：规则① 非法 hex 字符（#GGGGGG）被拦截" 1
+fi
+
+if echo "$out2" | grep -q "BADCONTRAST_VERIFY= False"; then
+  report "美术质检门禁：规则⑤ 低对比度配色被拦截" 0
+else
+  report "美术质检门禁：规则⑤ 低对比度配色被拦截" 1
 fi
 
 echo ""

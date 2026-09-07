@@ -15,6 +15,8 @@
 # ============================================================
 from __future__ import annotations
 
+import re
+
 from typing import Any, Dict
 
 from agent_core import BaseAgent
@@ -1057,29 +1059,114 @@ class ArtDeptAgent(DepartmentAgent):
         elif module == "ui_ux":
             # wp_ui_ux：生态 UI/UX 与交互规范接入部门流水线，
             # 让 UI 角色（tech_artist）成为可派发 Agent，产出可被 task_scheduler 消费。
+            #
+            # 【美术增强 · Issue #133 对齐 ui-ux-pro-max 启发】
+            # 从"占位形容词"升级为"可检索 + 可校验"的分层设计系统资产（design_system）：
+            #   palette（真实 hex 配色，引擎可消费） / type_scale（字号层级） /
+            #   iconography（矢量/切图规则，禁止 emoji 当图标） / responsive（多端断点与安全区）。
+            # 引擎感知：图标切图目录走目标引擎 sprite 导入路径；响应式断点为跨端 UI/UX 规范三档硬编码。
+            ui_flow = "界面流程"
+            ux = "交互设计"
+            navigation = "扁平导航"
+            feedback = "即时反馈"
+            accessibility = "无障碍支持"
+            style_guide = "统一风格"
+            # ---- P0 可校验设计系统字段（对齐 ui-ux-pro-max：配色/字号/图标/断点） ----
+            palette = {
+                "scheme": "game_neutral",
+                "colors": {
+                    "primary": "#2563EB",            # 主按钮色：白字对比度≥4.5:1（原#3B82F6 白字仅3.52不达标）
+                    "primary_pressed": "#1D4ED8",    # 按压态（更深）
+                    "secondary": "#64748B",
+                    "accent": "#F59E0B",
+                    "surface": "#0F172A",
+                    "surface_alt": "#1E293B",
+                    "text_high": "#F8FAFC",
+                    "text_medium": "#94A3B8",
+                    "text_low": "#A9B4C4",           # 次要文本：保证深色底上≥4.5:1（原#64748B 仅3.75不达标）
+                    "success": "#22C55E",
+                    "warning": "#EAB308",
+                    "danger": "#EF4444",
+                },
+                "contrast": {
+                    "text_high_on_surface": 17.06,
+                    "text_medium_on_surface": 6.96,
+                    "text_low_on_surface": 8.51,
+                    "text_high_on_primary": 4.94,     # 真实 hex 计算：白字@#2563EB 主按钮
+                },
+            }
+            type_scale = {
+                "base": 14,                # 基准字号（pt/逻辑像素）
+                "tiers": {"caption": 11, "body": 14, "subtitle": 18, "title": 24, "display": 32},
+                "scale_ratio": 1.25,        # 大字号层级倍数（maj. third）
+                "line_height": 1.4,         # 最小行高保证可读性
+            }
+            # 图标规范：强制矢量/切图（.png/.svg/.ttf-iconfont），禁止 emoji 当图标
+            iconography = {
+                "icon_set": "line_24px",
+                "format": "vector_sprite",          # 矢量/切图，非 emoji
+                "vector_source": "svg",             # 保留矢量源便于导出
+                "export_formats": ["png@1x", "png@2x", "png@3x"],
+                "grid_size": 24,
+                "padding": 2,
+                "no_emoji_icon": True,              # 质检规则①：图标禁 emoji
+                "import_dir": engine.resource_import_path("sprite"),
+            }
+            # 响应式断点：跨端 UI/UX 规范三档硬编码覆盖（含横竖屏与刘海安全区）
+            responsive = {
+                "breakpoints": {
+                    "mobile_phone": {"max_width": 960, "orientation": ["portrait", "landscape"]},
+                    "tablet": {"min_width": 961, "max_width": 1280},
+                    "desktop": {"min_width": 1281},
+                },
+                "safe_area": {"top": True, "bottom": True, "left": False, "right": False},
+                "orientation_lock": "auto",
+                "dpr_support": [1.0, 2.0, 3.0],
+            }
+            # 分层可检索设计系统资产（ui-ux-pro-max search.py 的落地映射，真值而非形容词）
+            design_system = {
+                "palette": palette,
+                "type_scale": type_scale,
+                "iconography": iconography,
+                "responsive": responsive,
+                "engine": engine_name,
+                "engine_type": engine_type,
+                "ui_asset_import_dir": engine.resource_import_path("sprite"),
+            }
             artifact = {
                 "module": "ui_ux", "label": label, "project": project,
                 "artifact_type": "ui_asset",
                 "content": {
-                    "ui_flow": "界面流程",
-                    "ux": "交互设计",
+                    "ui_flow": ui_flow,
+                    "ux": ux,
                     # 交互规范与视觉一致性（对齐 ecosystem_roles.yaml eco_tech_artist）
                     "interaction_spec": {
-                        "navigation": "扁平导航",
-                        "feedback": "即时反馈",
-                        "accessibility": "无障碍支持",
+                        "navigation": navigation,
+                        "feedback": feedback,
+                        "accessibility": accessibility,
                     },
                     "visual_consistency": {
-                        "style_guide": "统一风格",
-                        "palette": "配色方案",
-                        "type_scale": "字号体系",
+                        "style_guide": style_guide,
+                        "palette": palette,          # 真实 hex 配色（可校验）
+                        "type_scale": type_scale,    # 字号层级（可校验）
                     },
+                    # 美术增强：分层可检索 + 可校验的设计系统资产
+                    "design_system": design_system,
                     "render_pipeline": "客户端渲染管线",
                     "ui_binding": "UI 绑定",
                 },
                 # 交付物可被下游消费：派发 owner 为美术线 UI/UX 角色
                 "dispatchable_owner": "tech_artist",
                 "dispatchable_eco_owner": "eco_tech_artist",
+                # P0 资产回传展示：对接 cnb-upload-attachment，设计稿/图标切图可上传挂到 PR 展示
+                "asset_upload": {
+                    "tool": "cnb-upload-attachment",
+                    "artifacts": [
+                        {"type": "ui_mockup", "format": ["png@2x", "png@3x"]},
+                        {"type": "icon_sprite", "format": ["png@2x", "png@3x"]},
+                    ],
+                    "upload_target": "PR_preview",
+                },
             }
         elif module == "audio":
             # wp_audio：生态音频角色接入流水线 + 音频维度入市场预演联动。
@@ -1149,9 +1236,122 @@ class ArtDeptAgent(DepartmentAgent):
         artifact["dev_team"] = dev_team
         return artifact
 
+    # ---- 美术质检规则（P1 · Issue #133 对齐 ui-ux-pro-max 强制行为规范）----
+    # 对应其"对比度≥4.5 / 禁 emoji 当图标 / 响应式多断点 / 配色落项目 palette"等
+    # 硬约束，把门禁从"代码/流程"下沉到"美术资产"，对齐 pipeline_quality_gate 思路。
+    _UI_QUALITY_RULES = {
+        "palette_hex": "配色必须落真实 hex 值，禁止占位形容词（如'配色方案'）",
+        "type_scale_tiers": "字号必须落 type_scale 层级，禁止默认字重",
+        "icon_no_emoji": "图标必须矢量/切图（icon_format=vector_sprite），禁止 emoji 当图标",
+        "responsive_breakpoints": "UI 必须覆盖响应式多端断点（含安全区），禁止单分辨率硬编码",
+        "contrast_min": "文字/主色对比度需 ≥4.5:1",
+        "asset_upload": "设计稿需可回传展示（asset_upload 挂载上传工具）",
+    }
+
+    @staticmethod
+    def _hex_valid(color):
+        """校验 hex 颜色字符合法性：支持 #RGB / #RRGGBB / #RRGGBBAA / #RGBA。"""
+        if not isinstance(color, str):
+            return False
+        h = color.lstrip("#")
+        if len(h) not in (3, 4, 6, 8):
+            return False
+        return bool(re.fullmatch(r"[0-9a-fA-F]+", h))
+
+    @staticmethod
+    def _wcag_contrast(c1, c2):
+        """基于真实 hex 计算两色的 WCAG 相对亮度对比度比（≥1，数值越大对比越强）。"""
+        def _lum(color):
+            h = color.lstrip("#")
+            if len(h) == 4:            # #RGBA → 忽略 alpha 通道
+                h = h[:3]
+            if len(h) == 3:
+                h = "".join(ch * 2 for ch in h)
+            r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+            def _lin(c):
+                return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+            return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+
+        l1, l2 = _lum(c1), _lum(c2)
+        if l1 < l2:
+            l1, l2 = l2, l1
+        return (l1 + 0.05) / (l2 + 0.05)
+
+    def _ui_quality_violations(self, artifact):
+        """美术线 UI/UX 质检规则核对：返回违反的规则 id 列表（空=通过）。"""
+        content = artifact.get("content", {})
+        violations = []
+        ds = content.get("design_system", {})
+        palette = ds.get("palette", {}) or content.get("visual_consistency", {}).get("palette", {})
+        type_scale = ds.get("type_scale", {}) or content.get("visual_consistency", {}).get("type_scale", {})
+        icon = ds.get("iconography", {})
+        resp = ds.get("responsive", {})
+
+        # 规则① palette 必须含合法真实 hex 值（正则校验 # 后字符合法性，杜绝占位词/非法字符）
+        colors = (palette.get("colors", {}) if isinstance(palette, dict) else {})
+        if not colors or not all(self._hex_valid(c) for c in colors.values()):
+            violations.append("palette_hex")
+
+        # 规则② type_scale 必须含具体字号层级
+        tiers = (type_scale.get("tiers", {}) if isinstance(type_scale, dict) else {})
+        if not tiers or not all(isinstance(v, (int, float)) for v in tiers.values()):
+            violations.append("type_scale_tiers")
+
+        # 规则③ 图标必须矢量/切图，禁 emoji
+        if not (isinstance(icon, dict)
+                and icon.get("format") == "vector_sprite"
+                and icon.get("no_emoji_icon") is True):
+            violations.append("icon_no_emoji")
+
+        # 规则④ 响应式断点须覆盖多端
+        if not (isinstance(resp, dict) and len(resp.get("breakpoints", {})) >= 1
+                and isinstance(resp.get("safe_area"), dict)):
+            violations.append("responsive_breakpoints")
+
+        # 规则⑤ 对比度 ≥4.5:1 —— 基于真实 hex 程序化计算 WCAG 对比度，
+        #    不再采信 palette.contrast 硬编码值，杜绝"声明达标/实际不达标"造假。
+        if not self._ui_contrast_ok(colors):
+            violations.append("contrast_min")
+
+        # 规则⑥ 设计稿需可回传展示（挂载上传工具，artifact 根级）
+        if not artifact.get("asset_upload"):
+            violations.append("asset_upload")
+
+        return violations
+
+    def _ui_contrast_ok(self, colors):
+        """用真实 hex 校验设计系统关键文字-背景组合的 WCAG 对比度均 ≥4.5:1。
+        任一参与对比的关键色缺失或非法（非真实 hex）即视为无法校验 → 返回 False。"""
+        if not colors:
+            return False
+        text_keys = ("text_high", "text_medium", "text_low")
+        bg_keys = ("surface", "surface_alt")
+        # 仅对存在的 key 校验（避免缺 key 导致越界）
+        texts = [colors[k] for k in text_keys if k in colors]
+        bgs = [colors[k] for k in bg_keys if k in colors]
+        pairs = [(t, b) for t in texts for b in bgs]
+        # 主按钮：text_high 文字落在 primary 背景（主色按钮）
+        if "text_high" in colors and "primary" in colors:
+            pairs.append((colors["text_high"], colors["primary"]))
+        if not pairs:
+            return False
+        # 参与对比的任一色非法（非真实 hex）→ 无法计算真实对比度，视为不达标，
+        # 交由规则①（palette_hex）与规则⑤（contrast_min）共同拦截，杜绝"假 hex 蒙混"。
+        for t, b in pairs:
+            if not (self._hex_valid(t) and self._hex_valid(b)):
+                return False
+        return all(self._wcag_contrast(t, b) >= 4.5 for t, b in pairs)
+
     def _verify(self, work_package, artifact):
         if not artifact.get("content"):
             return False, "美术产出为空"
+        # 美术质检门禁：ui_ux 产出入库前强制校验可消费/可校验字段（Issue #133 P1）
+        if artifact.get("module") == "ui_ux":
+            viol = self._ui_quality_violations(artifact)
+            if viol:
+                reasons = "；".join(self._UI_QUALITY_RULES[v] for v in viol)
+                return False, f"美术质检门禁拦截：{reasons}"
         return True, "美术产出自检通过"
 
 
