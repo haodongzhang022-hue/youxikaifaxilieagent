@@ -1,0 +1,83 @@
+{
+  "workpackage": "Issue133_wp_issue133_pm_收口",
+  "milestone": "Issue#133 收口 / P0/P1 登记 / P2排期决策 / 美术质检门禁sign-off",
+  "department": "项目管理",
+  "origin": "项目管理部门统一头",
+  "repo_slug": "dongdongxiaozu/youxikaifaxilieagent",
+  "trigger_event": "PR#134美术线UI/UX P0/P1合入 post-merge-orchestrate 下游解锁(wp_issue133_pm)",
+  "routing_active": [
+    "美术线",
+    "测试线",
+    "项目管理"
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-07T14:50:00Z",
+      "type": "DELEGATE",
+      "action": "SPLIT",
+      "wp": "Issue#133收口：P0/P1登记+P2排期决策+门禁sign-off",
+      "from": "项目管理_统一头",
+      "note": "消费美术线wp_style_index GO + 测试线wp_art_gate_qa GO；release_manager负责门禁sign-off与P0/P1登记，project_manager负责P2排期决策与Issue收口"
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-07T14:50:00Z",
+      "type": "SUB_DELEGATE",
+      "role": "release_manager",
+      "task": "P0/P1完成登记 + 美术质检门禁(PR#134六规则)注册门禁体系并sign-off（复核16/16+9/9）",
+      "from": "项目管理_统一头"
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-07T14:50:00Z",
+      "type": "SUB_DELEGATE",
+      "role": "project_manager",
+      "task": "Issue#133收口：P2(wp_style_index)排期决策登记 + 里程碑闭环",
+      "from": "项目管理_统一头"
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-07T14:50:00Z",
+      "type": "SUB_ACCEPT",
+      "role": "release_manager",
+      "task": "门禁sign-off + P0/P1登记（承接）",
+      "from": "release_manager"
+    },
+    {
+      "seq": 5,
+      "ts": "2026-09-07T14:50:00Z",
+      "type": "SUB_ACCEPT",
+      "role": "project_manager",
+      "task": "P2排期决策 + Issue收口（承接）",
+      "from": "project_manager"
+    },
+    {
+      "seq": 6,
+      "ts": "2026-09-07T14:50:00Z",
+      "type": "SUB_COMPLETE",
+      "role": "release_manager",
+      "task": "美术质检门禁六规则sign-off通过(16/16+9/9复核)，P0/P1完成登记",
+      "from": "release_manager"
+    },
+    {
+      "seq": 7,
+      "ts": "2026-09-07T14:50:00Z",
+      "type": "SUB_COMPLETE",
+      "role": "project_manager",
+      "task": "P2(wp_style_index)排期决策登记完成，Issue#133收口闭环",
+      "from": "project_manager"
+    },
+    {
+      "seq": 8,
+      "ts": "2026-09-07T14:50:00Z",
+      "type": "DONE",
+      "wp": "Issue133_wp_issue133_pm_收口",
+      "from": "项目管理_统一头",
+      "review_result": "通过(GO)"
+    }
+  ],
+  "total_events": 8,
+  "review_result": "通过(GO)",
+  "report": "承接报告_Issue133_项目管理_wp_issue133_pm_REVIEW_RESULT.md"
+}

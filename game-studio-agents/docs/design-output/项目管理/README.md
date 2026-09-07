@@ -133,3 +133,31 @@
 | 上游消费 | 美术线 | 消费 MB-03 CG 锚点规格 + 注入契约（门禁前置） | PR#138 合并后 |
 | 下游解锁 | 程序线 | G2 GO → 解锁 M-C MC-01/02/03（Unity App 内容落地） | PM G2 GO 后 |
 | 下游解锁 | 测试线 | MC-04 G3 门禁回归（待 MC-01~03 完成） | PM G2 GO 后 |
+
+## 十二、PR #134 下游解锁 · Issue #133 本轮承接记录（wp_issue133_pm 收口）
+
+> PR #134（美术线 UI/UX 升级可检索可校验 design_system + 美术质检门禁）合入 → 下游路由标记指向项目管理承接 **wp_issue133_pm**（Issue #133 收口：P0/P1 登记 + P2 排期决策 + 美术质检门禁 sign-off）。
+
+| 工作包 | 状态 | 说明 |
+|--------|------|------|
+| wp_issue133_pm | ✅ DONE | 消费美术线（P0/P1 + P2 wp_style_index）+ 测试线（wp_art_gate_qa QA GO）双 GO 依据；release_manager 对美术质检门禁 6 规则 **sign-off**（复核 16/16+9/9），project_manager 决策 **P2 合入收口**，Issue #133 全链路里程碑收口闭环 |
+
+详细见：`issue133/承接报告_Issue133_项目管理_wp_issue133_pm_REVIEW_RESULT.md`
+审计流水：`issue133/issue133_pm_closure_group_audit.json`
+
+## 十三、组内分工表（新增 PR#134 / Issue#133）
+
+| 子任务 | 承接角色 | 内容 | 产出物文件 |
+|--------|---------|------|-----------|
+| wp_issue133_pm__sub1 | release_manager | P0/P1 完成登记 + 美术质检门禁（PR#134 P1 六规则）注册门禁体系并 sign-off（16/16+9/9 复核） | issue133/承接报告_Issue133_项目管理_wp_issue133_pm_REVIEW_RESULT.md |
+| wp_issue133_pm__sub2 | project_manager | Issue #133 收口：P2（wp_style_index）排期决策登记 + 全链路里程碑闭环 | issue133/承接报告_Issue133_项目管理_wp_issue133_pm_REVIEW_RESULT.md |
+
+## 十四、跨部门协作记录（新增 PR#134 / Issue#133）
+
+| 协作方向 | 部门 | 协作内容 | 触发时机 |
+|---------|------|---------|---------|
+| 上游消费 | 美术线 | 消费 P0/P1 design_system 合入 + P2 wp_style_index 风格索引 GO | PR#134 合并后 |
+| 上游消费 | 测试线 | 消费 wp_art_gate_qa 美术质检门禁 QA GO（16/16+9/9） | 测试线 QA GO 后 |
+| 被测对象 | 美术线 PR#134 | 美术质检门禁 6 规则实测复核（合规放行/违规拦截） | 门禁 sign-off 复核 |
+| 下游同步 | 运营线 | Issue #133 闭环结论同步（供运营生态引用） | Issue 收口后 |
+| 上游源头 | 策划线 | 风格索引选型契约供策划需求引用（机制预留） | Issue 收口后 |
