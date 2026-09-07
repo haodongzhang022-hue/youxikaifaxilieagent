@@ -1,0 +1,107 @@
+{
+  "ok": true,
+  "task_id": "wp_style_index",
+  "title": "wp_style_index 可检索风格索引（P2）- Issue#133 美术线",
+  "origin": "美术线_统一头",
+  "owner": "art_director|ui_ux|tech_artist|concept_artist",
+  "status": "DONE",
+  "transfer_chain": [],
+  "event_count": 9,
+  "events": [
+    {
+      "event": "DELEGATE",
+      "from": "美术线_统一头",
+      "to": "art_director|ui_ux|tech_artist|concept_artist",
+      "action": "SPLIT",
+      "detail": {
+        "sub_tasks": [
+          "wp_style_index__sub1",
+          "wp_style_index__sub2",
+          "wp_style_index__sub3",
+          "wp_style_index__sub4"
+        ],
+        "note": "部门级@分工 group_audit 留痕（wp_style_index 跨 art_director/ui_ux/tech_artist/concept_artist 四角色）"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "art_director",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "wp_style_index__sub1",
+        "note": "承接：风格选型准则 + 反查矩阵总纲（§三）主审"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "art_director",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "wp_style_index__sub1",
+        "note": "完成：主美审校反查矩阵 + 选型决策链"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "ui_ux",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "wp_style_index__sub2",
+        "note": "承接：UI 层风格套用 + flat/papercut 等 UI 系风格字段"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "ui_ux",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "wp_style_index__sub2",
+        "note": "完成：UI 系风格 entries + design_system(PR#134) 套用说明"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "tech_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "wp_style_index__sub3",
+        "note": "承接：风格→引擎技术栈映射 + 索引与 role_presets 真源一致性校验"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "tech_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "wp_style_index__sub3",
+        "note": "完成：L3 技术落地字段 + 真源派生 + 质检挂接"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "concept_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_ACCEPT",
+      "detail": {
+        "sub_id": "wp_style_index__sub4",
+        "note": "承接：2D/主题系风格 entries（§二表数据）"
+      }
+    },
+    {
+      "event": "ACK",
+      "from": "concept_artist",
+      "to": "美术线_统一头",
+      "action": "SUB_COMPLETE",
+      "detail": {
+        "sub_id": "wp_style_index__sub4",
+        "note": "完成：19 风格 entries 数据填充 + 反查矩阵"
+      }
+    }
+  ]
+}
