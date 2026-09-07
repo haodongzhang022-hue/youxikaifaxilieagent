@@ -101,6 +101,22 @@ bad['content'] = {
     },
 }
 print('BAD_VERIFY=', agent._verify(wp, bad)[0])
+# 规则⑥ 违规：删除 asset_upload（无回传工具）应被打回
+bad6 = agent._execute(wp, {})
+del bad6['asset_upload']
+print('BAD6_NO_ASSET_UPLOAD_VERIFY=', agent._verify(wp, bad6)[0])
+# 规则① 违规：非法 hex 字符（非 #+hex）应被打回
+badhex = agent._execute(wp, {})
+badhex['content']['design_system']['palette']['colors']['primary'] = '#GGGGGG'
+print('BADHEX_VIOLATIONS=', len(agent._ui_quality_violations(badhex)))
+print('BADHEX_VERIFY=', agent._verify(wp, badhex)[0])
+# 规则⑤ 违规：低对比度配色（白字@近白底，实测<4.5）应被打回
+badcon = agent._execute(wp, {})
+dsc = badcon['content']['design_system']
+dsc['palette']['colors']['text_high'] = '#F8FAFC'
+dsc['palette']['colors']['primary'] = '#F0F0F0'
+print('BADCONTRAST_VIOLATIONS=', len(agent._ui_quality_violations(badcon)))
+print('BADCONTRAST_VERIFY=', agent._verify(wp, badcon)[0])
 PYEOF
 )
 
@@ -172,6 +188,24 @@ if echo "$out2" | grep -q "BAD_VERIFY= False"; then
   report "美术质检门禁：违规 ui_ux 资产（占位/emoji/无断点）被拦截" 0
 else
   report "美术质检门禁：违规 ui_ux 资产（占位/emoji/无断点）被拦截" 1
+fi
+
+if echo "$out2" | grep -q "BAD6_NO_ASSET_UPLOAD_VERIFY= False"; then
+  report "美术质检门禁：规则⑥ 无 asset_upload 资产被拦截" 0
+else
+  report "美术质检门禁：规则⑥ 无 asset_upload 资产被拦截" 1
+fi
+
+if echo "$out2" | grep -q "BADHEX_VERIFY= False"; then
+  report "美术质检门禁：规则① 非法 hex 字符（#GGGGGG）被拦截" 0
+else
+  report "美术质检门禁：规则① 非法 hex 字符（#GGGGGG）被拦截" 1
+fi
+
+if echo "$out2" | grep -q "BADCONTRAST_VERIFY= False"; then
+  report "美术质检门禁：规则⑤ 低对比度配色被拦截" 0
+else
+  report "美术质检门禁：规则⑤ 低对比度配色被拦截" 1
 fi
 
 echo ""
