@@ -1,0 +1,23 @@
+{
+  "workpackage": "wp_qa_art_gate_accept",
+  "milestone": "Issue#133 PR#134 美术质检门禁 QA 验收",
+  "department": "测试线",
+  "origin": "测试线部门统一头",
+  "repo_slug": "dongdongxiaozu/youxikaifaxilieagent",
+  "trigger_event": "PR134 merged post-merge-orchestrate 下游解锁",
+  "routing_active": ["美术线", "测试线", "项目管理"],
+  "producer_note": "美术线承接 wp_style_index(P2) → 测试线 QA 验收美术质检门禁 → 项目管理 Issue 收口",
+  "events": [
+    {"seq": 1, "ts": "2026-09-07T14:46:00Z", "type": "DELEGATE", "action": "SPLIT", "wp": "wp_qa_art_gate_accept", "from": "测试线_统一头", "note": "Issue#133 PR#134 美术质检门禁(6规则)独立 QA 验收"},
+    {"seq": 2, "ts": "2026-09-07T14:46:10Z", "type": "SUB_DELEGATE", "role": "qa_engineer", "task": "美术质检门禁 6 规则独立功能 QA：合规 design_system 通过 + 6 类违规(占位/非法hex/emoji/无断点/低对比度/无upload)被拦截核对", "from": "测试线_统一头"},
+    {"seq": 3, "ts": "2026-09-07T14:46:10Z", "type": "SUB_DELEGATE", "role": "auto_qa", "task": "自动化回归：test_ui_ux.sh(16)+test_art_testing.sh(9) 门禁自动化套件全绿 + 风格索引数据派生 role_presets 一致性确认", "from": "测试线_统一头"},
+    {"seq": 4, "ts": "2026-09-07T14:47:00Z", "type": "SUB_ACCEPT", "role": "qa_engineer", "task": "6 规则全部有效拦截，合规零违规；compliant pass / 6 类违规均被判违规打回", "from": "qa_engineer"},
+    {"seq": 5, "ts": "2026-09-07T14:47:00Z", "type": "SUB_ACCEPT", "role": "auto_qa", "task": "test_ui_ux.sh 16/16 + test_art_testing.sh 9/9 全绿；role_presets art_style_* 19 条真源只读派生", "from": "auto_qa"},
+    {"seq": 6, "ts": "2026-09-07T14:48:00Z", "type": "SUB_COMPLETE", "role": "qa_engineer", "task": "功能 QA 验收完成", "from": "qa_engineer"},
+    {"seq": 7, "ts": "2026-09-07T14:48:00Z", "type": "SUB_COMPLETE", "role": "auto_qa", "task": "自动化回归完成", "from": "auto_qa"},
+    {"seq": 8, "ts": "2026-09-07T14:49:00Z", "type": "DONE", "wp": "wp_qa_art_gate_accept", "from": "测试线_统一头", "review_result": "通过"}
+  ],
+  "total_events": 8,
+  "review_result": "通过",
+  "report": "承接报告_Issue133_测试线_美术质检门禁QA验收_REVIEW_RESULT.md"
+}
