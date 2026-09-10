@@ -36,10 +36,12 @@ fi
 
 
 echo "== 1.5 CLI 路由决策：从环境变量读取并判断部门命中 =="
+# 显式提供 CNB_ROUTING_CONTENT，切断调用者环境态（如 CI 中的
+# CNB_ISSUE_DESCRIPTION / CNB_COMMENT_BODY）对路由判定的污染，
+# 保证本用例只验证"内容 → 部门"映射本身。
 CLI_TEST=$(
-  CNB_EVENT=issue.open \
-  CNB_ISSUE_TITLE="修复服务端接口并发 bug" \
-  CNB_ISSUE_DESCRIPTION="涉及 server 端接口逻辑与引擎适配" \
+  CNB_ROUTING_EVENT=issue.open \
+  CNB_ROUTING_CONTENT="服务端接口并发 bug，涉及 server 端接口逻辑与引擎适配" \
   $PY routing.py route 2>&1
 )
 if echo "$CLI_TEST" | grep -q "程序线"; then
@@ -50,14 +52,14 @@ else
 fi
 
 # CLI check 程序线应命中（退出码 0）
-if CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py check 程序线 >/dev/null 2>&1; then
+if CNB_ROUTING_EVENT=issue.open CNB_ROUTING_CONTENT="服务端接口并发 bug" $PY routing.py check 程序线 >/dev/null 2>&1; then
   report "CLI check 程序线命中" 0
 else
   report "CLI check 程序线命中" 1
 fi
 
 # CLI check 美术线不应命中（退出码非 0）
-if ! CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py check 美术线 >/dev/null 2>&1; then
+if ! CNB_ROUTING_EVENT=issue.open CNB_ROUTING_CONTENT="服务端接口并发 bug" $PY routing.py check 美术线 >/dev/null 2>&1; then
   report "CLI check 美术线未命中" 0
 else
   report "CLI check 美术线未命中" 1
@@ -65,7 +67,7 @@ fi
 
 # CLI marker 写入文件
 MARKER_FILE="$(mktemp)"
-CNB_EVENT=issue.open CNB_ISSUE_TITLE="修复服务端接口 bug" $PY routing.py marker "$MARKER_FILE" >/dev/null 2>&1
+CNB_ROUTING_EVENT=issue.open CNB_ROUTING_CONTENT="服务端接口并发 bug" $PY routing.py marker "$MARKER_FILE" >/dev/null 2>&1
 if [ -f "$MARKER_FILE" ] && grep -q "程序线" "$MARKER_FILE"; then
   report "CLI marker 写入路由清单文件" 0
 else
@@ -183,8 +185,9 @@ else
   report ".cnb.yml 部门 stage 含 if 条件拦截（${if_guard} 处，期望>=12）" 1
 fi
 
-# 新增：验证路由决策 stage 已写入流水线
-if grep -q "routing.py marker" "$PIPELINE"; then
+# 新增：验证路由决策 stage 已写入流水线（统一入口 scripts/routing-marker.sh，
+# 内联 routing.py marker 已抽取为脚本，避免两处 stage 复制「改一处漏一处」）
+if grep -q "routing-marker.sh" "$PIPELINE"; then
   report ".cnb.yml 含路由决策 marker 写文件 stage" 0
 else
   report ".cnb.yml 含路由决策 marker 写文件 stage" 1
@@ -308,6 +311,82 @@ if echo "$out9" | grep -q "LABELS_ISOLATED_OK"; then
 else
   report "route_from_env 不拼接 labels，状态标签不污染路由" 1
   echo "$out9"
+fi
+
+echo "== 10. 环境态污染修复：评论触发不得用 Issue 原始正文做语义路由 =="
+out10=$($PY - <<'PYBLK'
+import os
+import sys
+sys.path.insert(0, '.')
+
+# 复现 Issue #133 收尾时的真实故障环境：
+#   issue.comment@npc 事件下，CNB_ISSUE_TITLE/DESCRIPTION 仍是 Issue 原始正文
+#   （含"美术线/测试线/项目管理/运营线"等历史链路词），评论正文才是本轮内容。
+env = {
+    "CNB_EVENT": "issue.comment@npc",
+    "CNB_COMMENT_BODY": "@CodeBuddy 好的，做一下收尾，134已经合并了",
+    "CNB_ISSUE_TITLE": "尝试美工增强",
+    "CNB_ISSUE_DESCRIPTION": (
+        "# 【进展】Issue #133「尝试美工增强」\n"
+        "> 美术线承接 wp_style_index(P2) → 测试线 QA 验收美术质检门禁 "
+        "→ 项目管理 Issue 收口与门禁 sign-off。\n"
+        "运营线同步闭环结论。"
+    ),
+    "CNB_PULL_REQUEST_TITLE": "",
+    "CNB_PULL_REQUEST_DESCRIPTION": "",
+}
+old = {k: os.environ.get(k) for k in env}
+os.environ.update(env)
+os.environ.pop("CNB_ROUTING_CONTENT", None)
+os.environ.pop("CNB_ROUTING_EVENT", None)
+try:
+    from routing import route_from_env, serialize_active
+    active = serialize_active(route_from_env()).split()
+finally:
+    for k, v in old.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+# 评论内容"好的，做一下收尾，134已经合并了"无强职责关键词 → 不得拉起任何幻影部门
+assert active == [], f"环境态污染未隔离，误触发部门: {active}"
+
+# 显式注入权威内容时，应以权威内容为准
+os.environ["CNB_ROUTING_CONTENT"] = "服务端接口并发 bug 修复"
+os.environ["CNB_ROUTING_EVENT"] = "issue.comment@npc"
+try:
+    active2 = serialize_active(route_from_env()).split()
+finally:
+    os.environ.pop("CNB_ROUTING_CONTENT", None)
+    os.environ.pop("CNB_ROUTING_EVENT", None)
+assert active2 == ["程序线"], f"权威内容未生效: {active2}"
+print("ENV_POLLUTION_OK")
+PYBLK
+)
+if echo "$out10" | grep -q "ENV_POLLUTION_OK"; then
+  report "评论触发隔离 Issue 原始正文，幻影部门不再误触发" 0
+else
+  report "评论触发隔离 Issue 原始正文，幻影部门不再误触发" 1
+  echo "$out10"
+fi
+
+echo "== 11. 路由决策脚本护栏（统一入口 + 权威内容定位） =="
+if grep -q "CNB_COMMENT_BODY" ../../scripts/routing-marker.sh; then
+  report "routing-marker.sh 以评论正文为权威触发内容" 0
+else
+  report "routing-marker.sh 以评论正文为权威触发内容" 1
+fi
+marker_ref=$(grep -c "routing-marker.sh" ../../.cnb.yml || true)
+if [ "$marker_ref" -ge 2 ]; then
+  report ".cnb.yml 两处路由决策 stage 统一复用 routing-marker.sh（${marker_ref} 处）" 0
+else
+  report ".cnb.yml 两处路由决策 stage 统一复用 routing-marker.sh（${marker_ref} 处，期望>=2）" 1
+fi
+if ! grep -q "routing.py marker" ../../.cnb.yml; then
+  report ".cnb.yml 无内联 routing.py marker 残留（防改一处漏一处）" 0
+else
+  report ".cnb.yml 无内联 routing.py marker 残留" 1
 fi
 
 echo ""

@@ -42,8 +42,9 @@ $:
       stages:
         - name: 路由决策·部门派发
           script: |
-            python3 game-studio-agents/config/routing.py marker ${CNB_BUILD_WORKSPACE}/.routing_active.txt
-            cat ${CNB_BUILD_WORKSPACE}/.routing_active.txt
+            # 统一走 scripts/routing-marker.sh：定位权威触发内容（评论正文优先），
+            # 防「环境态污染」（issue.comment@npc 下 Issue 原始正文中的部门词误触发语义路由）。
+            bash scripts/routing-marker.sh
         - name: 游戏向经理自动拆解
           type: npc:go
           options:
@@ -642,8 +643,9 @@ $:
       stages:
         - name: 路由决策·部门派发
           script: |
-            python3 game-studio-agents/config/routing.py marker ${CNB_BUILD_WORKSPACE}/.routing_active.txt
-            cat ${CNB_BUILD_WORKSPACE}/.routing_active.txt
+            # 统一走 scripts/routing-marker.sh：定位权威触发内容（评论正文优先），
+            # 防「环境态污染」（issue.comment@npc 下 Issue 原始正文中的部门词误触发语义路由）。
+            bash scripts/routing-marker.sh
         - name: 合并后联动
           type: npc:go
           options:

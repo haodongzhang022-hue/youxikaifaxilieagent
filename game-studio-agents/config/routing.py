@@ -485,11 +485,33 @@ def route_from_env(threshold: int = DEFAULT_SEMANTIC_THRESHOLD) -> Dict[str, Any
     注意：**不再拼接 CNB_ISSUE_LABELS 到匹配内容**——平台注入的状态标签
     （如"测试线验收中,美术线验收中"）会污染语义判定、导致无关部门被误拉起。
     标签只反映进度状态，不应作为"分配工作"的触发依据（问题5修复）。
+
+    **环境态污染修复（Issue #133 收尾发现）**：评论触发
+    （`issue.comment@npc` / `pull_request.comment@npc`）下，平台注入的
+    CNB_ISSUE_TITLE / CNB_ISSUE_DESCRIPTION 仍是 **Issue 原始正文**（含历史链路
+    中的"美术线/测试线/项目管理"等词），会被当成本轮工作内容做语义匹配 →
+    幻影部门误触发。为此本函数支持由流水线显式注入的权威上下文：
+      - `CNB_ROUTING_CONTENT`：本轮真正的触发内容（如评论正文），非空时优先采用；
+      - `CNB_ROUTING_EVENT`（可选）：覆盖 CNB_EVENT，避免事件判定漂移
+        （如 issue.comment@npc 与 pull_request.comment@npc 混用 Issue 正文）。
+    同时**清空 PR 残留正文**（评论触发时 CNB_PULL_REQUEST_DESCRIPTION 可能残留），
+    确保匹配内容唯一来自权威来源。
     """
     import os
-    event = os.getenv("CNB_EVENT", "")
+    event = os.getenv("CNB_ROUTING_EVENT", "") or os.getenv("CNB_EVENT", "")
     is_issue = "issue" in event
-    is_pr = "pull_request" in event or "merge" in event
+    is_pr = ("pull_request" in event or "merge" in event) and "comment" not in event
+
+    # 权威触发内容优先（防环境态污染）：由 routing-marker.sh 注入
+    authoritative = os.getenv("CNB_ROUTING_CONTENT", "")
+    if authoritative:
+        return route(
+            issue_title="",
+            issue_body=authoritative,
+            pr_description="",
+            deps_unlocked=None,
+            threshold=threshold,
+        )
 
     if is_issue:
         title = os.getenv("CNB_ISSUE_TITLE", "")
@@ -501,6 +523,13 @@ def route_from_env(threshold: int = DEFAULT_SEMANTIC_THRESHOLD) -> Dict[str, Any
         # 兜底：优先 Issue 变量，回退到 PR 变量
         title = os.getenv("CNB_ISSUE_TITLE", "") or os.getenv("CNB_PULL_REQUEST_TITLE", "")
         body = os.getenv("CNB_ISSUE_DESCRIPTION", "") or os.getenv("CNB_PULL_REQUEST_DESCRIPTION", "")
+
+    # 评论触发（comment）下：Issue/PR 的正文是**历史内容**而非本轮评审/派发内容，
+    # 若仍参与语义匹配会拉起幻影部门 → 显式清空，只保留评论正文（若无则由上游注入
+    # CNB_ROUTING_CONTENT，见 route_from_env 注释）。
+    if "comment" in event:
+        title = ""
+        body = os.getenv("CNB_ROUTING_CONTENT", "")
 
     # 从环境变量读取依赖解锁信息（可选）
     deps_str = os.getenv("CNB_DEPS_UNLOCKED", "")
